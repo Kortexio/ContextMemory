@@ -1,0 +1,379 @@
+@using ContextMemory.Core.Agentic
+
+<div class="card card-outline card-warning mb-3">
+    <div class="card-header">
+        <h5 class="card-title mb-0">Agentic Gateway</h5>
+    </div>
+    <div class="card-body">
+        <div class="form-check mb-3">
+            <InputCheckbox class="form-check-input" id="agenticEnabled" @bind-Value="Model.Enabled" />
+            <label class="form-check-label" for="agenticEnabled">Enable agentic loop for this tenant</label>
+        </div>
+
+        <div class="form-row">
+            <div class="col-md-4 form-group">
+                <label>Prompt profile</label>
+                <InputSelect class="form-control" @bind-Value="Model.PromptProfile">
+                    <option value="auto">auto</option>
+                    <option value="ollama">ollama</option>
+                    <option value="openai">openai</option>
+                    <option value="claude">claude</option>
+                </InputSelect>
+            </div>
+            <div class="col-md-4 form-group">
+                <label>Validation mode</label>
+                <InputSelect class="form-control" @bind-Value="Model.Guardrails.ValidationMode">
+                    <option value="hybrid">hybrid</option>
+                    <option value="deterministic">deterministic</option>
+                    <option value="llm-judge">llm-judge</option>
+                </InputSelect>
+            </div>
+            <div class="col-md-4 form-group">
+                <label>Network egress</label>
+                <InputSelect class="form-control" @bind-Value="Model.Guardrails.NetworkEgress">
+                    <option value="restricted">restricted</option>
+                    <option value="allowed">allowed</option>
+                </InputSelect>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="col-md-3 form-group">
+                <label>Max iterations</label>
+                <InputNumber class="form-control" @bind-Value="Model.Guardrails.MaxIterations" />
+            </div>
+            <div class="col-md-3 form-group">
+                <label>Loop timeout (s)</label>
+                <InputNumber class="form-control" @bind-Value="Model.Guardrails.LoopTimeoutSeconds" />
+            </div>
+            <div class="col-md-3 form-group">
+                <label>Min answer length</label>
+                <InputNumber class="form-control" @bind-Value="Model.Guardrails.MinAnswerLength" />
+            </div>
+            <div class="col-md-3 form-group">
+                <label>Require confirmation for</label>
+                <InputText class="form-control" @bind-Value="ConfirmationKeywordsText"
+                           placeholder="delete, deploy-prod" />
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="col-md-6 form-group">
+                <label>Allowed egress hosts</label>
+                <InputText class="form-control" @bind-Value="AllowedHostsText"
+                           placeholder="internal.example.com, api.corp.local" />
+            </div>
+            <div class="col-md-6 form-group">
+                <label>Expected answer patterns (regex)</label>
+                <InputText class="form-control" @bind-Value="ExpectedPatternsText"
+                           placeholder="^## Summary" />
+            </div>
+        </div>
+
+        <div class="form-check mb-2">
+            <InputCheckbox class="form-check-input" @bind-Value="Model.Guardrails.RequireZeroExitCode" />
+            <label class="form-check-label">Require exit code 0 for all tools</label>
+        </div>
+        <div class="form-check mb-3">
+            <InputCheckbox class="form-check-input" @bind-Value="Model.Guardrails.HumanReviewOnMaxIterations" />
+            <label class="form-check-label">Human review when max iterations is reached</label>
+        </div>
+
+        <h6>Execution tools (ACA)</h6>
+        @for (var i = 0; i < Model.Tools.Execution.Count; i++)
+        {
+            var index = i;
+            <div class="border rounded p-2 mb-2">
+                <div class="form-row">
+                    <div class="col-md-3 form-group mb-2">
+                        <label>Runtime</label>
+                        <InputSelect class="form-control form-control-sm" @bind-Value="Model.Tools.Execution[index].Runtime">
+                            <option value="shell">shell</option>
+                            <option value="python">python</option>
+                            <option value="node">node</option>
+                            <option value="custom">custom</option>
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-5 form-group mb-2">
+                        <label>Pool endpoint</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Execution[index].PoolEndpoint" />
+                    </div>
+                    <div class="col-md-3 form-group mb-2">
+                        <label>Container image (custom)</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Execution[index].ContainerImage" />
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                @onclick="() => RemoveExecution(index)">×</button>
+                    </div>
+                </div>
+                <div class="form-check">
+                    <InputCheckbox class="form-check-input"
+                                   @bind-Value="Model.Tools.Execution[index].AllowEgress" />
+                    <label class="form-check-label">allowEgress</label>
+                </div>
+            </div>
+        }
+        <button type="button" class="btn btn-sm btn-outline-secondary mb-3" @onclick="AddExecution">+ ACA runtime</button>
+
+        <h6>Integration tools (MCP)</h6>
+        @for (var i = 0; i < Model.Tools.Integrations.Count; i++)
+        {
+            var index = i;
+            <div class="border rounded p-2 mb-2">
+                <div class="form-row">
+                    <div class="col-md-3 form-group mb-2">
+                        <label>Name</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].Name" />
+                    </div>
+                    <div class="col-md-5 form-group mb-2">
+                        <label>URL</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].Url" />
+                    </div>
+                    <div class="col-md-3 form-group mb-2">
+                        <label>Auth mode</label>
+                        <InputSelect class="form-control form-control-sm"
+                                    @bind-Value="Model.Tools.Integrations[index].AuthMode">
+                            <option value="">none</option>
+                            <option value="bearer">bearer</option>
+                            <option value="api-key">api-key</option>
+                            <option value="oauth-per-tenant">oauth-per-tenant</option>
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                @onclick="() => RemoveIntegration(index)">×</button>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="col-md-6 form-group mb-0">
+                        <label>Auth token (bearer/api-key)</label>
+                        <InputText class="form-control form-control-sm" type="password"
+                                   @bind-Value="Model.Tools.Integrations[index].AuthToken" />
+                    </div>
+                    <div class="col-md-6 form-group mb-0">
+                        <label>OAuth token URL</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].OAuth!.TokenUrl" />
+                    </div>
+                </div>
+                <div class="form-row mt-2">
+                    <div class="col-md-4 form-group mb-0">
+                        <label>OAuth client ID</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].OAuth!.ClientId" />
+                    </div>
+                    <div class="col-md-4 form-group mb-0">
+                        <label>OAuth client secret</label>
+                        <InputText class="form-control form-control-sm" type="password"
+                                   @bind-Value="Model.Tools.Integrations[index].OAuth!.ClientSecret" />
+                    </div>
+                    <div class="col-md-4 form-group mb-0">
+                        <label>OAuth scope</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].OAuth!.Scope" />
+                    </div>
+                </div>
+                <div class="form-check mt-2">
+                    <InputCheckbox class="form-check-input"
+                                   @bind-Value="Model.Tools.Integrations[index].AllowEgress" />
+                    <label class="form-check-label">allowEgress</label>
+                </div>
+            </div>
+        }
+        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="AddIntegration">+ MCP server</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public AgenticConfigForm Model { get; set; } = new();
+
+    private string ConfirmationKeywordsText
+    {
+        get => string.Join(", ", Model.Guardrails.RequireConfirmationFor);
+        set => Model.Guardrails.RequireConfirmationFor = SplitCsv(value);
+    }
+
+    private string AllowedHostsText
+    {
+        get => string.Join(", ", Model.Guardrails.AllowedEgressHosts);
+        set => Model.Guardrails.AllowedEgressHosts = SplitCsv(value);
+    }
+
+    private string ExpectedPatternsText
+    {
+        get => string.Join(", ", Model.Guardrails.ExpectedAnswerPatterns);
+        set => Model.Guardrails.ExpectedAnswerPatterns = SplitCsv(value);
+    }
+
+    private void AddExecution() =>
+        Model.Tools.Execution.Add(new ExecutionToolForm());
+
+    private void RemoveExecution(int index) =>
+        Model.Tools.Execution.RemoveAt(index);
+
+    private void AddIntegration() =>
+        Model.Tools.Integrations.Add(new IntegrationToolForm { OAuth = new IntegrationOAuthForm() });
+
+    private void RemoveIntegration(int index) =>
+        Model.Tools.Integrations.RemoveAt(index);
+
+    private static List<string> SplitCsv(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+    public sealed class AgenticConfigForm
+    {
+        public bool Enabled { get; set; }
+        public string PromptProfile { get; set; } = "auto";
+        public AgenticToolsForm Tools { get; set; } = new();
+        public AgenticGuardrailsForm Guardrails { get; set; } = new();
+
+        public AgenticConfig ToConfig() => new()
+        {
+            Enabled = Enabled,
+            PromptProfile = PromptProfile,
+            Tools = new AgenticToolsConfig
+            {
+                Execution = Tools.Execution.Select(e => new ExecutionToolConfig
+                {
+                    Type = "aca-session",
+                    Runtime = e.Runtime,
+                    PoolEndpoint = e.PoolEndpoint,
+                    ContainerImage = e.ContainerImage,
+                    AllowEgress = e.AllowEgress
+                }).ToList(),
+                Integrations = Tools.Integrations.Select(i => new IntegrationToolConfig
+                {
+                    Type = "mcp",
+                    Name = i.Name,
+                    Url = i.Url,
+                    AuthMode = i.AuthMode,
+                    AuthToken = i.AuthToken,
+                    AllowEgress = i.AllowEgress,
+                    OAuth = i.OAuth is { TokenUrl.Length: > 0 } oauth
+                        ? new McpOAuthConfig
+                        {
+                            TokenUrl = oauth.TokenUrl,
+                            ClientId = oauth.ClientId,
+                            ClientSecret = oauth.ClientSecret,
+                            Scope = oauth.Scope
+                        }
+                        : null
+                }).ToList()
+            },
+            Guardrails = new AgenticGuardrailsConfig
+            {
+                MaxIterations = Guardrails.MaxIterations > 0 ? Guardrails.MaxIterations : 15,
+                LoopTimeoutSeconds = Guardrails.LoopTimeoutSeconds,
+                ValidationMode = Guardrails.ValidationMode,
+                NetworkEgress = Guardrails.NetworkEgress,
+                MinAnswerLength = Guardrails.MinAnswerLength,
+                RequireConfirmationFor = Guardrails.RequireConfirmationFor,
+                AllowedEgressHosts = Guardrails.AllowedEgressHosts,
+                ExpectedAnswerPatterns = Guardrails.ExpectedAnswerPatterns,
+                RequireZeroExitCode = Guardrails.RequireZeroExitCode,
+                HumanReviewOnMaxIterations = Guardrails.HumanReviewOnMaxIterations
+            }
+        };
+
+        public static AgenticConfigForm FromConfig(AgenticConfig? config)
+        {
+            config ??= AgenticConfig.Disabled;
+            return new AgenticConfigForm
+            {
+                Enabled = config.Enabled,
+                PromptProfile = config.PromptProfile,
+                Tools = new AgenticToolsForm
+                {
+                    Execution = config.Tools.Execution.Select(e => new ExecutionToolForm
+                    {
+                        Runtime = e.Runtime,
+                        PoolEndpoint = e.PoolEndpoint,
+                        ContainerImage = e.ContainerImage,
+                        AllowEgress = e.AllowEgress
+                    }).ToList(),
+                    Integrations = config.Tools.Integrations.Select(i => new IntegrationToolForm
+                    {
+                        Name = i.Name,
+                        Url = i.Url,
+                        AuthMode = i.AuthMode,
+                        AuthToken = i.AuthToken,
+                        AllowEgress = i.AllowEgress,
+                        OAuth = new IntegrationOAuthForm
+                        {
+                            TokenUrl = i.OAuth?.TokenUrl ?? string.Empty,
+                            ClientId = i.OAuth?.ClientId ?? string.Empty,
+                            ClientSecret = i.OAuth?.ClientSecret ?? string.Empty,
+                            Scope = i.OAuth?.Scope
+                        }
+                    }).ToList()
+                },
+                Guardrails = new AgenticGuardrailsForm
+                {
+                    MaxIterations = config.Guardrails.MaxIterations,
+                    LoopTimeoutSeconds = config.Guardrails.LoopTimeoutSeconds,
+                    ValidationMode = config.Guardrails.ValidationMode,
+                    NetworkEgress = config.Guardrails.NetworkEgress,
+                    MinAnswerLength = config.Guardrails.MinAnswerLength,
+                    RequireConfirmationFor = config.Guardrails.RequireConfirmationFor.ToList(),
+                    AllowedEgressHosts = config.Guardrails.AllowedEgressHosts.ToList(),
+                    ExpectedAnswerPatterns = config.Guardrails.ExpectedAnswerPatterns.ToList(),
+                    RequireZeroExitCode = config.Guardrails.RequireZeroExitCode,
+                    HumanReviewOnMaxIterations = config.Guardrails.HumanReviewOnMaxIterations
+                }
+            };
+        }
+    }
+
+    public sealed class AgenticToolsForm
+    {
+        public List<ExecutionToolForm> Execution { get; set; } = [];
+        public List<IntegrationToolForm> Integrations { get; set; } = [];
+    }
+
+    public sealed class ExecutionToolForm
+    {
+        public string Runtime { get; set; } = "shell";
+        public string? PoolEndpoint { get; set; }
+        public string? ContainerImage { get; set; }
+        public bool AllowEgress { get; set; }
+    }
+
+    public sealed class IntegrationToolForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Url { get; set; } = string.Empty;
+        public string AuthMode { get; set; } = string.Empty;
+        public string? AuthToken { get; set; }
+        public bool AllowEgress { get; set; }
+        public IntegrationOAuthForm? OAuth { get; set; }
+    }
+
+    public sealed class IntegrationOAuthForm
+    {
+        public string TokenUrl { get; set; } = string.Empty;
+        public string ClientId { get; set; } = string.Empty;
+        public string ClientSecret { get; set; } = string.Empty;
+        public string? Scope { get; set; }
+    }
+
+    public sealed class AgenticGuardrailsForm
+    {
+        public int MaxIterations { get; set; } = 15;
+        public int LoopTimeoutSeconds { get; set; }
+        public string ValidationMode { get; set; } = "hybrid";
+        public string NetworkEgress { get; set; } = "restricted";
+        public int MinAnswerLength { get; set; }
+        public List<string> RequireConfirmationFor { get; set; } = [];
+        public List<string> AllowedEgressHosts { get; set; } = [];
+        public List<string> ExpectedAnswerPatterns { get; set; } = [];
+        public bool RequireZeroExitCode { get; set; } = true;
+        public bool HumanReviewOnMaxIterations { get; set; } = true;
+    }
+}

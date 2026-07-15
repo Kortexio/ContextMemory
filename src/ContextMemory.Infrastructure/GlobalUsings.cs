@@ -1,0 +1,9 @@
+global using ContextMemory.Core.Agentic;
+global using ContextMemory.Core.Agentic.Mcp;
+global using ContextMemory.Core.Configuration;
+global using ContextMemory.Core.Contracts;
+global using ContextMemory.Core.Models;
+global using ContextMemory.Core.Profile;
+global using ContextMemory.Core.Security;
+global using ContextMemory.Core.Session;
+global using ContextMemory.Infrastructure.Security;

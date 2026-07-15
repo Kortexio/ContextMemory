@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\ContextMemory.ServiceDefaults\ContextMemory.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\ContextMemory.Core\ContextMemory.Core.csproj" />
+    <ProjectReference Include="..\ContextMemory.Infrastructure\ContextMemory.Infrastructure.csproj" />
+    <ProjectReference Include="..\ContextMemory.Adapters\ContextMemory.Adapters.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>contextmemory-api-dev</UserSecretsId>
+  </PropertyGroup>
+
+</Project>

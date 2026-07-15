@@ -1,0 +1,353 @@
+@page "/apps/{AppId}/config"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@layout MainLayout
+@using ContextMemory.Admin.UI.Components
+@using static ContextMemory.Admin.UI.Components.AgenticConfigEditor
+
+<PageTitle>Config - @AppId</PageTitle>
+
+@if (_loading)
+{
+    <div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Loading configuration…</div>
+}
+else
+{
+    <div class="card card-outline card-primary">
+        <div class="card-header">
+            <h3 class="card-title">Runtime config — @AppId</h3>
+            <div class="card-tools">
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="LoadAsync" disabled="@_saving">Reload</button>
+            </div>
+        </div>
+        <div class="card-body">
+            @if (_loadError is not null)
+            {
+                <div class="alert alert-warning">@_loadError</div>
+            }
+
+            <EditForm Model="_form" OnValidSubmit="SaveAsync">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>LLM</h5>
+                        <div class="form-group">
+                            <label>Default language</label>
+                            <InputText class="form-control" @bind-Value="_form.DefaultLanguage" />
+                        </div>
+                        <div class="form-group">
+                            <label>LLM model</label>
+                            <InputText class="form-control" @bind-Value="_form.LlmModel" />
+                        </div>
+                        <div class="form-group">
+                            <label>Backend</label>
+                            <InputText class="form-control" @bind-Value="_form.LlmBackend" />
+                        </div>
+                        <div class="form-group">
+                            <label>Max history messages</label>
+                            <InputNumber class="form-control" @bind-Value="_form.MaxHistoryMessages" />
+                        </div>
+                        <div class="form-check mb-3">
+                            <InputCheckbox class="form-check-input" @bind-Value="_form.StreamingEnabled" />
+                            <label class="form-check-label">Streaming enabled</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>Wiki (v3)</h5>
+                        <div class="form-group">
+                            <label>Max wiki context chars</label>
+                            <InputNumber class="form-control" @bind-Value="_form.MaxWikiContextChars" />
+                        </div>
+                        <div class="form-group">
+                            <label>Compaction threshold (bytes)</label>
+                            <InputNumber class="form-control" @bind-Value="_form.WikiCompactionThresholdBytes" />
+                        </div>
+                        <div class="form-group">
+                            <label>Compaction min pages</label>
+                            <InputNumber class="form-control" @bind-Value="_form.WikiCompactionMinPages" />
+                        </div>
+
+                        <h5 class="mt-3">Web search (v3.2)</h5>
+                        <div class="form-check mb-2">
+                            <InputCheckbox class="form-check-input" @bind-Value="_form.WebSearchEnabled" />
+                            <label class="form-check-label">Enable web search</label>
+                        </div>
+                        <div class="form-group">
+                            <label>Mode</label>
+                            <InputSelect class="form-control" @bind-Value="_form.WebSearchMode">
+                                <option value="heuristic">heuristic (fast + LLM when inconclusive)</option>
+                                <option value="llm">llm (always classify)</option>
+                                <option value="always">always (search every turn)</option>
+                                <option value="off">off</option>
+                            </InputSelect>
+                        </div>
+                        <div class="form-group">
+                            <label>Provider</label>
+                            <InputSelect class="form-control" @bind-Value="_form.WebSearchProvider">
+                                <option value="tavily">tavily</option>
+                                <option value="brave">brave</option>
+                            </InputSelect>
+                        </div>
+                        <div class="form-group">
+                            <label>Max results</label>
+                            <InputNumber class="form-control" @bind-Value="_form.WebSearchMaxResults" />
+                        </div>
+                        <div class="form-group">
+                            <label>Max context chars (ephemeral prompt)</label>
+                            <InputNumber class="form-control" @bind-Value="_form.WebSearchMaxContextChars" />
+                        </div>
+                        <div class="form-check mb-2">
+                            <InputCheckbox class="form-check-input" @bind-Value="_form.WebSearchPersistToWiki" />
+                            <label class="form-check-label">Persist web facts to wiki (maintainer)</label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <InputCheckbox class="form-check-input" @bind-Value="_form.WebSearchLogWebSearch" />
+                            <label class="form-check-label">Log web searches in telemetry</label>
+                        </div>
+                        <p class="text-muted small">Tavily/Brave API keys in <code>appsettings.Development.json</code> (global).</p>
+                    </div>
+                </div>
+
+                <h5 class="mt-2">Rate limits</h5>
+                <div class="form-row">
+                    <div class="col-md-4 form-group">
+                        <label>Requests / min (app)</label>
+                        <InputNumber class="form-control" @bind-Value="_form.RateLimitRpm" />
+                    </div>
+                    <div class="col-md-4 form-group">
+                        <label>Requests / min (user)</label>
+                        <InputNumber class="form-control" @bind-Value="_form.RateLimitUserRpm" />
+                    </div>
+                    <div class="col-md-4 form-group">
+                        <label>Tokens / min</label>
+                        <InputNumber class="form-control" @bind-Value="_form.RateLimitTpm" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="col-md-6 form-group">
+                        <label>Agentic request weight</label>
+                        <InputNumber class="form-control" @bind-Value="_form.AgenticRequestWeight" />
+                        <small class="text-muted">Each agentic turn counts as N requests in the rate limiter.</small>
+                    </div>
+                    <div class="col-md-6 form-group">
+                        <label>Agentic tokens / iteration</label>
+                        <InputNumber class="form-control" @bind-Value="_form.AgenticTokensPerIteration" />
+                    </div>
+                </div>
+
+                <AgenticConfigEditor Model="_form.Agentic" />
+
+                <h5 class="mt-2">Persona and rules (markdown)</h5>
+                <div class="form-group">
+                    <label>Base persona</label>
+                    <InputTextArea class="form-control" rows="3" @bind-Value="_form.BasePersona" />
+                </div>
+                <div class="form-group">
+                    <label>Business rules</label>
+                    <InputTextArea class="form-control" rows="2" @bind-Value="_form.BusinessRules" />
+                </div>
+                <div class="form-group">
+                    <label>Format rules</label>
+                    <InputTextArea class="form-control" rows="2" @bind-Value="_form.FormatRules" />
+                </div>
+                <div class="form-group">
+                    <label>Wiki schema</label>
+                    <InputTextArea class="form-control" rows="3" @bind-Value="_form.WikiSchema" />
+                </div>
+
+                @if (_message is not null)
+                {
+                    <div class="alert alert-success">@_message</div>
+                }
+                @if (_error is not null)
+                {
+                    <div class="alert alert-danger">@_error</div>
+                }
+
+                <button class="btn btn-primary" type="submit" disabled="@_saving">Save changes</button>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    private sealed class ConfigForm
+    {
+        public string DefaultLanguage { get; set; } = "en-US";
+        public string LlmModel { get; set; } = "qwen3.5:9b";
+        public string LlmBackend { get; set; } = "ollama";
+        public int MaxHistoryMessages { get; set; } = 20;
+        public bool StreamingEnabled { get; set; } = true;
+        public int MaxWikiContextChars { get; set; }
+        public long WikiCompactionThresholdBytes { get; set; }
+        public int WikiCompactionMinPages { get; set; }
+        public string BasePersona { get; set; } = string.Empty;
+        public string BusinessRules { get; set; } = string.Empty;
+        public string FormatRules { get; set; } = string.Empty;
+        public string WikiSchema { get; set; } = string.Empty;
+        public bool WebSearchEnabled { get; set; }
+        public string WebSearchMode { get; set; } = "heuristic";
+        public string WebSearchProvider { get; set; } = "tavily";
+        public int WebSearchMaxResults { get; set; } = 5;
+        public int WebSearchMaxContextChars { get; set; } = 3000;
+        public bool WebSearchPersistToWiki { get; set; }
+        public bool WebSearchLogWebSearch { get; set; } = true;
+        public int RateLimitRpm { get; set; } = 60;
+        public int RateLimitUserRpm { get; set; } = 30;
+        public int RateLimitTpm { get; set; } = 100_000;
+        public int AgenticRequestWeight { get; set; } = 3;
+        public int AgenticTokensPerIteration { get; set; } = 500;
+        public AgenticConfigForm Agentic { get; set; } = new();
+    }
+
+    [Parameter] public string AppId { get; set; } = string.Empty;
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+    [Inject] private ChatClient ChatApi { get; set; } = default!;
+    [Inject] private AdminSession Session { get; set; } = default!;
+
+    private ConfigForm _form = new();
+    private bool _loading = true;
+    private bool _saving;
+    private string? _message;
+    private string? _error;
+    private string? _loadError;
+    private string? _apiKey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Session.IsConfigured)
+            await Session.InitializeAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        _message = null;
+        _error = null;
+
+        if (!Session.IsConfigured)
+        {
+            _loadError = "Configure Settings first.";
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            var credentials = await Api.GetAppCredentialsAsync(AppId);
+            if (credentials is null || string.IsNullOrWhiteSpace(credentials.ApiKey))
+            {
+                _loadError = "API key unavailable — could not load config via GET /apps/{id}/config.";
+                return;
+            }
+
+            _apiKey = credentials.ApiKey;
+            var settings = new ChatTestSettings
+            {
+                AppId = AppId,
+                UserId = "admin-config",
+                ApiKey = credentials.ApiKey,
+                Model = "qwen3.5:9b"
+            };
+
+            var config = await ChatApi.GetAppConfigAsync(settings);
+            if (config is null)
+            {
+                _loadError = "Empty config.";
+                return;
+            }
+
+            _form = new ConfigForm
+            {
+                DefaultLanguage = config.DefaultLanguage,
+                LlmModel = config.LlmModel,
+                LlmBackend = config.LlmBackend,
+                MaxHistoryMessages = config.MaxHistoryMessages,
+                StreamingEnabled = config.StreamingEnabled,
+                MaxWikiContextChars = config.MaxWikiContextChars,
+                WikiCompactionThresholdBytes = config.WikiCompactionThresholdBytes,
+                WikiCompactionMinPages = config.WikiCompactionMinPages,
+                BasePersona = config.BasePersona,
+                BusinessRules = config.BusinessRules,
+                FormatRules = config.FormatRules,
+                WikiSchema = config.WikiSchema,
+                WebSearchEnabled = config.WebSearch?.Enabled ?? false,
+                WebSearchMode = config.WebSearch?.Mode ?? "heuristic",
+                WebSearchProvider = config.WebSearch?.Provider ?? "tavily",
+                WebSearchMaxResults = config.WebSearch?.MaxResults ?? 5,
+                WebSearchMaxContextChars = config.WebSearch?.MaxContextChars ?? 3000,
+                WebSearchPersistToWiki = config.WebSearch?.PersistToWiki ?? false,
+                WebSearchLogWebSearch = config.WebSearch?.LogWebSearch ?? true,
+                RateLimitRpm = config.RateLimits?.RequestsPerMinute ?? 60,
+                RateLimitUserRpm = config.RateLimits?.UserRequestsPerMinute ?? 30,
+                RateLimitTpm = config.RateLimits?.TokensPerMinute ?? 100_000,
+                AgenticRequestWeight = config.RateLimits?.AgenticRequestWeight ?? 3,
+                AgenticTokensPerIteration = config.RateLimits?.AgenticTokensPerIteration ?? 500,
+                Agentic = AgenticConfigForm.FromConfig(config.Agentic)
+            };
+        }
+        catch (Exception ex)
+        {
+            _loadError = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _message = null;
+        _error = null;
+        try
+        {
+            var patch = new AppConfigPatchRequest
+            {
+                DefaultLanguage = _form.DefaultLanguage,
+                LlmModel = _form.LlmModel,
+                LlmBackend = _form.LlmBackend,
+                MaxHistoryMessages = _form.MaxHistoryMessages,
+                StreamingEnabled = _form.StreamingEnabled,
+                MaxWikiContextChars = _form.MaxWikiContextChars > 0 ? _form.MaxWikiContextChars : null,
+                WikiCompactionThresholdBytes = _form.WikiCompactionThresholdBytes > 0 ? _form.WikiCompactionThresholdBytes : null,
+                WikiCompactionMinPages = _form.WikiCompactionMinPages > 0 ? _form.WikiCompactionMinPages : null,
+                BasePersona = _form.BasePersona,
+                BusinessRules = _form.BusinessRules,
+                FormatRules = _form.FormatRules,
+                WikiSchema = _form.WikiSchema,
+                WebSearch = new WebSearchConfigPatch
+                {
+                    Enabled = _form.WebSearchEnabled,
+                    Mode = _form.WebSearchMode,
+                    Provider = _form.WebSearchProvider,
+                    MaxResults = _form.WebSearchMaxResults > 0 ? _form.WebSearchMaxResults : null,
+                    MaxContextChars = _form.WebSearchMaxContextChars > 0 ? _form.WebSearchMaxContextChars : null,
+                    PersistToWiki = _form.WebSearchPersistToWiki,
+                    LogWebSearch = _form.WebSearchLogWebSearch
+                },
+                RateLimits = new RateLimitConfig
+                {
+                    RequestsPerMinute = _form.RateLimitRpm,
+                    UserRequestsPerMinute = _form.RateLimitUserRpm,
+                    TokensPerMinute = _form.RateLimitTpm,
+                    AgenticRequestWeight = _form.AgenticRequestWeight,
+                    AgenticTokensPerIteration = _form.AgenticTokensPerIteration
+                },
+                Agentic = _form.Agentic.ToConfig()
+            };
+
+            var updated = await Api.PatchConfigAsync(AppId, patch);
+            _message = $"Config saved. Model: {updated?.LlmModel ?? _form.LlmModel}";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

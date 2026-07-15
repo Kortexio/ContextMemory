@@ -1,0 +1,140 @@
+.chat-lab .chat-messages {
+    min-height: 380px;
+    max-height: 560px;
+    overflow-y: auto;
+    background: #f8f9fa;
+}
+
+.chat-row {
+    margin-bottom: 1rem;
+    clear: both;
+}
+
+.chat-row-user {
+    text-align: right;
+}
+
+.chat-row-assistant {
+    text-align: left;
+}
+
+.chat-meta {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-bottom: 0.25rem;
+}
+
+.chat-bubble {
+    display: inline-block;
+    max-width: 92%;
+    padding: 0.6rem 0.85rem;
+    border-radius: 0.5rem;
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: #fff;
+    border: 1px solid #dee2e6;
+}
+
+.chat-row-user .chat-bubble {
+    background: #007bff;
+    color: #fff;
+    border-color: #007bff;
+}
+
+.chat-bubble-error {
+    background: #f8d7da !important;
+    color: #721c24 !important;
+    border-color: #f5c6cb !important;
+}
+
+.chat-raw {
+    font-size: 0.7rem;
+    max-height: 180px;
+    overflow: auto;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 0.5rem;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.agentic-timeline {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px dashed #dee2e6;
+}
+
+.agentic-timeline-title,
+.agentic-answer-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6c757d;
+    margin-bottom: 0.35rem;
+}
+
+.agentic-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45rem;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    margin-bottom: 0.25rem;
+    color: #495057;
+}
+
+.agentic-step-icon {
+    flex: 0 0 auto;
+    width: 1rem;
+    text-align: center;
+    font-weight: 700;
+}
+
+.agentic-step-running .agentic-step-icon {
+    color: #007bff;
+}
+
+.agentic-step-done .agentic-step-icon {
+    color: #28a745;
+}
+
+.agentic-step-error .agentic-step-icon {
+    color: #dc3545;
+}
+
+.agentic-step-warning .agentic-step-icon {
+    color: #ffc107;
+}
+
+.agentic-step-pending .agentic-step-icon {
+    color: #fd7e14;
+}
+
+.agentic-step-pending .agentic-step-label {
+    font-weight: 600;
+}
+
+.agentic-confirmation-hint {
+    margin-bottom: 0.75rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: 0.35rem;
+    border: 1px solid #ffe8a1;
+    background: #fff9e6;
+    color: #856404;
+    font-size: 0.82rem;
+}
+
+.agentic-confirmation-hint code {
+    color: #6f4e00;
+    background: #fff3cd;
+    padding: 0.1rem 0.25rem;
+    border-radius: 0.2rem;
+}
+
+.agentic-answer {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
