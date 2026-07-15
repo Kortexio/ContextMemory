@@ -1,0 +1,631 @@
+@page "/chat"
+@page "/chat-test"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@layout MainLayout
+@implements IDisposable
+
+<PageTitle>Chat Lab - ContextMemory</PageTitle>
+
+<div class="row chat-lab">
+    <div class="col-xl-3 mb-3">
+        <div class="card card-outline card-secondary">
+            <div class="card-header"><h3 class="card-title">Connection</h3></div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label>App ID</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_settings.AppId" />
+                </div>
+                <div class="form-group">
+                    <label>User ID</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_settings.UserId" />
+                </div>
+                <div class="form-group">
+                    <label>Session ID</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_settings.SessionId" placeholder="empty = API generates" />
+                </div>
+                <div class="form-group">
+                    <label>App API key</label>
+                    <InputText class="form-control form-control-sm" type="password" @bind-Value="_settings.ApiKey" />
+                </div>
+                <div class="form-group">
+                    <label>Model</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_settings.Model" />
+                </div>
+                <div class="btn-group btn-group-sm w-100 mb-2">
+                    <button type="button" class="btn @ModeBtnClass(ChatEndpointMode.Chat)" @onclick="() => SetMode(ChatEndpointMode.Chat)">Chat</button>
+                    <button type="button" class="btn @ModeBtnClass(ChatEndpointMode.Generate)" @onclick="() => SetMode(ChatEndpointMode.Generate)">Generate</button>
+                </div>
+                <div class="custom-control custom-switch mb-2">
+                    <InputCheckbox class="custom-control-input" id="streamSwitch" @bind-Value="_settings.Stream" disabled="@_busy" />
+                    <label class="custom-control-label" for="streamSwitch">Streaming (NDJSON)</label>
+                </div>
+                <div class="custom-control custom-switch mb-2">
+                    <InputCheckbox class="custom-control-input" id="rawSwitch" @bind-Value="_settings.ShowRawJson" />
+                    <label class="custom-control-label" for="rawSwitch">Show raw JSON panel</label>
+                </div>
+                <button class="btn btn-outline-primary btn-sm btn-block" type="button" @onclick="SaveSettingsAsync" disabled="@_busy">Save locally</button>
+                <button class="btn btn-outline-secondary btn-sm btn-block mt-1" type="button" @onclick="LoadAppAsync" disabled="@_busy">Load app</button>
+                <button class="btn btn-outline-warning btn-sm btn-block mt-1" type="button" @onclick="NewSessionAsync" disabled="@_busy">New session</button>
+            </div>
+        </div>
+
+        @if (_appDetail is not null)
+        {
+            <div class="card card-outline card-info">
+                <div class="card-header"><h3 class="card-title">@_appDetail.AppId</h3></div>
+                <div class="card-body p-2 small">
+                    <div><strong>Backend:</strong> @_appDetail.LlmBackend / @_appDetail.LlmModel</div>
+                    <div><strong>Language:</strong> @_appDetail.DefaultLanguage</div>
+                    <div><strong>History:</strong> @_appDetail.MaxHistoryMessages msgs</div>
+                    <div><strong>Memory:</strong> per-session wiki</div>
+                    <div><strong>Active users:</strong> @_appDetail.ActiveUsers</div>
+                </div>
+            </div>
+        }
+
+        <div class="card card-outline card-secondary">
+            <div class="card-header">
+                <h3 class="card-title">Ollama options</h3>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label>System prompt (chat)</label>
+                    <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_settings.SystemPrompt" />
+                </div>
+                <div class="form-row">
+                    <div class="col-6 form-group">
+                        <label>temperature</label>
+                        <InputNumber class="form-control form-control-sm" @bind-Value="_settings.Temperature" />
+                    </div>
+                    <div class="col-6 form-group">
+                        <label>top_p</label>
+                        <InputNumber class="form-control form-control-sm" @bind-Value="_settings.TopP" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="col-6 form-group">
+                        <label>top_k</label>
+                        <InputNumber class="form-control form-control-sm" @bind-Value="_settings.TopK" />
+                    </div>
+                    <div class="col-6 form-group">
+                        <label>num_ctx</label>
+                        <InputNumber class="form-control form-control-sm" @bind-Value="_settings.NumCtx" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="col-6 form-group">
+                        <label>repeat_penalty</label>
+                        <InputNumber class="form-control form-control-sm" @bind-Value="_settings.RepeatPenalty" />
+                    </div>
+                    <div class="col-6 form-group">
+                        <label>num_predict</label>
+                        <InputNumber class="form-control form-control-sm" @bind-Value="_settings.NumPredict" />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>keep_alive</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_settings.KeepAlive" />
+                </div>
+                <div class="form-group mb-0">
+                    <label>format (e.g. json)</label>
+                    <InputText class="form-control form-control-sm" @bind-Value="_settings.Format" />
+                </div>
+            </div>
+        </div>
+
+        @if (!_adminSession.IsConfigured)
+        {
+            <div class="alert alert-warning">Set API URL in <NavLink href="/settings">Settings</NavLink>.</div>
+        }
+    </div>
+
+    <div class="@(_settings.ShowRawJson ? "col-xl-6" : "col-xl-9") mb-3">
+        <div class="card card-outline card-primary h-100">
+            <div class="card-header">
+                <h3 class="card-title">
+                    @(_settings.Mode == ChatEndpointMode.Chat ? "POST /api/chat" : "POST /api/generate")
+                </h3>
+                <div class="card-tools">
+                    @if (_busy)
+                    {
+                        <button class="btn btn-sm btn-warning mr-1" type="button" @onclick="CancelRequest">Stop</button>
+                    }
+                    <button class="btn btn-sm btn-outline-secondary mr-1" type="button" @onclick="RegenerateAsync" disabled="@(_busy || !CanRegenerate)">Regenerate</button>
+                    <button class="btn btn-sm btn-outline-danger" type="button" @onclick="ClearUi" disabled="@(_busy && _messages.Count == 0)">Clear UI</button>
+                </div>
+            </div>
+
+            @if (_settings.Mode == ChatEndpointMode.Chat)
+            {
+                <div class="card-body chat-messages" @ref="_messagesContainer">
+                    @if (_messages.Count == 0)
+                    {
+                        <p class="text-muted">Per-session memory: recent history + compiled wiki. Send only the new message; middleware enriches the prompt.</p>
+                    }
+                    @foreach (var msg in _messages)
+                    {
+                        <div class="chat-row @(msg.Role == "user" ? "chat-row-user" : "chat-row-assistant")">
+                            <div class="chat-meta">
+                                <span class="badge badge-@(msg.Role == "user" ? "primary" : msg.IsError ? "danger" : "secondary")">@msg.Role</span>
+                                @msg.Timestamp.LocalDateTime.ToString("HH:mm:ss")
+                                @if (msg.ElapsedMs is not null) { <span> · @msg.ElapsedMs ms</span> }
+                                @if (msg.IsStreaming) { <span> · streaming…</span> }
+                                @if (!string.IsNullOrEmpty(msg.MessageId)) { <span> · @msg.MessageId</span> }
+                            </div>
+                            <div class="chat-bubble @(msg.IsError ? "chat-bubble-error" : "")">
+                                @if (msg.HasAgenticProgress)
+                                {
+                                    <div class="agentic-timeline">
+                                        <div class="agentic-timeline-title">Agentic</div>
+                                        @foreach (var step in msg.AgenticSteps)
+                                        {
+                                            <div class="agentic-step agentic-step-@step.Status">
+                                                <span class="agentic-step-icon">@StepIcon(step.Status)</span>
+                                                <span class="agentic-step-label">@step.Label</span>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                @if (msg.AwaitingConfirmation)
+                                {
+                                    <div class="agentic-confirmation-hint">
+                                        <strong>Human confirmation required</strong>
+                                        <p class="mb-1">Destructive tool execution is paused until explicit authorization.</p>
+                                        @if (!string.IsNullOrEmpty(msg.PendingConfirmationId))
+                                        {
+                                            <p class="mb-1">
+                                                Reply with <code>confirm</code> or send
+                                                <code>[CONFIRM:@msg.PendingConfirmationId]</code>
+                                            </p>
+                                            <button class="btn btn-xs btn-outline-warning" type="button"
+                                                    @onclick="() => CopyConfirmTokenAsync(msg.PendingConfirmationId!)">
+                                                Copy token
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <p class="mb-0">Reply with <code>confirm</code> to authorize or <code>cancel</code> to abort. (HITL keywords follow tenant locale.)</p>
+                                        }
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(msg.FinalContent))
+                                {
+                                    @if (msg.HasAgenticProgress || msg.AwaitingConfirmation)
+                                    {
+                                        <div class="agentic-answer-title">Answer</div>
+                                    }
+                                    <div class="agentic-answer">@msg.FinalContent</div>
+                                }
+                                else if (!msg.HasAgenticProgress)
+                                {
+                                    @msg.Content
+                                }
+                            </div>
+                            @if (msg.Role == "assistant" && !string.IsNullOrEmpty(msg.MessageId) && !msg.IsStreaming)
+                            {
+                                <div class="mt-1">
+                                    <button class="btn btn-xs btn-outline-secondary" type="button" @onclick="() => CopyAsync(msg.Content)">Copy</button>
+                                </div>
+                            }
+                            @if (msg.PromptEvalCount is not null || msg.EvalCount is not null)
+                            {
+                                <div class="small text-muted">tokens in/out: @msg.PromptEvalCount / @msg.EvalCount</div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="card-footer">
+                    <EditForm Model="_chatInput" OnValidSubmit="SendChatAsync">
+                        <div class="input-group">
+                            <InputTextArea class="form-control" rows="2" @bind-Value="_chatInput.Text" placeholder="Message…" disabled="@_busy" />
+                            <div class="input-group-append">
+                                <button class="btn btn-primary" type="submit" disabled="@(_busy || string.IsNullOrWhiteSpace(_chatInput.Text))">Send</button>
+                            </div>
+                        </div>
+                    </EditForm>
+                </div>
+            }
+            else
+            {
+                <div class="card-body">
+                    <label>Prompt</label>
+                    <InputTextArea class="form-control" rows="8" @bind-Value="_generatePrompt" disabled="@_busy" />
+                </div>
+                <div class="card-footer">
+                    <button class="btn btn-primary" type="button" @onclick="SendGenerateAsync" disabled="@(_busy || string.IsNullOrWhiteSpace(_generatePrompt))">Generate</button>
+                </div>
+            }
+
+            @if (_error is not null)
+            {
+                <div class="card-footer border-top-0 pt-0"><div class="alert alert-danger mb-0">@_error</div></div>
+            }
+            @if (_info is not null)
+            {
+                <div class="card-footer border-top-0 pt-0"><div class="alert alert-info mb-0">@_info</div></div>
+            }
+        </div>
+    </div>
+
+    @if (_settings.ShowRawJson)
+    {
+        <div class="col-xl-3 mb-3">
+            <div class="card card-outline card-dark h-100">
+                <div class="card-header"><h3 class="card-title">Inspector</h3></div>
+                <div class="card-body p-2">
+                    <label class="small font-weight-bold">Last request</label>
+                    <pre class="chat-raw">@(_lastRequestJson ?? "—")</pre>
+                    <label class="small font-weight-bold">Last response</label>
+                    <pre class="chat-raw">@(_lastResponseJson ?? "—")</pre>
+                    @if (_lastMeta is not null)
+                    {
+                        <div class="small text-muted mt-2">
+                            model: @_lastMeta.Model<br />
+                            done: @_lastMeta.DoneReason<br />
+                            prompt tokens: @_lastMeta.PromptEvalCount<br />
+                            completion tokens: @_lastMeta.EvalCount
+                        </div>
+                    }
+                    @if (_lastWebSearchUsed is not null)
+                    {
+                        <div class="small text-muted mt-2">
+                            <strong>Web search</strong><br />
+                            X-Web-Search-Used: @_lastWebSearchUsed<br />
+                            @if (_lastWebSearchProvider is not null)
+                            {
+                                @:X-Web-Search-Provider: @_lastWebSearchProvider<br />
+                            }
+                            @if (_lastWebSearchSkipReason is not null)
+                            {
+                                @:X-Web-Search-Skip-Reason: @_lastWebSearchSkipReason<br />
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="card-footer">
+                    <button class="btn btn-sm btn-outline-warning btn-block" type="button" @onclick="NewSessionAsync" disabled="@_busy">
+                        New session (new X-Session-Id)
+                    </button>
+                    <small class="text-muted">Clears the local sessionId and UI history. Previous wiki data remains on disk in the API.</small>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private sealed class ChatInputModel { public string Text { get; set; } = string.Empty; }
+
+    [Inject] private AdminSession _adminSession { get; set; } = default!;
+    [Inject] private ChatClient ChatApi { get; set; } = default!;
+    [Inject] private IChatTestSettingsStorage ChatSettingsStorage { get; set; } = default!;
+    [Inject] private IJSRuntime Js { get; set; } = default!;
+
+    private ElementReference _messagesContainer;
+    private ChatTestSettings _settings = new();
+    private ChatInputModel _chatInput = new();
+    private string _generatePrompt = string.Empty;
+    private readonly List<ChatUiMessage> _messages = [];
+    private AppDetailDto? _appDetail;
+    private string? _lastRequestJson;
+    private string? _lastResponseJson;
+    private OllamaResponseMeta? _lastMeta;
+    private string? _lastWebSearchUsed;
+    private string? _lastWebSearchProvider;
+    private string? _lastWebSearchSkipReason;
+    private CancellationTokenSource? _cts;
+    private bool _busy;
+    private string? _error;
+    private string? _info;
+
+    private bool CanRegenerate =>
+        _settings.Mode == ChatEndpointMode.Chat && _messages.Any(m => m.Role == "user");
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!_adminSession.IsConfigured)
+            await _adminSession.InitializeAsync();
+        _settings = await ChatSettingsStorage.LoadAsync() ?? new ChatTestSettings();
+    }
+
+    private string ModeBtnClass(ChatEndpointMode mode) =>
+        _settings.Mode == mode ? "btn-primary" : "btn-outline-primary";
+
+    private void SetMode(ChatEndpointMode mode) => _settings.Mode = mode;
+
+    private async Task SaveSettingsAsync()
+    {
+        try
+        {
+            await ChatSettingsStorage.SaveAsync(_settings);
+            _info = "Settings saved.";
+            _error = null;
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    private async Task LoadAppAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await ChatSettingsStorage.SaveAsync(_settings);
+            _appDetail = await ChatApi.GetAppAsync(_settings);
+            if (_appDetail?.LlmModel is { Length: > 0 } m && string.IsNullOrWhiteSpace(_settings.Model))
+                _settings.Model = m;
+            _info = "App metadata loaded.";
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task SendChatAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_chatInput.Text))
+            return;
+
+        BeginRequest();
+        var userText = _chatInput.Text.Trim();
+        _chatInput.Text = string.Empty;
+        _messages.Add(new ChatUiMessage { Role = "user", Content = userText });
+
+        var assistant = new ChatUiMessage { Role = "assistant", Content = string.Empty, IsStreaming = _settings.Stream };
+        if (_settings.Stream)
+            _messages.Add(assistant);
+
+        try
+        {
+            await ChatSettingsStorage.SaveAsync(_settings);
+            ChatExchangeResult result;
+
+            if (_settings.Stream)
+            {
+                result = await ChatApi.ChatStreamAsync(
+                    _settings,
+                    userText,
+                    _ => InvokeAsync(StateHasChanged),
+                    assistant,
+                    _cts!.Token);
+            }
+            else
+            {
+                result = await ChatApi.ChatAsync(_settings, userText, _cts!.Token);
+                _messages.Add(MapAssistant(result));
+            }
+
+            await ApplyResultAsync(result);
+            if (_settings.Stream && result.IsError)
+                assistant.IsError = true;
+
+            _info = $"Completed in {result.ElapsedMs} ms" +
+                    (result.ResponseTimeHeaderMs is not null ? $" (gateway: {result.ResponseTimeHeaderMs} ms)" : "") +
+                    (result.MessageId is not null ? $" · msg {result.MessageId}" : "") +
+                    (result.SessionId is not null ? $" · session {result.SessionId}" : "");
+        }
+        catch (OperationCanceledException)
+        {
+            _info = "Request cancelled.";
+            if (_settings.Stream && assistant.IsStreaming)
+            {
+                assistant.IsStreaming = false;
+                assistant.Content += "\n\n[cancelled]";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            if (_settings.Stream && _messages.Contains(assistant))
+            {
+                assistant.IsError = true;
+                assistant.IsStreaming = false;
+            }
+        }
+        finally
+        {
+            EndRequest();
+            await ScrollToBottomAsync();
+        }
+    }
+
+    private async Task SendGenerateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_generatePrompt))
+            return;
+
+        BeginRequest();
+        var prompt = _generatePrompt.Trim();
+        var assistant = new ChatUiMessage { Role = "assistant", Content = string.Empty, IsStreaming = _settings.Stream };
+        _messages.Add(new ChatUiMessage { Role = "user", Content = $"[generate]\n{prompt}" });
+        if (_settings.Stream)
+            _messages.Add(assistant);
+
+        try
+        {
+            await ChatSettingsStorage.SaveAsync(_settings);
+            ChatExchangeResult result;
+
+            if (_settings.Stream)
+                result = await ChatApi.GenerateStreamAsync(_settings, prompt, _ => InvokeAsync(StateHasChanged), assistant, _cts!.Token);
+            else
+                result = await ChatApi.GenerateAsync(_settings, prompt, _cts!.Token);
+
+            if (!_settings.Stream)
+                _messages.Add(MapAssistant(result));
+
+            await ApplyResultAsync(result);
+            _info = $"Generate done in {result.ElapsedMs} ms.";
+        }
+        catch (OperationCanceledException) { _info = "Cancelled."; }
+        catch (Exception ex) { _error = ex.Message; }
+        finally
+        {
+            EndRequest();
+            await ScrollToBottomAsync();
+        }
+    }
+
+    private async Task RegenerateAsync()
+    {
+        var lastUser = _messages.LastOrDefault(m => m.Role == "user");
+        if (lastUser is null)
+            return;
+
+        while (_messages.Count > 0 && _messages[^1].Role != "user")
+            _messages.RemoveAt(_messages.Count - 1);
+
+        BeginRequest();
+        var userText = lastUser.Content;
+        var assistant = new ChatUiMessage { Role = "assistant", Content = string.Empty, IsStreaming = _settings.Stream };
+        if (_settings.Stream)
+            _messages.Add(assistant);
+
+        try
+        {
+            await ChatSettingsStorage.SaveAsync(_settings);
+            ChatExchangeResult result;
+            if (_settings.Stream)
+                result = await ChatApi.ChatStreamAsync(_settings, userText, _ => InvokeAsync(StateHasChanged), assistant, _cts!.Token);
+            else
+            {
+                result = await ChatApi.ChatAsync(_settings, userText, _cts!.Token);
+                _messages.Add(MapAssistant(result));
+            }
+            await ApplyResultAsync(result);
+            _info = $"Regenerated in {result.ElapsedMs} ms.";
+        }
+        catch (OperationCanceledException) { _info = "Cancelled."; }
+        catch (Exception ex) { _error = ex.Message; }
+        finally
+        {
+            EndRequest();
+            await ScrollToBottomAsync();
+        }
+    }
+
+    private async Task NewSessionAsync()
+    {
+        _settings.SessionId = string.Empty;
+        _messages.Clear();
+        _lastRequestJson = null;
+        _lastResponseJson = null;
+        _lastMeta = null;
+        _error = null;
+        _info = "New session — the next request will make the API generate a new X-Session-Id.";
+        await ChatSettingsStorage.SaveAsync(_settings);
+    }
+
+    private async Task CopyAsync(string text) =>
+        await Js.InvokeVoidAsync("navigator.clipboard.writeText", text);
+
+    private Task CopyConfirmTokenAsync(string pendingId) =>
+        CopyAsync("[CONFIRM:" + pendingId + "]");
+
+    private void CancelRequest()
+    {
+        _cts?.Cancel();
+        _info = "Cancelling…";
+    }
+
+    private void ClearUi()
+    {
+        _messages.Clear();
+        _lastRequestJson = null;
+        _lastResponseJson = null;
+        _lastMeta = null;
+        _error = null;
+        _info = null;
+    }
+
+    private void BeginRequest()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        _busy = true;
+        _error = null;
+        _info = null;
+    }
+
+    private void EndRequest()
+    {
+        _busy = false;
+        _cts?.Dispose();
+        _cts = null;
+    }
+
+    private async Task ApplyResultAsync(ChatExchangeResult result)
+    {
+        _lastRequestJson = result.RawRequestJson;
+        _lastResponseJson = result.RawResponseJson;
+        _lastMeta = result.Meta;
+        _lastWebSearchUsed = result.WebSearchUsed;
+        _lastWebSearchProvider = result.WebSearchProvider;
+        _lastWebSearchSkipReason = result.WebSearchSkipReason;
+
+        if (!string.IsNullOrWhiteSpace(result.SessionId))
+        {
+            _settings.SessionId = result.SessionId;
+            await ChatSettingsStorage.SaveAsync(_settings);
+        }
+
+        if (!_settings.Stream && result.IsError)
+            return;
+
+        var target = _messages.LastOrDefault(m => m.Role == "assistant");
+        if (target is not null && _settings.Stream)
+        {
+            target.MessageId = result.MessageId;
+            target.ElapsedMs = result.ElapsedMs;
+            target.IsError = result.IsError;
+            target.AwaitingConfirmation = result.AwaitingConfirmation;
+            target.PendingConfirmationId = result.PendingConfirmationId;
+            target.PromptEvalCount = result.Meta?.PromptEvalCount;
+            target.EvalCount = result.Meta?.EvalCount;
+        }
+    }
+
+    private static ChatUiMessage MapAssistant(ChatExchangeResult result) =>
+        new()
+        {
+            Role = "assistant",
+            Content = result.Content,
+            FinalContent = string.IsNullOrEmpty(result.FinalContent) ? result.Content : result.FinalContent,
+            AgenticSteps = result.AgenticSteps,
+            AwaitingConfirmation = result.AwaitingConfirmation,
+            PendingConfirmationId = result.PendingConfirmationId,
+            MessageId = result.MessageId,
+            ElapsedMs = result.ElapsedMs,
+            IsError = result.IsError,
+            PromptEvalCount = result.Meta?.PromptEvalCount,
+            EvalCount = result.Meta?.EvalCount
+        };
+
+    private static string StepIcon(string status) =>
+        status switch
+        {
+            "done" => "✓",
+            "error" => "✗",
+            "warning" => "⚠",
+            "pending" => "⏸",
+            _ => "…"
+        };
+
+    private async Task ScrollToBottomAsync()
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("eval", "document.querySelector('.chat-messages')?.scrollTo(0, 999999)");
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

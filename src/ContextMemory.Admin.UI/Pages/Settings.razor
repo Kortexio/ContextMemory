@@ -1,0 +1,161 @@
+@page "/settings"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@layout MainLayout
+
+<PageTitle>Settings - ContextMemory Admin</PageTitle>
+
+<div class="card card-outline card-primary mb-3">
+    <div class="card-header"><h3 class="card-title">API connection</h3></div>
+    <div class="card-body">
+        <EditForm Model="_model" OnValidSubmit="SaveAsync">
+            <DataAnnotationsValidator />
+
+            <div class="form-group">
+                <label>API base URL</label>
+                <InputText class="form-control" @bind-Value="_model.ApiBaseUrl" placeholder="http://localhost:5100" />
+            </div>
+
+            <div class="form-group">
+                <label>Master key</label>
+                <InputText class="form-control" type="password" @bind-Value="_model.MasterKey" />
+            </div>
+
+            @if (_message is not null)
+            {
+                <div class="alert alert-success">@_message</div>
+            }
+            @if (_error is not null)
+            {
+                <div class="alert alert-danger">@_error</div>
+            }
+
+            <button class="btn btn-primary" type="submit" disabled="@_saving">Save</button>
+            <button class="btn btn-outline-secondary ml-2" type="button" @onclick="TestConnectionAsync" disabled="@_saving">Test connection</button>
+            <button class="btn btn-outline-danger ml-2" type="button" @onclick="ClearAsync" disabled="@_saving">Clear</button>
+        </EditForm>
+    </div>
+</div>
+
+@if (_health is not null)
+{
+    <div class="card card-outline card-info">
+        <div class="card-header"><h3 class="card-title">Health check</h3></div>
+        <div class="card-body">
+            <p>Status: <strong>@_health.Status</strong></p>
+            @if (_health.Checks is not null)
+            {
+                <ul class="mb-0">
+                    <li>Ollama: @_health.Checks.Ollama</li>
+                    @if (_health.Checks.Database is not null)
+                    {
+                        <li>Database: @_health.Checks.Database</li>
+                    }
+                    <li>Persistence: @_health.Checks.Persistence</li>
+                    <li>Apps loaded: @_health.Checks.AppsLoaded</li>
+                    <li>Default model: @_health.Checks.DefaultModel</li>
+                </ul>
+            }
+        </div>
+    </div>
+}
+
+@if (_metricsUrl is not null)
+{
+    <p class="mt-3 small text-muted">
+        Prometheus metrics (public): <a href="@_metricsUrl" target="_blank" rel="noopener">@_metricsUrl</a>
+    </p>
+}
+
+@code {
+    [Inject] private AdminSession Session { get; set; } = default!;
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+
+    private AdminSettings _model = new();
+    private HealthResponseDto? _health;
+    private string? _metricsUrl;
+    private bool _saving;
+    private string? _message;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitializeAsync();
+        _model = new AdminSettings
+        {
+            ApiBaseUrl = Session.Settings.ApiBaseUrl,
+            MasterKey = Session.Settings.MasterKey
+        };
+
+        if (Session.IsConfigured)
+            _metricsUrl = Api.GetMetricsUrl();
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _message = null;
+        _error = null;
+        try
+        {
+            await Session.SaveAsync(_model);
+            _metricsUrl = Api.GetMetricsUrl();
+            _message = "Settings saved.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        _saving = true;
+        _message = null;
+        _error = null;
+        _health = null;
+        try
+        {
+            await Session.SaveAsync(_model);
+            _metricsUrl = Api.GetMetricsUrl();
+
+            var apps = await Api.GetAppsAsync();
+            _health = await Api.GetHealthAsync();
+            _message = $"Connected: {apps.Count} app(s). Health: {_health?.Status ?? "n/a"}.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ClearAsync()
+    {
+        _saving = true;
+        _message = null;
+        _error = null;
+        _health = null;
+        _metricsUrl = null;
+        try
+        {
+            await Session.ClearAsync();
+            _model = new AdminSettings();
+            _message = "Settings cleared.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

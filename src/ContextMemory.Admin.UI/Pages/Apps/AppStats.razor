@@ -1,0 +1,435 @@
+@page "/apps/{AppId}"
+
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+
+@layout MainLayout
+
+
+
+<PageTitle>@AppId - ContextMemory Admin</PageTitle>
+
+
+
+@if (_loading)
+
+{
+
+    <div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+
+}
+
+else if (_error is not null)
+
+{
+
+    <div class="alert alert-danger">@_error</div>
+
+}
+
+else if (_stats is not null)
+
+{
+
+    <div class="card card-outline card-primary mb-3">
+
+        <div class="card-header">
+
+            <h3 class="card-title">@AppId</h3>
+
+            <span class="badge bg-secondary float-end">@(_credentials?.Source ?? "unknown")</span>
+
+        </div>
+
+        <div class="card-body">
+
+            <div class="row text-center mb-3">
+
+                <div class="col-md-3 mb-2"><small>Requests</small><div><strong>@(_stats.Telemetry?.RequestsTotal ?? 0)</strong></div></div>
+
+                <div class="col-md-3 mb-2"><small>Errors</small><div><strong>@(_stats.Telemetry?.RequestsError ?? 0)</strong></div></div>
+
+                <div class="col-md-3 mb-2"><small>Active users</small><div><strong>@_stats.ActiveUsers</strong></div></div>
+
+                <div class="col-md-3 mb-2"><small>Avg latency</small><div><strong>@((_stats.Telemetry?.AvgLatencyMs ?? 0).ToString("0")) ms</strong></div></div>
+
+            </div>
+
+            <div class="row text-center">
+
+                <div class="col-md-4 mb-2"><small>Tokens prompt</small><div><strong>@(_stats.Telemetry?.TokensPrompt ?? 0)</strong></div></div>
+
+                <div class="col-md-4 mb-2"><small>Tokens completion</small><div><strong>@(_stats.Telemetry?.TokensCompletion ?? 0)</strong></div></div>
+
+                <div class="col-md-4 mb-2"><small>Wiki truncated (total)</small><div><strong>@(_stats.Telemetry?.WikiTruncatedTotal ?? 0)</strong></div></div>
+
+            </div>
+
+        </div>
+
+        <div class="card-footer">
+
+            <a class="btn btn-sm btn-outline-secondary" href="/apps/@AppId/config">Config</a>
+
+            <NavLink class="btn btn-sm btn-outline-info" href="/chat">Chat Lab</NavLink>
+
+        </div>
+
+    </div>
+
+
+
+    @if (_stats.Telemetry is { } t)
+
+    {
+
+        <div class="card card-outline card-info mb-3">
+
+            <div class="card-header"><h3 class="card-title">Wiki memory (last observed turn)</h3></div>
+
+            <div class="card-body">
+
+                <div class="row text-center">
+
+                    <div class="col-md-3"><small>Chars in prompt</small><div><strong>@t.WikiContextChars</strong></div></div>
+
+                    <div class="col-md-3"><small>Pages included</small><div><strong>@t.WikiPagesIncluded</strong></div></div>
+
+                    <div class="col-md-3"><small>Pages on disk</small><div><strong>@t.WikiPagesTotal</strong></div></div>
+
+                    <div class="col-md-3"><small>Compactions</small><div><strong>@t.WikiCompactionSuccess</strong> ok / <strong>@t.WikiCompactionErrors</strong> err</div></div>
+
+                </div>
+
+                <p class="text-muted small mb-0 mt-2">Per-app aggregated metrics — also see <code>GET /metrics</code> on the API.</p>
+
+            </div>
+
+        </div>
+
+    }
+
+    @if (_stats.Telemetry is { } ws && (ws.WebSearchTotal > 0 || ws.WebSearchSkippedTotal > 0))
+    {
+        <div class="card card-outline card-success mb-3">
+            <div class="card-header"><h3 class="card-title">Web search (v3.2)</h3></div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-3"><small>Searches (total)</small><div><strong>@ws.WebSearchTotal</strong></div></div>
+                    <div class="col-md-3"><small>Aggregated hits</small><div><strong>@ws.WebSearchHits</strong></div></div>
+                    <div class="col-md-3"><small>Skipped</small><div><strong>@ws.WebSearchSkippedTotal</strong></div></div>
+                    <div class="col-md-3"><small>Last latency (ms)</small><div><strong>@ws.WebSearchLastLatencyMs.ToString("0")</strong></div></div>
+                </div>
+                <p class="text-muted small mb-0 mt-2">Prometheus: <code>cm_web_search_*</code></p>
+            </div>
+        </div>
+    }
+
+    <div class="card card-outline card-warning">
+
+        <div class="card-header">
+
+            <h3 class="card-title"><i class="fas fa-key"></i> API key</h3>
+
+        </div>
+
+        <div class="card-body">
+
+            @if (_credentialsLoading)
+
+            {
+
+                <div class="text-muted"><i class="fas fa-spinner fa-spin"></i> Loading credentials…</div>
+
+            }
+
+            else if (_credentialsError is not null)
+
+            {
+
+                <div class="alert alert-danger mb-0">@_credentialsError</div>
+
+            }
+
+            else if (_credentials is not null)
+
+            {
+
+                @if (_rotateMessage is not null)
+
+                {
+
+                    <div class="alert alert-success">@_rotateMessage</div>
+
+                }
+
+
+
+                <div class="form-group mb-2">
+
+                    <label>App API key</label>
+
+                    <div class="input-group">
+
+                        <input class="form-control font-monospace" readonly
+
+                               type="@(_showApiKey ? "text" : "password")"
+
+                               value="@_credentials.ApiKey" />
+
+                        <div class="input-group-append">
+
+                            <button type="button" class="btn btn-outline-secondary" @onclick="ToggleShowApiKey">
+
+                                <i class="fas @(_showApiKey ? "fa-eye-slash" : "fa-eye")"></i>
+
+                            </button>
+
+                            <button type="button" class="btn btn-outline-secondary" @onclick="CopyApiKeyAsync">
+
+                                <i class="fas fa-copy"></i>
+
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+
+                @if (_credentials.Source == "seed")
+
+                {
+
+                    <div class="alert alert-info mb-2">
+
+                        App <strong>seed</strong> (appsettings). Rotation applies until the API restarts;
+
+                        to persist, update <code>ContextMemory:Apps:@AppId:ApiKey</code>.
+
+                    </div>
+
+                }
+
+
+
+                <button type="button" class="btn btn-warning" @onclick="RotateApiKeyAsync" disabled="@_rotating">
+
+                    @(_rotating ? "Rotating…" : "Generate new API key")
+
+                </button>
+
+                <NavLink class="btn btn-outline-primary ml-2" href="/chat">Use in Chat Lab</NavLink>
+
+            }
+
+        </div>
+
+    </div>
+
+}
+
+
+
+@code {
+
+    [Parameter] public string AppId { get; set; } = string.Empty;
+
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+
+    [Inject] private AdminSession Session { get; set; } = default!;
+
+    [Inject] private IJSRuntime Js { get; set; } = default!;
+
+
+
+    private AppCredentialsDto? _credentials;
+
+    private AppStatsResponse? _stats;
+
+    private bool _loading = true;
+
+    private bool _credentialsLoading = true;
+
+    private bool _rotating;
+
+    private bool _showApiKey;
+
+    private string? _error;
+
+    private string? _credentialsError;
+
+    private string? _rotateMessage;
+
+
+
+    protected override async Task OnParametersSetAsync()
+
+    {
+
+        _loading = true;
+
+        _credentialsLoading = true;
+
+        _error = null;
+
+        _credentialsError = null;
+
+        _rotateMessage = null;
+
+
+
+        if (!Session.IsConfigured)
+
+            await Session.InitializeAsync();
+
+
+
+        if (!Session.IsConfigured)
+
+        {
+
+            _error = "Configure Settings primeiro.";
+
+            _loading = false;
+
+            _credentialsLoading = false;
+
+            return;
+
+        }
+
+
+
+        try
+
+        {
+
+            _stats = await Api.GetAppStatsAsync(AppId);
+
+        }
+
+        catch (Exception ex)
+
+        {
+
+            _error = ex.Message;
+
+        }
+
+        finally
+
+        {
+
+            _loading = false;
+
+        }
+
+
+
+        try
+
+        {
+
+            _credentials = await Api.GetAppCredentialsAsync(AppId);
+
+            if (_credentials is null)
+
+                _credentialsError = "Credenciais não encontradas.";
+
+        }
+
+        catch (Exception ex)
+
+        {
+
+            _credentialsError = ex.Message;
+
+        }
+
+        finally
+
+        {
+
+            _credentialsLoading = false;
+
+        }
+
+    }
+
+
+
+    private void ToggleShowApiKey() => _showApiKey = !_showApiKey;
+
+
+
+    private async Task CopyApiKeyAsync()
+
+    {
+
+        if (_credentials?.ApiKey is null)
+
+            return;
+
+        await Js.InvokeVoidAsync("navigator.clipboard.writeText", _credentials.ApiKey);
+
+        _rotateMessage = "API key copiada.";
+
+    }
+
+
+
+    private async Task RotateApiKeyAsync()
+
+    {
+
+        if (!await Js.InvokeAsync<bool>("confirm", "Gerar nova API key? A key anterior deixa de funcionar."))
+
+            return;
+
+
+
+        _rotating = true;
+
+        _rotateMessage = null;
+
+        _credentialsError = null;
+
+        try
+
+        {
+
+            _credentials = await Api.RotateAppApiKeyAsync(AppId);
+
+            _showApiKey = true;
+
+            _rotateMessage = _credentials.RotationPersists
+
+                ? "New API key generated and saved."
+
+                : "New API key generated (valid until API restart — seed app).";
+
+        }
+
+        catch (Exception ex)
+
+        {
+
+            _credentialsError = ex.Message;
+
+        }
+
+        finally
+
+        {
+
+            _rotating = false;
+
+        }
+
+    }
+
+}
+
+

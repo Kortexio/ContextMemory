@@ -1,0 +1,111 @@
+@page "/"
+@page "/apps"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@layout MainLayout
+@implements IDisposable
+
+<PageTitle>Applications - ContextMemory Admin</PageTitle>
+
+<div class="mb-3">
+    <NavLink class="btn btn-primary" href="/apps/new">
+        <i class="fas fa-plus"></i> New application
+    </NavLink>
+</div>
+
+@if (_loading)
+{
+    <div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Loading applications...</div>
+}
+else if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+else if (_apps.Count == 0)
+{
+    <div class="alert alert-info">No registered applications. <NavLink href="/apps/new">Create the first one</NavLink>.</div>
+}
+else
+{
+    <div class="row">
+        @foreach (var app in _apps)
+        {
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card card-outline card-primary">
+                    <div class="card-header">
+                        <h3 class="card-title">@app.AppId</h3>
+                        <span class="badge bg-secondary float-end">@app.Source</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-4"><small>Requests</small><div><strong>@(app.Stats?.RequestsTotal ?? 0)</strong></div></div>
+                            <div class="col-4"><small>Users</small><div><strong>@(app.Stats?.ActiveUsers ?? 0)</strong></div></div>
+                            <div class="col-4"><small>Wiki (last)</small><div><strong>@(app.Stats?.WikiPagesIncluded ?? 0)/@(app.Stats?.WikiPagesTotal ?? 0)</strong></div></div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <a class="btn btn-sm btn-primary" href="/apps/@app.AppId">Details</a>
+                        <a class="btn btn-sm btn-outline-secondary" href="/apps/@app.AppId/config">Config</a>
+                        <a class="btn btn-sm btn-outline-info" href="/chat">Chat Lab</a>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+    [Inject] private AdminSession Session { get; set; } = default!;
+
+    private IReadOnlyList<AdminAppListItem> _apps = [];
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Changed += HandleSessionChanged;
+        await EnsureSessionAsync();
+        await LoadAsync();
+    }
+
+    private async void HandleSessionChanged() => await InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    private async Task EnsureSessionAsync()
+    {
+        if (!Session.IsConfigured)
+            await Session.InitializeAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+
+        if (!Session.IsConfigured)
+        {
+            _apps = [];
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            _apps = await Api.GetAppsAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _apps = [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    public void Dispose() => Session.Changed -= HandleSessionChanged;
+}
