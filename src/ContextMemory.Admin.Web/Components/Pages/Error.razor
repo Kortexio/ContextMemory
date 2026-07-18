@@ -1,0 +1,26 @@
+﻿@page "/Error"
+@using System.Diagnostics
+@layout ContextMemory.Admin.UI.Components.Layout.MainLayout
+
+<PageTitle>Error</PageTitle>
+
+<h1 class="text-danger">Error</h1>
+<p class="text-danger">An error occurred while processing your request.</p>
+
+@if (ShowRequestId)
+{
+    <p>
+        <strong>Request ID:</strong> <code>@RequestId</code>
+    </p>
+}
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
+
+    protected override void OnInitialized() =>
+        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

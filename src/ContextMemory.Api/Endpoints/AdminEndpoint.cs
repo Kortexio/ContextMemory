@@ -74,12 +74,17 @@ public static class AdminEndpoint
           <style>
             body { font-family: system-ui, sans-serif; margin: 2rem; background: #0f172a; color: #e2e8f0; }
             h1 { color: #38bdf8; }
-            pre { background: #1e293b; padding: 1rem; border-radius: 8px; overflow: auto; }
+            a { color: #7dd3fc; }
+            code, pre { background: #1e293b; padding: 0.15rem 0.4rem; border-radius: 6px; }
+            pre { padding: 1rem; overflow: auto; }
           </style>
         </head>
         <body>
           <h1>ContextMemory Admin</h1>
-          <p>Session-scoped memory API (Karpathy-style wiki). Use <code>GET /admin/apps</code> with the master key.</p>
+          <p>For the full console (apps, config, <strong>Chat Lab</strong>), run the Admin UI host:</p>
+          <pre>cd src/ContextMemory.Admin.Web<br />dotnet run</pre>
+          <p>Then open <a href="http://localhost:5200">http://localhost:5200</a> — set API URL <code>http://localhost:5100</code> and your Master Key in Settings.</p>
+          <p>Admin HTTP APIs (Master Key required): <code>GET /admin/apps</code>, <code>PATCH /admin/apps/{id}/config</code>, …</p>
           <p>Chat headers: <code>X-App-Id</code>, <code>X-User-Id</code>, <code>X-Session-Id</code> (optional), <code>Authorization: Bearer API_KEY</code></p>
         </body>
         </html>

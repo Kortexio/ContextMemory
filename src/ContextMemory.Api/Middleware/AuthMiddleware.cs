@@ -140,7 +140,9 @@ public sealed class AuthMiddleware
     private static bool IsPublicPath(PathString path) =>
         path.StartsWithSegments("/health", StringComparison.OrdinalIgnoreCase)
         || path.StartsWithSegments("/metrics", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWithSegments("/swagger", StringComparison.OrdinalIgnoreCase);
+        || path.StartsWithSegments("/swagger", StringComparison.OrdinalIgnoreCase)
+        // HTML landing only — /admin/apps and other admin APIs still require the master key.
+        || path.Equals("/admin", StringComparison.OrdinalIgnoreCase);
 
     private static bool RequiresMasterKey(PathString path) =>
         path.StartsWithSegments("/admin", StringComparison.OrdinalIgnoreCase)

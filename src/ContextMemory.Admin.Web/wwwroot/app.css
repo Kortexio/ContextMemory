@@ -1,0 +1,8 @@
+/* Host shell tweaks — AdminLTE provides the main chrome. */
+html, body {
+    height: 100%;
+}
+
+.content-wrapper {
+    min-height: calc(100vh - 57px);
+}
