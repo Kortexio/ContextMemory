@@ -2,7 +2,16 @@
 
 **Give an LLM memory by swapping a URL. That same URL can also act when it needs to.**
 
-ContextMemory is a context and agent proxy for applications that already talk to LLMs through an Ollama/OpenAI-compatible API. Your integration code **does not change**: you keep using `POST /api/chat` with the same headers and message schema. Behind the scenes, the gateway enriches each turn with session memory (wiki), optional web search, and — when enabled — an **agentic loop** with tools isolated per tenant.
+ContextMemory is a context and agent proxy for applications that already talk to LLMs. The public wire format is **Ollama-compatible**: you keep using `POST /api/chat` with the same message schema and get back an Ollama-style response (`message.content` / `done`) — not OpenAI `choices[]`. Behind the scenes, the gateway enriches each turn with session memory (a per-session markdown wiki), optional web search, and — when enabled — an **agentic loop** with tools isolated per tenant.
+
+OpenAI, Azure OpenAI, Anthropic, and similar providers are supported as **LLM backends**; the gateway maps them to the Ollama response shape your client already reads.
+
+---
+
+> ### Don't want to self-host?
+> **[Kortexio Cloud](https://kortexio.io)** is the hosted version of this gateway — same request body and response schema, zero infrastructure, **bring your own LLM key** (no markup on tokens). Get an API key and point your chat endpoint at it in minutes. **[Start free →](https://kortexio.io)**
+>
+> Self-hosting this open-source core and running on Kortexio Cloud share the **same chat body and Ollama response**. The only differences are the API key prefix and whether you send `X-App-Id`. Prototype locally, move to the cloud without rewriting your chat payload — or the other way around.
 
 ---
 
@@ -12,32 +21,241 @@ ContextMemory is a context and agent proxy for applications that already talk to
 |---|---|
 | The LLM forgets context between messages | Per-session compiled wiki + recent history injected automatically |
 | You need actions (shell, APIs, MCP) without a new endpoint | Agentic loop on the same `/api/chat`, invisible to the client |
-| Each client/tenant needs different tools and rules | Per-app configuration: ACA, MCP, guardrails, prompts |
+| Each client/tenant needs different tools and rules | Per-app configuration: ACA, self-hosted sandbox, MCP, guardrails, prompts |
 | Destructive actions need human control | Blocking human-in-the-loop with wiki checkpoints |
 | Streaming with multi-step loops is complex | Internal buffer: client only receives final text; optional progress via metadata |
+
+---
+
+## Two ways to run it
+
+| | **Kortexio Cloud** (hosted) | **Self-host** (this repo) |
+|---|---|---|
+| Infrastructure | None — managed for you | You run the .NET 9 gateway |
+| LLM | BYOK via dashboard — set provider + model + key | You point the gateway at your own backend in `appsettings` |
+| API key format | `cmk_live_...` | `cm_live_...` |
+| Tenant selection | Bound to your key — no `X-App-Id` | `X-App-Id` header per app |
+| Request body & response | **Identical** (Ollama schema) | **Identical** (Ollama schema) |
+| Best for | Shipping fast, no ops | Full control, air-gapped / on-prem |
+| Get started | [kortexio.io](https://kortexio.io) | [Quick start ↓](#quick-start--self-host) |
+
+Both speak the **same `POST /api/chat`** contract. The only auth differences are the key prefix and whether you pass `X-App-Id`. Never `choices[]` — the response is always Ollama-style `message.content` / `done`.
+
+---
+
+## Quick start — Kortexio Cloud
+
+The fastest path: no build, no database, no Ollama to run.
+
+### 1. Get a key and connect your LLM (BYOK)
+
+Create a free account at **[kortexio.io](https://kortexio.io)** and copy your API key (starts with `cmk_live_`).
+
+Kortexio Cloud is **bring-your-own-key**: Kortexio orchestrates memory and agentic — text generation always uses your provider. In your app's **LLM provider** tab on the dashboard, pick a provider (OpenAI, Azure OpenAI, Anthropic, your own Ollama, …), set the model id, and paste your own provider key — **no markup on tokens**. Use **Test connection** to verify it before you ship. The `model` you send in each request must match the one configured there.
+
+### 2. Point your endpoint here
+
+If you already call an Ollama-compatible `POST /api/chat`, change one URL and keep the same body and response parsing:
+
+```diff
+- POST http://localhost:11434/api/chat
++ POST https://api.kortexio.io/api/chat
+```
+
+Coming from the OpenAI Chat Completions API? Keep a similar message body, but parse the **Ollama** response (`message.content` / `done`), not `choices[]`.
+
+### 3. First chat request
+
+```bash
+# Turn 1 — teach it something
+curl -X POST https://api.kortexio.io/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: user-42" \
+  -H "X-Session-Id: sess-abc" \
+  -H "Authorization: Bearer cmk_live_..." \
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [{ "role": "user", "content": "Remember: KORTEX-PINEAPPLE" }]
+  }'
+```
+
+```bash
+# Turn 2 — same X-Session-Id, memory recalled automatically
+curl -X POST https://api.kortexio.io/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: user-42" \
+  -H "X-Session-Id: sess-abc" \
+  -H "Authorization: Bearer cmk_live_..." \
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [{ "role": "user", "content": "What was the secret word?" }]
+  }'
+```
+
+**Response (Ollama schema — same as self-host):**
+
+```json
+{
+  "model": "gpt-4o-mini",
+  "message": { "role": "assistant", "content": "The secret word is KORTEX-PINEAPPLE." },
+  "done": true
+}
+```
+
+That's the entire integration. Session memory works on the next turn automatically — no embeddings, no vector DB, no retrieval logic to write.
+
+**Required headers:** `X-User-Id`, `Authorization: Bearer cmk_live_...`  
+**Optional:** `X-Session-Id` (generated by the API if omitted). Your tenant is inferred from the key — you do **not** send `X-App-Id` on Cloud.  
+**`model`:** required in the body, and it must match the provider/model you configured in the **LLM provider** tab (BYOK).
+
+---
+
+## Quick start — self-host
+
+Run the open-source gateway yourself — the path for **on-prem or fully local** deployments. Unlike Cloud (where the dashboard wires up your LLM for you), here **you point the gateway at your own LLM backend** — endpoint and model — in config. Same chat body, same Ollama response as Cloud; you supply the `X-App-Id` and use a `cm_live_` key.
+
+### Prerequisites
+
+- .NET 9 SDK
+- Ollama (or another configured backend) reachable on the network
+- Optional: PostgreSQL 14+ for production / multi-instance HA
+
+### 1. Configure
+
+The committed `appsettings.json` uses **safe placeholders** and `PersistenceProvider: File` (no database required). Seed app id: `demo-dev` with key `cm_live_dev_key_change_me` (change before any real use).
+
+**Local secrets** — choose one approach (never commit real values):
+
+| Method | How |
+|---|---|
+| User Secrets (recommended) | `cd src/ContextMemory.Api` then `dotnet user-secrets set "ContextMemory:MasterKey" "your-key"` |
+| Environment variables | See [`.env.example`](.env.example) for the `__` naming convention |
+| Development file | Create `src/ContextMemory.Api/appsettings.Development.json` (gitignored) with local overrides |
+
+For **PostgreSQL** in production or multi-instance HA:
+
+```json
+{
+  "ConnectionStrings": {
+    "ContextMemory": "Host=localhost;Port=5432;Database=contextmemory;Username=...;Password=..."
+  },
+  "ContextMemory": {
+    "PersistenceProvider": "Postgres",
+    "DataPath": "../../data",
+    "OllamaEndpoint": "http://localhost:11434",
+    "MasterKey": "your-master-key",
+    "Apps": {
+      "my-app": {
+        "ApiKey": "cm_live_...",
+        "SystemPrompt": "You are a helpful assistant.",
+        "LlmModel": "qwen3.5:9b"
+      }
+    }
+  }
+}
+```
+
+Use `"Postgres"` exactly (not `Postgresql`). Relative `DataPath` values resolve from the API content root.
+
+#### `appsettings.json` field reference
+
+| Field | Meaning |
+|---|---|
+| `ConnectionStrings:ContextMemory` | PostgreSQL connection string when `PersistenceProvider` is `Postgres` |
+| `ContextMemory:PersistenceProvider` | `File` (default) or `Postgres` |
+| `ContextMemory:DataPath` | Root for file-based persistence (apps, sessions, wiki) |
+| `ContextMemory:OllamaEndpoint` | Default Ollama (or Ollama-compatible) backend base URL |
+| `ContextMemory:DefaultLlmModel` | Fallback model when an app has no `LlmModel` |
+| `ContextMemory:MasterKey` | Secret for Admin API / admin dashboard |
+| `ContextMemory:AdminCorsOrigins` | Allowed browser origins for Admin UI CORS |
+| `ContextMemory:WebSearch:*` | Tavily/Brave keys, default provider, timeout |
+| `ContextMemory:Apps` | Seed map of tenant apps; each key is the **app id** (`X-App-Id`) |
+
+Per-app runtime settings (agentic tools, wiki schema, web-search toggles, guardrails) are managed via the admin API or Admin UI host, not only this seed section.
+
+### 2. Start the API
+
+```bash
+cd src/ContextMemory.Api
+dotnet run
+```
+
+API defaults to `http://localhost:5100` (Swagger in Development at `/swagger`).
+
+### 3. First chat request
+
+```bash
+curl -X POST http://localhost:5100/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-App-Id: demo-dev" \
+  -H "X-User-Id: user-123" \
+  -H "X-Session-Id: sess-abc" \
+  -H "Authorization: Bearer cm_live_dev_key_change_me" \
+  -d '{
+    "model": "qwen3.5:9b",
+    "messages": [{ "role": "user", "content": "Hi, do you remember my name?" }]
+  }'
+```
+
+**Response (Ollama schema — identical to Cloud):**
+
+```json
+{
+  "model": "qwen3.5:9b",
+  "message": { "role": "assistant", "content": "..." },
+  "done": true,
+  "context_memory": {
+    "message_id": "...",
+    "agentic": {
+      "phase": "Completed",
+      "awaiting_confirmation": false,
+      "steps": [{ "tool_name": "shell_execute", "success": true }]
+    }
+  }
+}
+```
+
+**Required headers:** `X-App-Id`, `X-User-Id`, `Authorization: Bearer {API_KEY}`  
+**Optional:** `X-Session-Id` (generated by the API if omitted).
+
+### 4. Admin UI and Chat Lab
+
+In a second terminal:
+
+```bash
+cd src/ContextMemory.Admin.Web
+dotnet run
+```
+
+Open **[http://localhost:5200](http://localhost:5200)** → **Settings** → set API URL `http://localhost:5100` and your Master Key (`ContextMemory:MasterKey`) → **Test connection**.
+
+- **Applications** — register apps, stats, rotate API keys  
+- **Apps → Config** — LLM, wiki, web search, rate limits, **Agentic Gateway**  
+- **Chat Lab** — streaming, agentic timeline, human confirmation  
+
+The API also serves a short HTML pointer at [http://localhost:5100/admin](http://localhost:5100/admin). Admin HTTP APIs still require the Master Key bearer token.
 
 ---
 
 ## Architecture in 30 seconds
 
 ```
-Your app (zero contract changes)
+Your app (Ollama-compatible client)
         │
-        ▼ POST /api/chat  (Ollama-compatible)
+        ▼ POST /api/chat
 ┌───────────────────────────────────────────┐
 │  ContextMemory Gateway (.NET 9)           │
-│  1. Auth + tenant (X-App-Id, API key)     │
+│  1. Auth + tenant (API key, X-App-Id)     │
 │  2. Memory: history + session wiki        │
 │  3. Web search (optional)                 │
 │  4. Agentic loop (if enabled)             │
 │     LLM ↔ tools ↔ validation ↔ HITL       │
-│  5. Response in the schema you already use │
+│  5. Ollama-schema response                │
 └───────────┬───────────────┬───────────────┘
             ▼               ▼
-     ACA Dynamic        MCP Servers
-     Sessions           (Zuora, Jira, …)
-     shell/python/      JSON-RPC + OAuth
-     node/custom
+     ACA / self-hosted   MCP Servers
+     sandbox (shell/     (Zuora, Jira, …)
+     python/node/custom) JSON-RPC + OAuth
 ```
 
 ---
@@ -49,17 +267,15 @@ Your app (zero contract changes)
 - **Per-session wiki** — Markdown pages, index, execution log, and schema; automatic compaction as volume grows.
 - **Recent history** — last N messages injected into the prompt (configurable per tenant).
 - **Persona and rules** — `basePersona`, `businessRules`, `formatRules`, `wikiSchema` per application.
-- **Zero client changes** — send only the new message; middleware builds the full prompt.
+- **Zero client changes for memory** — send only the new message; the gateway builds the full prompt.
 
-### Agentic Gateway (Blueprint v0.2)
+### Agentic Gateway
 
 - **Same endpoint** — `POST /api/chat`; enabled via `agentic.enabled` in tenant config.
 - **Orchestrator** — loop with iteration cap, configurable timeout, and validation before returning the final answer.
-- **Execution tools (ACA Dynamic Sessions)**
-  - `shell_execute` — isolated shell commands
-  - `python_execute` — Python code
-  - `node_execute` — Node.js code
-  - `container_execute` — **custom** runtime with a dedicated container image
+- **Execution tools**
+  - ACA Dynamic Sessions: `shell_execute`, `python_execute`, `node_execute`, `container_execute` (custom image)
+  - Self-hosted sandbox (`self-hosted-sandbox`): same tool names against your own gVisor/sandbox endpoint
 - **Integration tools (MCP)**
   - Dynamic catalog per configured MCP server
   - Qualified naming `server__tool`
@@ -83,10 +299,10 @@ Your app (zero contract changes)
 
 - With `stream: true`, tool calls and internal observations **do not leak** into the text stream.
 - The final answer is emitted in chunks after the loop completes (or times out).
-- Agentic progress metadata via `context_memory.agentic` (timeline in Chat Lab).
+- Agentic progress metadata via `context_memory.agentic`.
 - Timeout with graceful partial response + header `X-Context-Memory-Agentic-Timed-Out`.
 
-### Web search (v3.2)
+### Web search
 
 - Providers: **Tavily**, **Brave**
 - Modes: `heuristic`, `llm`, `always`, `off`
@@ -96,9 +312,9 @@ Your app (zero contract changes)
 ### Multi-tenant and operations
 
 - **Isolated apps** — API key, config, tools, and guardrails per `appId`
-- **Rate limiting** — RPM/TPM per app and per user; extra weight for agentic turns (`agenticRequestWeight`, `agenticTokensPerIteration`)
+- **Rate limiting** — RPM/TPM per app and per user; extra weight for agentic turns
 - **Telemetry** — requests, tokens, latency, wiki, web search, active users
-- **Admin UI** — dashboard, app registration, runtime config, **Chat Lab** with agentic timeline and human confirmation UI
+- **Admin** — Blazor console at `ContextMemory.Admin.Web` (`:5200`), HTTP admin API, HTML pointer at `/admin`
 - **Persistence**
   - `File` — development and single-node
   - `Postgres` — apps, profiles, **sessions/wiki**, and HITL state in JSONB (multi-instance HA)
@@ -108,118 +324,6 @@ Your app (zero contract changes)
 - **Ollama** (default)
 - **OpenAI-compatible** (OpenAI, Azure OpenAI, etc.)
 - **LM Studio**
-
----
-
-## Quick start
-
-### Prerequisites
-
-- .NET 9 SDK
-- Ollama (or another configured backend) reachable on the network
-- Optional: PostgreSQL 14+ for production
-
-### 1. Configure
-
-The committed `appsettings.json` uses **safe placeholders** and `PersistenceProvider: File` (no database required).
-
-**Local secrets** — choose one approach (never commit real values):
-
-| Method | How |
-|---|---|
-| User Secrets (recommended) | `cd src/ContextMemory.Api` then `dotnet user-secrets set "ContextMemory:MasterKey" "your-key"` |
-| Development file | Copy `appsettings.Development.example.json` → `appsettings.Development.json` and fill in values (gitignored) |
-| Environment variables | See `.env.example` for the `__` naming convention |
-
-For **PostgreSQL** in production or multi-instance HA:
-
-```json
-{
-  "ConnectionStrings": {
-    "ContextMemory": "Host=localhost;Port=5432;Database=contextmemory;Username=...;Password=..."
-  },
-  "ContextMemory": {
-    "PersistenceProvider": "Postgres",
-    "DataPath": "./data",
-    "OllamaEndpoint": "http://localhost:11434",
-    "MasterKey": "your-master-key",
-    "Apps": {
-      "my-app": {
-        "ApiKey": "cm_live_...",
-        "SystemPrompt": "You are a helpful assistant.",
-        "LlmModel": "qwen3.5:9b"
-      }
-    }
-  }
-}
-```
-
-#### `appsettings.json` field reference
-
-Values below match the committed template in `src/ContextMemory.Api/appsettings.json`. Prefer User Secrets / environment variables for keys and connection strings.
-
-| Field | Meaning |
-|---|---|
-| `Logging:LogLevel:Default` | Default log verbosity for the host (e.g. `Information`). |
-| `Logging:LogLevel:Microsoft.AspNetCore` | Verbosity for ASP.NET Core framework logs (often `Warning` to reduce noise). |
-| `Logging:LogLevel:ContextMemory` | Verbosity for gateway application logs under the `ContextMemory` category. |
-| `AllowedHosts` | Host-filtering allow-list. `"*"` accepts any host header (fine for local/dev). |
-| `ConnectionStrings:ContextMemory` | PostgreSQL connection string. Required when `PersistenceProvider` is `Postgres`; ignored when using `File`. |
-| `ContextMemory:PersistenceProvider` | Storage backend: `File` (session wiki/profiles under `DataPath`) or `Postgres` (EF Core + migrate on startup). Default: `File`. |
-| `ContextMemory:DataPath` | Root directory for file-based persistence (apps, sessions, wiki). Relative paths are resolved from the API content root. |
-| `ContextMemory:OllamaEndpoint` | Base URL of the default Ollama (or Ollama-compatible) LLM backend. |
-| `ContextMemory:DefaultLlmModel` | Fallback model id when an app does not set its own `LlmModel` (e.g. at registration). |
-| `ContextMemory:MasterKey` | Secret for Admin API / Admin UI. Sent as the admin bearer/master key; **never commit a production value**. |
-| `ContextMemory:AdminCorsOrigins` | Allowed browser origins for CORS policy `AdminWebCors` (Admin UI + Chat Lab). Empty list disables that policy’s origins. |
-| `ContextMemory:WebSearch:TavilyApiKey` | API key for the Tavily web-search provider. Empty = Tavily unavailable. |
-| `ContextMemory:WebSearch:BraveApiKey` | API key for the Brave Search provider. Empty = Brave unavailable. |
-| `ContextMemory:WebSearch:DefaultProvider` | Preferred web-search provider when more than one is configured (`tavily` or `brave`). |
-| `ContextMemory:WebSearch:RequestTimeoutSeconds` | HTTP timeout (seconds) for outbound web-search provider calls. |
-| `ContextMemory:Apps` | Seed map of tenant apps loaded at startup. Each key is the **app id** (`X-App-Id`). |
-| `ContextMemory:Apps.{appId}:ApiKey` | Tenant API key for `Authorization: Bearer …` on chat/generate. |
-| `ContextMemory:Apps.{appId}:SystemPrompt` | Base system persona for that app (merged into the enriched prompt with wiki/web sections). |
-| `ContextMemory:Apps.{appId}:DefaultLanguage` | Tenant locale (BCP-47), e.g. `en-US` or `pt-PT`. Selects English/Portuguese copy for LLM prompts, HITL text, and wiki tool messages. |
-| `ContextMemory:Apps.{appId}:LlmModel` | Default model for that app’s chat/generate turns (overrides `DefaultLlmModel` for the tenant). |
-
-Additional options exist on `ContextMemoryOptions` / `WebSearchOptions` (timeouts, LM Studio/OpenAI endpoints, rate-limit defaults, wiki budgets, etc.) but are not present in the committed `appsettings.json`; set them in Development config, env vars, or User Secrets when needed. Per-app runtime settings (agentic tools, wiki schema, web-search toggles, guardrails) are managed under **Apps → Config** in the Admin UI (or the apps config API), not only in this seed section.
-
-### 2. Start the API
-
-```bash
-cd src/ContextMemory.Api
-dotnet run
-```
-
-API defaults to `http://localhost:5100`.
-
-### 3. First chat request
-
-```bash
-curl -X POST http://localhost:5100/api/chat \
-  -H "Content-Type: application/json" \
-  -H "X-App-Id: my-app" \
-  -H "X-User-Id: user-123" \
-  -H "X-Session-Id: sess-abc" \
-  -H "Authorization: Bearer cm_live_..." \
-  -d '{
-    "model": "qwen3.5:9b",
-    "messages": [{ "role": "user", "content": "Hi, do you remember my name?" }]
-  }'
-```
-
-**Required headers:** `X-App-Id`, `X-User-Id`, `Authorization: Bearer {API_KEY}`  
-**Optional:** `X-Session-Id` (generated by the API if omitted)
-
-### 4. Admin UI and Chat Lab
-
-```bash
-cd src/ContextMemory.Admin.UI
-dotnet run
-```
-
-- **Settings** — API URL + Master Key
-- **Apps → Config** — LLM, wiki, web search, rate limits, **Agentic Gateway**
-- **Chat Lab** — test streaming, agentic timeline, human confirmation
 
 ---
 
@@ -267,7 +371,7 @@ dotnet run
 }
 ```
 
-Configure via Admin UI (`/apps/{appId}/config`) or `PATCH /admin/apps/{appId}/config` with the Master Key.
+Configure via the Admin UI (`/apps/{appId}/config` on `:5200`) or `PATCH /admin/apps/{appId}/config` with the Master Key.
 
 ---
 
@@ -292,24 +396,9 @@ Everything is recorded in the session `log.md` for audit.
 | `GET /apps/{id}/config` | Runtime config (auth with app API key) |
 | `PATCH /admin/apps/{id}/config` | Update config (Master Key) |
 | `GET /health` | API, Ollama, Postgres health |
+| `GET /admin` | HTML pointer to the Admin UI host |
 
-**Chat response** — unchanged Ollama schema; optional extensions in `context_memory`:
-
-```json
-{
-  "model": "qwen3.5:9b",
-  "message": { "role": "assistant", "content": "..." },
-  "done": true,
-  "context_memory": {
-    "message_id": "...",
-    "agentic": {
-      "phase": "Completed",
-      "awaiting_confirmation": false,
-      "steps": [{ "tool_name": "shell_execute", "success": true }]
-    }
-  }
-}
-```
+The chat response is always the **Ollama schema** — `message.content` / `done`, never `choices[]` — with optional extensions under `context_memory` (see the self-host response above).
 
 ---
 
@@ -361,7 +450,7 @@ The seed app in `appsettings.json` uses `en-US`. Tenants can set `DefaultLanguag
 - Append-only wiki log per session (agentic checkpoints)
 - Rate limits with extra cost accounting for agentic loops
 - **Do not commit real credentials** — `appsettings.Development.json`, `.env`, and `data/` are gitignored; use User Secrets, environment variables, or Key Vault in production
-- Rotate any credentials that were ever committed to version control before publishing
+- Rotate any credentials that were ever committed to version control
 
 ---
 
@@ -371,7 +460,7 @@ The seed app in `appsettings.json` uses `en-US`. Tenants can set `DefaultLanguag
 dotnet test tests/ContextMemory.Api.Tests/ContextMemory.Api.Tests.csproj
 ```
 
-**124 tests** covering: API contract, wiki, web search, agentic E2E (shell/MCP), HITL, streaming, guardrails, validation, prompt profiles.
+Coverage includes: API contract, wiki, web search, agentic E2E (shell/MCP), HITL, streaming, guardrails, validation, prompt profiles.
 
 ---
 
@@ -383,7 +472,8 @@ src/
   ContextMemory.Core/             # Domain, orchestration, contracts, session wiki logic
   ContextMemory.Infrastructure/   # Persistence, HttpClients, tool executors, telemetry
   ContextMemory.Adapters/         # Ollama, OpenAI, LM Studio, web search
-  ContextMemory.Admin.UI/         # Operations console + Chat Lab
+  ContextMemory.Admin.UI/         # Blazor component library (Chat Lab / config editors)
+  ContextMemory.Admin.Web/        # Runnable Admin console host (http://localhost:5200)
 tests/
   ContextMemory.Api.Tests/        # Integration and E2E tests
 ```
@@ -394,32 +484,22 @@ Public contracts live in `src/ContextMemory.Core/Contracts/` with XML documentat
 
 ---
 
-## Public roadmap — current status
-
-| Phase | Scope | Status |
-|---|---|---|
-| 1 | Orchestrator + validator + ACA shell + wiki + flag | ✅ |
-| 2 | Per-tenant configurable MCP | ✅ |
-| 3 | Streaming with buffer + partial timeout | ✅ |
-| 4 | Hybrid validator + guardrails + HITL | ✅ |
-| 5 | Prompt profiles per model | ✅ |
-
-**Ready for public release** with documentation, full Admin UI, Postgres HA, OAuth MCP, custom containers, and test suite.
-
----
-
 ## Licensing
 
-Define the license before publishing the repository. The historical core may use AGPL-3.0; the Agentic Gateway may adopt a different license depending on commercial positioning.
+ContextMemory is released under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See [`LICENSE`](LICENSE) for the full text.
+
+In short: you are free to use, modify, and self-host this software, including commercially. If you run a modified version as a network service, the AGPL requires you to make your modified source available to that service's users under the same license.
+
+Want to build a closed-source product on top, or avoid the AGPL's network-copyleft obligations entirely? **[Kortexio Cloud](https://kortexio.io)** gives you the hosted gateway under commercial terms — no copyleft reach into your application code. For a self-hosted commercial license or enterprise deployment (ACA pools, internal MCP, admin SSO), contact the commercial team via [kortexio.io](https://kortexio.io).
 
 ---
 
 ## Support and contribution
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for language policy, local setup, and PR guidelines.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the language policy, local setup, and PR guidelines. Open a [GitHub issue](https://github.com/Kortexio/ContextMemory/issues) to report a bug or propose an improvement.
 
-To report issues or propose improvements, open a GitHub issue after the repository is published. For enterprise integration (ACA pools, internal MCP, admin SSO), contact the commercial team.
+For enterprise integration (ACA pools, internal MCP, admin SSO), reach the commercial team via [kortexio.io](https://kortexio.io).
 
 ---
 
-*ContextMemory — one URL for memory and action.*
+*ContextMemory — one URL for memory and action. The open-source core of [Kortexio](https://kortexio.io).*

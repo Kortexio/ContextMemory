@@ -14,7 +14,23 @@ dotnet build ContextMemory.sln
 dotnet test tests/ContextMemory.Api.Tests/ContextMemory.Api.Tests.csproj
 ```
 
-Copy `appsettings.Development.example.json` to `appsettings.Development.json` (gitignored) or use `.env.example` for environment variables.
+### Run API + Admin UI
+
+```bash
+# Terminal 1 — gateway
+cd src/ContextMemory.Api
+dotnet run
+# http://localhost:5100
+
+# Terminal 2 — Admin console / Chat Lab
+cd src/ContextMemory.Admin.Web
+dotnet run
+# http://localhost:5200
+```
+
+In Admin Settings, set API base URL `http://localhost:5100` and the Master Key from `ContextMemory:MasterKey` (User Secrets, env, or `appsettings`).
+
+Local secrets — prefer User Secrets or environment variables (see [`.env.example`](.env.example)). You may also create a gitignored `src/ContextMemory.Api/appsettings.Development.json` with local overrides.
 
 ## Documentation
 
