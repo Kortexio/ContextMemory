@@ -8,6 +8,7 @@ using ContextMemory.Infrastructure.Persistence.Postgres;
 using ContextMemory.Infrastructure.Profile;
 using ContextMemory.Infrastructure.RateLimiting;
 using ContextMemory.Infrastructure.Session;
+using ContextMemory.Infrastructure.Wiki;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,6 +23,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IAppConfigStore, AppConfigStore>();
         services.AddSingleton<ISessionStore, FileSessionStore>();
         services.AddSingleton<IAgenticPendingStore, FileAgenticPendingStore>();
+        services.AddSingleton<IGlobalWikiStore, FileGlobalWikiStore>();
         return services;
     }
 
@@ -50,6 +52,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IAppConfigStore, PostgresAppConfigStore>();
         services.AddSingleton<ISessionStore, PostgresSessionStore>();
         services.AddSingleton<IAgenticPendingStore, PostgresAgenticPendingStore>();
+        services.AddSingleton<IGlobalWikiStore, PostgresGlobalWikiStore>();
         services.AddSingleton<IPostgresHealthCheck, PostgresHealthCheck>();
 
         return services;
@@ -68,9 +71,11 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddTransient<AcaExecutionToolExecutor>();
         services.AddTransient<SelfHostedGVisorExecutor>();
         services.AddTransient<McpToolExecutor>();
+        services.AddTransient<GlobalWikiToolExecutor>();
         services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<AcaExecutionToolExecutor>());
         services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<SelfHostedGVisorExecutor>());
         services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<McpToolExecutor>());
+        services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<GlobalWikiToolExecutor>());
 
         services.AddSingleton<IMcpToolCatalog, McpToolCatalog>();
 

@@ -2,6 +2,7 @@ using ContextMemory.Core.Agentic;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Engine;
+using ContextMemory.Core.GlobalWiki;
 using ContextMemory.Core.Persistence;
 using ContextMemory.Core.Profile;
 using ContextMemory.Infrastructure.Profile;
@@ -41,6 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<WikiUpdateQueue>();
         services.AddSingleton<IWikiUpdateQueue>(sp => sp.GetRequiredService<WikiUpdateQueue>());
         services.AddSingleton<WikiUpdateProcessor>();
+        services.AddSingleton<GlobalWikiService>();
         services.AddScoped<ChatTurnContext>();
         services.AddSingleton<IWebSearchFreshnessClassifier, LlmFreshnessDetector>();
         services.AddSingleton<LlmFreshnessDetector>();

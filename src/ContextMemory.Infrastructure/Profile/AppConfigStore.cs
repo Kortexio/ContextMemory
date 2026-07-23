@@ -102,7 +102,9 @@ public sealed class AppConfigStore : IAppConfigStore
                     WebSearchConfigMerge.FromFile(current.WebSearch),
                     patch.WebSearch),
                 RateLimits = patch.RateLimits ?? current.RateLimits,
-                Agentic = patch.Agentic ?? current.Agentic
+                Agentic = patch.Agentic ?? current.Agentic,
+                GlobalWikiEnabled = patch.GlobalWikiEnabled ?? current.GlobalWikiEnabled,
+                MaxGlobalWikiToolChars = patch.MaxGlobalWikiToolChars ?? current.MaxGlobalWikiToolChars
             };
 
             await File.WriteAllTextAsync(
@@ -149,7 +151,9 @@ public sealed class AppConfigStore : IAppConfigStore
                 : _defaults.WikiCompactionMinPages,
             StreamingEnabled = seed.StreamingEnabled,
             WebSearch = seed.WebSearch,
-            Agentic = seed.Agentic
+            Agentic = seed.Agentic,
+            GlobalWikiEnabled = seed.GlobalWikiEnabled,
+            MaxGlobalWikiToolChars = seed.MaxGlobalWikiToolChars
         };
 
         File.WriteAllText(Path.Combine(dir, "config.json"), JsonSerializer.Serialize(configFile, JsonOptions));
@@ -203,7 +207,9 @@ public sealed class AppConfigStore : IAppConfigStore
                 TokensPerMinute = _defaults.DefaultRateLimitTpm
             },
             WebSearch = WebSearchConfigMerge.FromFile(configFile.WebSearch),
-            Agentic = configFile.Agentic ?? AgenticConfig.Disabled
+            Agentic = configFile.Agentic ?? AgenticConfig.Disabled,
+            GlobalWikiEnabled = configFile.GlobalWikiEnabled ?? true,
+            MaxGlobalWikiToolChars = configFile.MaxGlobalWikiToolChars
         };
     }
 

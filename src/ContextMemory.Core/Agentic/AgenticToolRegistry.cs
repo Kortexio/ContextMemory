@@ -10,9 +10,45 @@ public static class AgenticToolRegistry
     public const string PythonExecuteToolName = "python_execute";
     public const string NodeExecuteToolName = "node_execute";
     public const string ContainerExecuteToolName = "container_execute";
+    public const string WikiSearchToolName = "wiki_search";
 
     public static List<OllamaTool> BuildTools(AppRuntimeConfig runtimeConfig) =>
         BuildExecutionTools(runtimeConfig);
+
+    public static OllamaTool? BuildWikiSearchTool(AppRuntimeConfig runtimeConfig)
+    {
+        if (!runtimeConfig.GlobalWikiEnabled)
+            return null;
+
+        return new OllamaTool(
+            "function",
+            new OllamaFunction(
+                WikiSearchToolName,
+                AgenticToolDescriptionBuilder.BuildWikiSearchDescription(runtimeConfig),
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        query = new
+                        {
+                            type = "string",
+                            description = "Search query against the app's global knowledge base (ingested docs)."
+                        },
+                        sourceId = new
+                        {
+                            type = "string",
+                            description = "Optional source filter (e.g. jira, confluence:SPACE)."
+                        },
+                        topK = new
+                        {
+                            type = "integer",
+                            description = "Max documents to return (default 5)."
+                        }
+                    },
+                    required = new[] { "query" }
+                }));
+    }
 
     public static List<OllamaTool> BuildExecutionTools(AppRuntimeConfig runtimeConfig)
     {

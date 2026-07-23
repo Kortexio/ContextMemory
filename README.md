@@ -2,7 +2,7 @@
 
 **Give an LLM memory by swapping a URL. That same URL can also act when it needs to.**
 
-ContextMemory is a context and agent proxy for applications that already talk to LLMs. The public wire format is **Ollama-compatible**: you keep using `POST /api/chat` with the same message schema and get back an Ollama-style response (`message.content` / `done`) — not OpenAI `choices[]`. Behind the scenes, the gateway enriches each turn with session memory (a per-session markdown wiki), optional web search, and — when enabled — an **agentic loop** with tools isolated per tenant.
+ContextMemory is a context and agent proxy for applications that already talk to LLMs. The public wire format is **Ollama-compatible**: you keep using `POST /api/chat` with the same message schema and get back an Ollama-style response (`message.content` / `done`) — not OpenAI `choices[]`. Behind the scenes, the gateway enriches each turn with session memory (a per-session markdown wiki), optional **Global Wiki** retrieval via the `wiki_search` tool, optional web search, and — when enabled — an **agentic loop** with tools isolated per tenant.
 
 OpenAI, Azure OpenAI, Anthropic, and similar providers are supported as **LLM backends**; the gateway maps them to the Ollama response shape your client already reads.
 
@@ -20,6 +20,7 @@ OpenAI, Azure OpenAI, Anthropic, and similar providers are supported as **LLM ba
 | Problem | ContextMemory solution |
 |---|---|
 | The LLM forgets context between messages | Per-session compiled wiki + recent history injected automatically |
+| Product/ops docs live outside the chat session | **Global Wiki** — app-scoped knowledge base searched on demand via `wiki_search` |
 | You need actions (shell, APIs, MCP) without a new endpoint | Agentic loop on the same `/api/chat`, invisible to the client |
 | Each client/tenant needs different tools and rules | Per-app configuration: ACA, self-hosted sandbox, MCP, guardrails, prompts |
 | Destructive actions need human control | Blocking human-in-the-loop with wiki checkpoints |
@@ -247,10 +248,11 @@ Your app (Ollama-compatible client)
 │  ContextMemory Gateway (.NET 9)           │
 │  1. Auth + tenant (API key, X-App-Id)     │
 │  2. Memory: history + session wiki        │
-│  3. Web search (optional)                 │
-│  4. Agentic loop (if enabled)             │
+│  3. Global Wiki tool (wiki_search)        │
+│  4. Web search (optional)                 │
+│  5. Agentic loop (if enabled)             │
 │     LLM ↔ tools ↔ validation ↔ HITL       │
-│  5. Ollama-schema response                │
+│  6. Ollama-schema response                │
 └───────────┬───────────────┬───────────────┘
             ▼               ▼
      ACA / self-hosted   MCP Servers
@@ -268,6 +270,41 @@ Your app (Ollama-compatible client)
 - **Recent history** — last N messages injected into the prompt (configurable per tenant).
 - **Persona and rules** — `basePersona`, `businessRules`, `formatRules`, `wikiSchema` per application.
 - **Zero client changes for memory** — send only the new message; the gateway builds the full prompt.
+
+### Global Wiki (app-scoped knowledge base)
+
+Shared Markdown documents for an entire `appId` (all users/sessions). Unlike session memory, Global Wiki is **not** injected on every turn — when enabled, the model calls the built-in tool `wiki_search` only when it needs documented facts (token-efficient).
+
+| Capability | What it does |
+|---|---|
+| **Ingest** | `PUT /apps/{appId}/wiki/documents/{documentId}` — idempotent upsert by content hash; batch via `POST .../documents/batch` |
+| **List / delete** | `GET` / `DELETE` under `/apps/{appId}/wiki/documents...` |
+| **Query** | `POST /apps/{appId}/wiki/query` — keyword search returning a compact Markdown snippet + scored matches |
+| **Chat** | Tool `wiki_search` in the agentic loop when `GlobalWikiEnabled` is true (default) |
+| **Config** | Toggle / budget via app runtime config (`GlobalWikiEnabled`, max chars) |
+
+Typical sources: Jira issues, Confluence pages, SQL exports, or any pipeline that emits Markdown with a stable `documentId` (e.g. `jira:PROJ-123`).
+
+```bash
+# Upsert a document (app API key + X-App-Id, or admin path as configured)
+curl -X PUT http://localhost:5100/apps/demo-dev/wiki/documents/jira:PROJ-123 \
+  -H "Content-Type: application/json" \
+  -H "X-App-Id: demo-dev" \
+  -H "Authorization: Bearer cm_live_dev_key_change_me" \
+  -d '{
+    "title": "PROJ-123 — Fix renewal invoice",
+    "content": "# PROJ-123\n\n## Description\n...",
+    "sourceId": "jira:PROJ",
+    "summary": "Billing renewal invoice bug"
+  }'
+
+# Search without chat
+curl -X POST http://localhost:5100/apps/demo-dev/wiki/query \
+  -H "Content-Type: application/json" \
+  -H "X-App-Id: demo-dev" \
+  -H "Authorization: Bearer cm_live_dev_key_change_me" \
+  -d '{"query":"subscription renewal invoice","topK":5}'
+```
 
 ### Agentic Gateway
 
@@ -391,10 +428,15 @@ Everything is recorded in the session `log.md` for audit.
 
 | Endpoint | Description |
 |---|---|
-| `POST /api/chat` | Ollama-compatible chat (+ agentic, memory, web search) |
+| `POST /api/chat` | Ollama-compatible chat (+ agentic, session memory, Global Wiki tool, web search) |
 | `POST /api/generate` | Ollama-compatible completion |
+| `PUT /apps/{id}/wiki/documents/{documentId}` | Upsert Global Wiki document |
+| `POST /apps/{id}/wiki/documents/batch` | Batch upsert Global Wiki documents |
+| `GET /apps/{id}/wiki/documents` | List Global Wiki documents |
+| `DELETE /apps/{id}/wiki/documents/{documentId}` | Delete Global Wiki document |
+| `POST /apps/{id}/wiki/query` | Keyword search over Global Wiki |
 | `GET /apps/{id}/config` | Runtime config (auth with app API key) |
-| `PATCH /admin/apps/{id}/config` | Update config (Master Key) |
+| `PATCH /admin/apps/{id}/config` | Update config (Master Key), including `GlobalWikiEnabled` |
 | `GET /health` | API, Ollama, Postgres health |
 | `GET /admin` | HTML pointer to the Admin UI host |
 
@@ -408,11 +450,12 @@ The chat response is always the **Ollama schema** — `message.content` / `done`
 |---|---|---|
 | App registry + API keys | ✅ | ✅ |
 | Runtime config (LLM, agentic, wiki) | ✅ | ✅ |
-| Sessions, messages, wiki | ✅ | ✅ |
+| Sessions, messages, session wiki | ✅ | ✅ |
+| Global Wiki documents | ✅ | ✅ |
 | Pending HITL state | ✅ | ✅ |
 | Telemetry / rate limits | in-memory | in-memory |
 
-EF Core ships a single `InitialCreate` migration in `ContextMemory.Infrastructure` (current schema: 4 Postgres tables).
+EF Core migrations live in `ContextMemory.Infrastructure` (includes `global_wiki_documents`).
 
 ```bash
 dotnet ef database update \
@@ -460,7 +503,7 @@ The seed app in `appsettings.json` uses `en-US`. Tenants can set `DefaultLanguag
 dotnet test tests/ContextMemory.Api.Tests/ContextMemory.Api.Tests.csproj
 ```
 
-Coverage includes: API contract, wiki, web search, agentic E2E (shell/MCP), HITL, streaming, guardrails, validation, prompt profiles.
+Coverage includes: API contract, session wiki, Global Wiki, web search, agentic E2E (shell/MCP), HITL, streaming, guardrails, validation, prompt profiles.
 
 ---
 

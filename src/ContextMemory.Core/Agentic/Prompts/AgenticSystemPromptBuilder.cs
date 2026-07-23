@@ -42,8 +42,9 @@ public static class AgenticSystemPromptBuilder
             You have external tools: {toolNamesSummary}.{mcpLine}
 
             Tool calling rules:
-            - Invoke tools only when the question requires **external action** (commands, APIs, remote systems).
-            - For greetings or questions answerable from memory/context, respond **directly** without tools.
+            - Invoke tools only when needed: **external action** (commands, APIs) or **app documentation** via `wiki_search`.
+            - Use `wiki_search` when the question needs facts from ingested docs (Jira, Confluence, SQL, etc.) that are not in session memory.
+            - For greetings or questions answerable from session memory/context alone, respond **directly** without tools.
             - When you need a tool: emit **only** `tool_calls` with valid JSON arguments — no extra text.
             - After receiving results (`role=tool` messages), synthesize the final answer in natural language.
             - MCP tools use the `server__tool` format (e.g. `crm__get_customer`).
@@ -55,8 +56,9 @@ public static class AgenticSystemPromptBuilder
             Tens ferramentas externas: {toolNamesSummary}.{mcpLine}
 
             Regras de tool calling:
-            - Só invoca tools quando a pergunta exigir **ação externa** (comandos, APIs, sistemas remotos).
-            - Para saudações ou perguntas respondíveis com memória/contexto, responde **directamente** sem tools.
+            - Só invoca tools quando necessário: **ação externa** (comandos, APIs) ou **documentação da app** via `wiki_search`.
+            - Usa `wiki_search` quando a pergunta precisar de factos de docs ingeridos (Jira, Confluence, SQL, etc.) que não estão na memória da sessão.
+            - Para saudações ou perguntas respondíveis só com memória/contexto da sessão, responde **directamente** sem tools.
             - Quando precisares de uma tool: emite **apenas** `tool_calls` com argumentos JSON válidos — sem texto extra.
             - Depois de receberes resultados (mensagens `role=tool`), sintetiza a resposta final em linguagem natural.
             - Tools MCP usam o formato `servidor__tool` (ex: `crm__get_customer`).
