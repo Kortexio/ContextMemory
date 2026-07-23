@@ -68,16 +68,36 @@ public sealed class AuthMiddleware
             return;
         }
 
-        if (!context.Request.Headers.TryGetValue(AppIdHeader, out var appIdValues)
-            || !context.Request.Headers.TryGetValue(UserIdHeader, out var userIdValues))
+        var wikiPath = IsGlobalWikiPath(path);
+
+        if (!context.Request.Headers.TryGetValue(AppIdHeader, out var appIdValues))
         {
-            await WriteJsonErrorAsync(context, StatusCodes.Status401Unauthorized, "Missing X-App-Id or X-User-Id header.")
+            await WriteJsonErrorAsync(context, StatusCodes.Status401Unauthorized, "Missing X-App-Id header.")
                 .ConfigureAwait(false);
             return;
         }
 
+        string userId;
+        if (wikiPath)
+        {
+            userId = context.Request.Headers.TryGetValue(UserIdHeader, out var wikiUserValues)
+                     && IdentifierValidator.IsValid(wikiUserValues.ToString())
+                ? wikiUserValues.ToString()!
+                : "ingest";
+        }
+        else
+        {
+            if (!context.Request.Headers.TryGetValue(UserIdHeader, out var userIdValues))
+            {
+                await WriteJsonErrorAsync(context, StatusCodes.Status401Unauthorized, "Missing X-App-Id or X-User-Id header.")
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            userId = userIdValues.ToString();
+        }
+
         var appId = appIdValues.ToString();
-        var userId = userIdValues.ToString();
 
         if (!IdentifierValidator.IsValid(appId) || !IdentifierValidator.IsValid(userId))
         {
@@ -152,6 +172,20 @@ public sealed class AuthMiddleware
         path.StartsWithSegments("/api/chat", StringComparison.OrdinalIgnoreCase)
         || path.StartsWithSegments("/api/generate", StringComparison.OrdinalIgnoreCase)
         || path.StartsWithSegments("/apps", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Global wiki ingest/query: server-to-server; X-User-Id optional (defaults to _ingest).
+    /// Matches /apps/{appId}/wiki/...
+    /// </summary>
+    private static bool IsGlobalWikiPath(PathString path)
+    {
+        var value = path.Value ?? string.Empty;
+        // /apps/{appId}/wiki/...
+        var parts = value.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 3
+               && parts[0].Equals("apps", StringComparison.OrdinalIgnoreCase)
+               && parts[2].Equals("wiki", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool TryGetBearerToken(HttpContext context, out string token)
     {

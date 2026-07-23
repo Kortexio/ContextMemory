@@ -21,5 +21,12 @@ public record AppRuntimeConfig
     public WebSearchConfig WebSearch { get; init; } = WebSearchConfig.Disabled;
     public AgenticConfig Agentic { get; init; } = AgenticConfig.Disabled;
 
-    public bool AgenticEnabled => Agentic.Enabled && Agentic.HasAnyTools;
+    /// <summary>When true, exposes the built-in <c>wiki_search</c> tool for app-scoped global docs.</summary>
+    public bool GlobalWikiEnabled { get; init; } = true;
+
+    /// <summary>Max chars returned by <c>wiki_search</c> (0 = service default).</summary>
+    public int MaxGlobalWikiToolChars { get; init; }
+
+    public bool AgenticEnabled =>
+        (Agentic.Enabled && Agentic.HasAnyTools) || GlobalWikiEnabled;
 }
