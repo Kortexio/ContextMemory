@@ -60,4 +60,10 @@ public static class AgenticToolDescriptionBuilder
             $"[MCP:{tool.ServerName}] {baseDesc}",
             $"[MCP:{tool.ServerName}] {baseDesc} (chamar como {tool.QualifiedName})");
     }
+
+    public static string BuildWikiSearchDescription(AppRuntimeConfig config) =>
+        TenantLocale.Select(
+            config.DefaultLanguage,
+            "Search the app's global knowledge base (Jira, Confluence, SQL exports, and other ingested documents). Use when the question needs documented facts not present in session memory. Do not use for greetings or pure conversational replies.",
+            "Pesquisa a base de conhecimento global da app (Jira, Confluence, exports SQL e outros documentos ingeridos). Usa quando a pergunta precisar de factos documentados que não estão na memória da sessão. Não uses para saudações ou conversa pura.");
 }

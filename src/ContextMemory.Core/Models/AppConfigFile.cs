@@ -37,6 +37,12 @@ public record AppConfigFile
 
     [JsonPropertyName("agentic")]
     public AgenticConfig? Agentic { get; init; }
+
+    [JsonPropertyName("globalWikiEnabled")]
+    public bool? GlobalWikiEnabled { get; init; }
+
+    [JsonPropertyName("maxGlobalWikiToolChars")]
+    public int MaxGlobalWikiToolChars { get; init; }
 }
 
 public record AppConfigPatchRequest
@@ -85,4 +91,10 @@ public record AppConfigPatchRequest
 
     [JsonPropertyName("agentic")]
     public AgenticConfig? Agentic { get; init; }
+
+    [JsonPropertyName("globalWikiEnabled")]
+    public bool? GlobalWikiEnabled { get; init; }
+
+    [JsonPropertyName("maxGlobalWikiToolChars")]
+    public int? MaxGlobalWikiToolChars { get; init; }
 }

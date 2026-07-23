@@ -13,6 +13,7 @@ public sealed class ContextMemoryDbContext : DbContext
     public DbSet<AppProfileEntity> AppProfiles => Set<AppProfileEntity>();
     public DbSet<SessionRecordEntity> SessionRecords => Set<SessionRecordEntity>();
     public DbSet<AgenticPendingRecordEntity> AgenticPendingRecords => Set<AgenticPendingRecordEntity>();
+    public DbSet<GlobalWikiDocumentEntity> GlobalWikiDocuments => Set<GlobalWikiDocumentEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,7 +51,40 @@ public sealed class ContextMemoryDbContext : DbContext
             e.Property(x => x.SessionId).HasMaxLength(128);
             e.Property(x => x.StateJson).HasColumnType("jsonb");
         });
+
+        modelBuilder.Entity<GlobalWikiDocumentEntity>(e =>
+        {
+            e.ToTable("global_wiki_documents");
+            e.HasKey(x => new { x.AppId, x.DocumentId });
+            e.Property(x => x.AppId).HasMaxLength(64);
+            e.Property(x => x.DocumentId).HasMaxLength(256);
+            e.Property(x => x.Slug).HasMaxLength(128);
+            e.Property(x => x.Title).HasMaxLength(512);
+            e.Property(x => x.Content).HasColumnType("text");
+            e.Property(x => x.Summary).HasMaxLength(512);
+            e.Property(x => x.SourceId).HasMaxLength(128);
+            e.Property(x => x.MetadataJson).HasColumnType("jsonb");
+            e.Property(x => x.ContentHash).HasMaxLength(64);
+            e.HasIndex(x => x.AppId);
+            e.HasIndex(x => new { x.AppId, x.UpdatedAt });
+            e.HasIndex(x => new { x.AppId, x.SourceId });
+        });
     }
+}
+
+public sealed class GlobalWikiDocumentEntity
+{
+    public string AppId { get; set; } = string.Empty;
+    public string DocumentId { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+    public string Summary { get; set; } = string.Empty;
+    public string SourceId { get; set; } = string.Empty;
+    public string MetadataJson { get; set; } = "{}";
+    public string ContentHash { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }
 
 public sealed class SessionRecordEntity
