@@ -21,6 +21,10 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
         var tools = new List<OllamaTool>();
         tools.AddRange(AgenticToolRegistry.BuildExecutionTools(runtimeConfig));
 
+        var wikiTool = AgenticToolRegistry.BuildWikiSearchTool(runtimeConfig);
+        if (wikiTool is not null)
+            tools.Add(wikiTool);
+
         var mcpTools = await _mcpCatalog.GetToolsAsync(runtimeConfig, cancellationToken).ConfigureAwait(false);
         foreach (var mcpTool in mcpTools)
         {

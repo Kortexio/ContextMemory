@@ -89,7 +89,9 @@ public sealed class PostgresAppConfigStore : IAppConfigStore
                     WebSearchConfigMerge.FromFile(current.WebSearch),
                     patch.WebSearch),
                 RateLimits = patch.RateLimits ?? current.RateLimits,
-                Agentic = patch.Agentic ?? current.Agentic
+                Agentic = patch.Agentic ?? current.Agentic,
+                GlobalWikiEnabled = patch.GlobalWikiEnabled ?? current.GlobalWikiEnabled,
+                MaxGlobalWikiToolChars = patch.MaxGlobalWikiToolChars ?? current.MaxGlobalWikiToolChars
             };
 
             row.ConfigJson = JsonSerializer.Serialize(updated, PostgresJson.CamelCase);
@@ -132,7 +134,9 @@ public sealed class PostgresAppConfigStore : IAppConfigStore
                 ? seed.WikiCompactionMinPages
                 : _defaults.WikiCompactionMinPages,
             StreamingEnabled = seed.StreamingEnabled,
-            Agentic = seed.Agentic
+            Agentic = seed.Agentic,
+            GlobalWikiEnabled = seed.GlobalWikiEnabled,
+            MaxGlobalWikiToolChars = seed.MaxGlobalWikiToolChars
         };
 
         if (row is null)
@@ -210,7 +214,9 @@ public sealed class PostgresAppConfigStore : IAppConfigStore
                 TokensPerMinute = _defaults.DefaultRateLimitTpm
             },
             WebSearch = WebSearchConfigMerge.FromFile(configFile.WebSearch),
-            Agentic = configFile.Agentic ?? AgenticConfig.Disabled
+            Agentic = configFile.Agentic ?? AgenticConfig.Disabled,
+            GlobalWikiEnabled = configFile.GlobalWikiEnabled ?? true,
+            MaxGlobalWikiToolChars = configFile.MaxGlobalWikiToolChars
         };
     }
 

@@ -82,6 +82,66 @@ namespace ContextMemory.Infrastructure.Migrations
                     b.ToTable("app_profiles", (string)null);
                 });
 
+            modelBuilder.Entity("ContextMemory.Infrastructure.Persistence.Postgres.GlobalWikiDocumentEntity", b =>
+                {
+                    b.Property<string>("AppId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DocumentId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MetadataJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("SourceId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AppId", "DocumentId");
+
+                    b.HasIndex("AppId");
+
+                    b.HasIndex("AppId", "SourceId");
+
+                    b.HasIndex("AppId", "UpdatedAt");
+
+                    b.ToTable("global_wiki_documents", (string)null);
+                });
+
             modelBuilder.Entity("ContextMemory.Infrastructure.Persistence.Postgres.RegisteredAppEntity", b =>
                 {
                     b.Property<string>("AppId")
