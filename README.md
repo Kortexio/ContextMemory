@@ -1,10 +1,17 @@
 # ContextMemory Agentic Gateway
 
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](LICENSE)
+[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4)](https://dotnet.microsoft.com/)
+[![Docker](https://img.shields.io/badge/ghcr.io-contextmemory-blue?logo=docker)](https://github.com/users/Kortexio/packages/container/package/contextmemory)
+[![CI](https://github.com/Kortexio/ContextMemory/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/Kortexio/ContextMemory/actions/workflows/docker-publish.yml)
+
 **Give an LLM memory by swapping a URL. That same URL can also act when it needs to.**
 
 ContextMemory is a context and agent proxy for applications that already talk to LLMs. The public wire format is **Ollama-compatible**: you keep using `POST /api/chat` with the same message schema and get back an Ollama-style response (`message.content` / `done`) — not OpenAI `choices[]`. Behind the scenes, the gateway enriches each turn with session memory (a per-session markdown wiki), optional **Global Wiki** retrieval via the `wiki_search` tool, optional web search, and — when enabled — an **agentic loop** with tools isolated per tenant.
 
 OpenAI, Azure OpenAI, Anthropic, and similar providers are supported as **LLM backends**; the gateway maps them to the Ollama response shape your client already reads.
+
+**Contents:** [Why](#why-it-exists) · [Cloud vs self-host](#two-ways-to-run-it) · [Cloud quick start](#quick-start--kortexio-cloud) · [Self-host / Docker](#quick-start--self-host) · [Architecture](#architecture-in-30-seconds) · [Features](#features) · [API](#api--stable-contract) · [Troubleshooting](#troubleshooting) · [License](#licensing)
 
 ---
 
@@ -117,10 +124,12 @@ Run the open-source gateway yourself — the path for **on-prem or fully local**
 
 ### Fastest: one-liner from GHCR (API)
 
-Images are published to GitHub Container Registry on every push to `main`:
+Public images (published on every push to `main`):
 
-- `ghcr.io/kortexio/contextmemory` — API
-- `ghcr.io/kortexio/contextmemory-admin` — Admin UI
+| Image | Package |
+|---|---|
+| `ghcr.io/kortexio/contextmemory` | [API](https://github.com/users/Kortexio/packages/container/package/contextmemory) |
+| `ghcr.io/kortexio/contextmemory-admin` | [Admin UI](https://github.com/users/Kortexio/packages/container/package/contextmemory-admin) |
 
 **API only** (needs [Docker](https://docs.docker.com/get-docker/) + Ollama on the host):
 
@@ -136,13 +145,6 @@ docker run --rm -p 5100:8080 \
 ```
 
 Then: http://localhost:5100/health
-
-If the package is private the first time, log in once:
-
-```bash
-echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
-# or make the package public: GitHub → Packages → contextmemory → Package settings → Change visibility
-```
 
 **API + Admin from GHCR (no local build):**
 
@@ -620,6 +622,24 @@ The seed app in `appsettings.json` uses `en-US`. Tenants can set `DefaultLanguag
 - Rate limits with extra cost accounting for agentic loops
 - **Do not commit real credentials** — `appsettings.Development.json`, `.env`, and `data/` are gitignored; use User Secrets, environment variables, or Key Vault in production
 - Rotate any credentials that were ever committed to version control
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `docker pull` / health OK but chat hangs or 502/503 | Ollama not reachable from the container | On the **host**: `ollama serve` + `ollama pull qwen3.5:9b`. Keep `ContextMemory__OllamaEndpoint=http://host.docker.internal:11434` (Compose/scripts already set `host-gateway`). On Linux without Docker Desktop, confirm `host.docker.internal` resolves. |
+| Health shows Ollama unhealthy | Wrong endpoint or firewall | From the API container or host, `curl http://host.docker.internal:11434/api/tags`. Override with `-e ContextMemory__OllamaEndpoint=...` or `OLLAMA_ENDPOINT` in `.env`. |
+| Port already in use (`5100` / `5200`) | Another process bound the port | Change `API_PORT` / `ADMIN_PORT`, or stop the other process / previous container: `docker rm -f contextmemory-api contextmemory-admin`. |
+| Admin: “Not connected” / 401 | Missing or wrong Master Key | Settings → Master Key = `ContextMemory:MasterKey` (demo: `cm_master_dev_key_change_me`). For Compose/GHCR Admin, URL from the **Admin container** is `http://api:8080`, not `localhost`. Click **Test connection**. |
+| Admin sidebar / menu does nothing | Stale browser cache after upgrade | Hard refresh. Current Admin uses a Blazor toggle (`admin-shell.js`), not AdminLTE jQuery. |
+| Chat Lab 401 | Using Master Key as app key | Chat needs the **app** API key (`cm_live_...`) + `X-App-Id`. Master Key is only for Admin APIs. |
+| Model not found / empty replies | Model not pulled or name mismatch | `ollama pull <model>` and set the same id in app config / request body (`llmModel` / `"model"`). |
+| Custom OpenAI-compatible URL fails | Missing `/v1` or wrong backend | Set backend to `openai-compatible` (or `openai`) and `llmEndpoint` to the server base URL; the gateway appends `/v1` if needed. |
+| Data lost after `docker rm` without volume | Ephemeral container FS | Always mount a volume (`-v contextmemory-data:/app/data` or Compose `cm_data`). |
+
+Still stuck? Open a [GitHub issue](https://github.com/Kortexio/ContextMemory/issues) with health JSON (`GET /health`) and sanitized logs.
 
 ---
 
