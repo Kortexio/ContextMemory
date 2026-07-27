@@ -6,6 +6,10 @@
 
 <PageTitle>Config - @AppId</PageTitle>
 
+<div class="mb-2">
+    <NavLink href="@($"/apps/{AppId}")">← Back to @AppId</NavLink>
+</div>
+
 @if (_loading)
 {
     <div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Loading configuration…</div>
@@ -32,43 +36,90 @@ else
                         <div class="form-group">
                             <label>Default language</label>
                             <InputText class="form-control" @bind-Value="_form.DefaultLanguage" />
+                            <FieldHelp>BCP-47 locale injected into prompts (e.g. en-US).</FieldHelp>
                         </div>
                         <div class="form-group">
                             <label>LLM model</label>
                             <InputText class="form-control" @bind-Value="_form.LlmModel" />
+                            <FieldHelp>Model id for this tenant. Must exist on the configured backend.</FieldHelp>
                         </div>
                         <div class="form-group">
                             <label>Backend</label>
-                            <InputText class="form-control" @bind-Value="_form.LlmBackend" />
+                            <InputSelect class="form-control" @bind-Value="_form.LlmBackend">
+                                <option value="ollama">ollama</option>
+                                <option value="lmstudio">lmstudio</option>
+                                <option value="openai">openai</option>
+                                <option value="openai-compatible">openai-compatible</option>
+                                <option value="custom">custom (alias of openai-compatible)</option>
+                            </InputSelect>
+                            <FieldHelp>
+                                Protocol used to talk to the LLM.
+                                Use <code>openai-compatible</code> / <code>custom</code> with a Base URL for vLLM, LiteLLM, Azure OpenAI, etc.
+                            </FieldHelp>
+                        </div>
+                        <div class="form-group">
+                            <label>LLM endpoint URL (optional)</label>
+                            <InputText class="form-control" @bind-Value="_form.LlmEndpoint" placeholder="Leave empty for host default" />
+                            <FieldHelp>
+                                Per-app override of the backend base URL.
+                                Empty = API host defaults (<code>OllamaEndpoint</code> / <code>LmStudioEndpoint</code> / <code>OpenAiEndpoint</code>).
+                                OpenAI-compatible URLs get <code>/v1</code> appended when missing.
+                            </FieldHelp>
+                        </div>
+                        <div class="form-group">
+                            <label>LLM API key (optional)</label>
+                            <InputText class="form-control" type="password" @bind-Value="_form.LlmApiKey" />
+                            <FieldHelp>Per-app key for OpenAI-compatible backends. Empty = host <code>OpenAiApiKey</code>.</FieldHelp>
                         </div>
                         <div class="form-group">
                             <label>Max history messages</label>
                             <InputNumber class="form-control" @bind-Value="_form.MaxHistoryMessages" />
+                            <FieldHelp>How many recent chat turns are kept in the prompt (session wiki is separate).</FieldHelp>
                         </div>
                         <div class="form-check mb-3">
-                            <InputCheckbox class="form-check-input" @bind-Value="_form.StreamingEnabled" />
-                            <label class="form-check-label">Streaming enabled</label>
+                            <InputCheckbox class="form-check-input" id="streamingEnabled" @bind-Value="_form.StreamingEnabled" />
+                            <label class="form-check-label" for="streamingEnabled">Streaming enabled</label>
+                            <FieldHelp>Allow NDJSON token streaming on <code>/api/chat</code>.</FieldHelp>
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <h5>Wiki (v3)</h5>
+                        <h5>Session wiki</h5>
                         <div class="form-group">
                             <label>Max wiki context chars</label>
                             <InputNumber class="form-control" @bind-Value="_form.MaxWikiContextChars" />
+                            <FieldHelp>Budget for compiled per-session wiki text injected into each turn. <code>0</code> = API default.</FieldHelp>
                         </div>
                         <div class="form-group">
                             <label>Compaction threshold (bytes)</label>
                             <InputNumber class="form-control" @bind-Value="_form.WikiCompactionThresholdBytes" />
+                            <FieldHelp>When session wiki files exceed this size, the maintainer compacts older pages.</FieldHelp>
                         </div>
                         <div class="form-group">
                             <label>Compaction min pages</label>
                             <InputNumber class="form-control" @bind-Value="_form.WikiCompactionMinPages" />
+                            <FieldHelp>Minimum page count before compaction is allowed to run.</FieldHelp>
                         </div>
 
-                        <h5 class="mt-3">Web search (v3.2)</h5>
+                        <h5 class="mt-3">Global Wiki</h5>
                         <div class="form-check mb-2">
-                            <InputCheckbox class="form-check-input" @bind-Value="_form.WebSearchEnabled" />
-                            <label class="form-check-label">Enable web search</label>
+                            <InputCheckbox class="form-check-input" id="globalWikiEnabled" @bind-Value="_form.GlobalWikiEnabled" />
+                            <label class="form-check-label" for="globalWikiEnabled">Enable Global Wiki (<code>wiki_search</code>)</label>
+                            <FieldHelp>
+                                Exposes the built-in tool so the agent can search app-scoped documents ingested via
+                                <code>/apps/&#123;id&#125;/wiki/…</code>.
+                            </FieldHelp>
+                        </div>
+                        <div class="form-group">
+                            <label>Max Global Wiki tool chars</label>
+                            <InputNumber class="form-control" @bind-Value="_form.MaxGlobalWikiToolChars" />
+                            <FieldHelp>Max characters returned by a single <code>wiki_search</code> call. <code>0</code> = service default.</FieldHelp>
+                        </div>
+
+                        <h5 class="mt-3">Web search</h5>
+                        <div class="form-check mb-2">
+                            <InputCheckbox class="form-check-input" id="webSearchEnabled" @bind-Value="_form.WebSearchEnabled" />
+                            <label class="form-check-label" for="webSearchEnabled">Enable web search</label>
+                            <FieldHelp>Optional live web lookup when the model needs fresh public info.</FieldHelp>
                         </div>
                         <div class="form-group">
                             <label>Mode</label>
@@ -78,6 +129,7 @@ else
                                 <option value="always">always (search every turn)</option>
                                 <option value="off">off</option>
                             </InputSelect>
+                            <FieldHelp>When to trigger a search relative to each user turn.</FieldHelp>
                         </div>
                         <div class="form-group">
                             <label>Provider</label>
@@ -85,24 +137,27 @@ else
                                 <option value="tavily">tavily</option>
                                 <option value="brave">brave</option>
                             </InputSelect>
+                            <FieldHelp>API keys are configured on the API host (<code>ContextMemory:WebSearch</code>), not per app.</FieldHelp>
                         </div>
                         <div class="form-group">
                             <label>Max results</label>
                             <InputNumber class="form-control" @bind-Value="_form.WebSearchMaxResults" />
+                            <FieldHelp>How many search hits to fetch per query.</FieldHelp>
                         </div>
                         <div class="form-group">
                             <label>Max context chars (ephemeral prompt)</label>
                             <InputNumber class="form-control" @bind-Value="_form.WebSearchMaxContextChars" />
+                            <FieldHelp>How much search text may be injected into the prompt for that turn.</FieldHelp>
                         </div>
                         <div class="form-check mb-2">
-                            <InputCheckbox class="form-check-input" @bind-Value="_form.WebSearchPersistToWiki" />
-                            <label class="form-check-label">Persist web facts to wiki (maintainer)</label>
+                            <InputCheckbox class="form-check-input" id="persistWeb" @bind-Value="_form.WebSearchPersistToWiki" />
+                            <label class="form-check-label" for="persistWeb">Persist web facts to session wiki</label>
+                            <FieldHelp>When on, useful snippets may be written into the session wiki by the maintainer.</FieldHelp>
                         </div>
                         <div class="form-check mb-2">
-                            <InputCheckbox class="form-check-input" @bind-Value="_form.WebSearchLogWebSearch" />
-                            <label class="form-check-label">Log web searches in telemetry</label>
+                            <InputCheckbox class="form-check-input" id="logWeb" @bind-Value="_form.WebSearchLogWebSearch" />
+                            <label class="form-check-label" for="logWeb">Log web searches in telemetry</label>
                         </div>
-                        <p class="text-muted small">Tavily/Brave API keys in <code>appsettings.Development.json</code> (global).</p>
                     </div>
                 </div>
 
@@ -111,25 +166,29 @@ else
                     <div class="col-md-4 form-group">
                         <label>Requests / min (app)</label>
                         <InputNumber class="form-control" @bind-Value="_form.RateLimitRpm" />
+                        <FieldHelp>Shared budget across all users of this app.</FieldHelp>
                     </div>
                     <div class="col-md-4 form-group">
                         <label>Requests / min (user)</label>
                         <InputNumber class="form-control" @bind-Value="_form.RateLimitUserRpm" />
+                        <FieldHelp>Per <code>X-User-Id</code> budget.</FieldHelp>
                     </div>
                     <div class="col-md-4 form-group">
                         <label>Tokens / min</label>
                         <InputNumber class="form-control" @bind-Value="_form.RateLimitTpm" />
+                        <FieldHelp>Approximate token throughput cap for this app.</FieldHelp>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="col-md-6 form-group">
                         <label>Agentic request weight</label>
                         <InputNumber class="form-control" @bind-Value="_form.AgenticRequestWeight" />
-                        <small class="text-muted">Each agentic turn counts as N requests in the rate limiter.</small>
+                        <FieldHelp>Each agentic turn counts as N requests in the rate limiter (tools are heavier).</FieldHelp>
                     </div>
                     <div class="col-md-6 form-group">
                         <label>Agentic tokens / iteration</label>
                         <InputNumber class="form-control" @bind-Value="_form.AgenticTokensPerIteration" />
+                        <FieldHelp>Estimated tokens charged per agentic iteration for TPM accounting.</FieldHelp>
                     </div>
                 </div>
 
@@ -139,18 +198,22 @@ else
                 <div class="form-group">
                     <label>Base persona</label>
                     <InputTextArea class="form-control" rows="3" @bind-Value="_form.BasePersona" />
+                    <FieldHelp>Core assistant identity / tone for this tenant.</FieldHelp>
                 </div>
                 <div class="form-group">
                     <label>Business rules</label>
                     <InputTextArea class="form-control" rows="2" @bind-Value="_form.BusinessRules" />
+                    <FieldHelp>Hard product or policy constraints the model must follow.</FieldHelp>
                 </div>
                 <div class="form-group">
                     <label>Format rules</label>
                     <InputTextArea class="form-control" rows="2" @bind-Value="_form.FormatRules" />
+                    <FieldHelp>Output shape preferences (lists, headings, language style).</FieldHelp>
                 </div>
                 <div class="form-group">
                     <label>Wiki schema</label>
                     <InputTextArea class="form-control" rows="3" @bind-Value="_form.WikiSchema" />
+                    <FieldHelp>Guidance for how the session wiki should be structured (page names, sections).</FieldHelp>
                 </div>
 
                 @if (_message is not null)
@@ -162,7 +225,12 @@ else
                     <div class="alert alert-danger">@_error</div>
                 }
 
-                <button class="btn btn-primary" type="submit" disabled="@_saving">Save changes</button>
+                <div class="sticky-save-bar">
+                    <button class="btn btn-primary" type="submit" disabled="@_saving">
+                        @(_saving ? "Saving…" : "Save changes")
+                    </button>
+                    <span class="text-muted small ml-2">Changes apply to new requests immediately after save.</span>
+                </div>
             </EditForm>
         </div>
     </div>
@@ -174,11 +242,15 @@ else
         public string DefaultLanguage { get; set; } = "en-US";
         public string LlmModel { get; set; } = "qwen3.5:9b";
         public string LlmBackend { get; set; } = "ollama";
+        public string LlmEndpoint { get; set; } = string.Empty;
+        public string LlmApiKey { get; set; } = string.Empty;
         public int MaxHistoryMessages { get; set; } = 20;
         public bool StreamingEnabled { get; set; } = true;
         public int MaxWikiContextChars { get; set; }
         public long WikiCompactionThresholdBytes { get; set; }
         public int WikiCompactionMinPages { get; set; }
+        public bool GlobalWikiEnabled { get; set; } = true;
+        public int MaxGlobalWikiToolChars { get; set; }
         public string BasePersona { get; set; } = string.Empty;
         public string BusinessRules { get; set; } = string.Empty;
         public string FormatRules { get; set; } = string.Empty;
@@ -262,11 +334,15 @@ else
                 DefaultLanguage = config.DefaultLanguage,
                 LlmModel = config.LlmModel,
                 LlmBackend = config.LlmBackend,
+                LlmEndpoint = config.LlmEndpoint ?? string.Empty,
+                LlmApiKey = config.LlmApiKey ?? string.Empty,
                 MaxHistoryMessages = config.MaxHistoryMessages,
                 StreamingEnabled = config.StreamingEnabled,
                 MaxWikiContextChars = config.MaxWikiContextChars,
                 WikiCompactionThresholdBytes = config.WikiCompactionThresholdBytes,
                 WikiCompactionMinPages = config.WikiCompactionMinPages,
+                GlobalWikiEnabled = config.GlobalWikiEnabled,
+                MaxGlobalWikiToolChars = config.MaxGlobalWikiToolChars,
                 BasePersona = config.BasePersona,
                 BusinessRules = config.BusinessRules,
                 FormatRules = config.FormatRules,
@@ -308,11 +384,15 @@ else
                 DefaultLanguage = _form.DefaultLanguage,
                 LlmModel = _form.LlmModel,
                 LlmBackend = _form.LlmBackend,
+                LlmEndpoint = _form.LlmEndpoint ?? string.Empty,
+                LlmApiKey = _form.LlmApiKey ?? string.Empty,
                 MaxHistoryMessages = _form.MaxHistoryMessages,
                 StreamingEnabled = _form.StreamingEnabled,
                 MaxWikiContextChars = _form.MaxWikiContextChars > 0 ? _form.MaxWikiContextChars : null,
                 WikiCompactionThresholdBytes = _form.WikiCompactionThresholdBytes > 0 ? _form.WikiCompactionThresholdBytes : null,
                 WikiCompactionMinPages = _form.WikiCompactionMinPages > 0 ? _form.WikiCompactionMinPages : null,
+                GlobalWikiEnabled = _form.GlobalWikiEnabled,
+                MaxGlobalWikiToolChars = _form.MaxGlobalWikiToolChars > 0 ? _form.MaxGlobalWikiToolChars : null,
                 BasePersona = _form.BasePersona,
                 BusinessRules = _form.BusinessRules,
                 FormatRules = _form.FormatRules,

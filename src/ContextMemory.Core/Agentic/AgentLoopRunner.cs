@@ -43,7 +43,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
         var maxIterations = request.RuntimeConfig.Agentic.MaxIterations;
         var loopTimeout = ResolveLoopTimeout(request.RuntimeConfig);
         var loopSw = Stopwatch.StartNew();
-        var adapter = _adapterResolver.Resolve(request.RuntimeConfig.LlmBackend);
+        var adapter = _adapterResolver.Resolve(request.RuntimeConfig);
         string? lastAnswer = null;
 
         for (var iteration = request.StartIteration - 1; iteration < maxIterations; iteration++)

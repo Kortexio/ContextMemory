@@ -38,7 +38,7 @@ public static class GenerateEndpoint
             throw new AppNotFoundException(appId);
 
         var runtimeConfig = appConfigStore.GetConfig(appId);
-        var adapter = adapterResolver.Resolve(runtimeConfig.LlmBackend);
+        var adapter = adapterResolver.Resolve(runtimeConfig);
         var isStreaming = request.Stream ?? false;
 
         try

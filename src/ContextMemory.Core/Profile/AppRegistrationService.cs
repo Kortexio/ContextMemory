@@ -70,6 +70,8 @@ public sealed class AppRegistrationService : IAppRegistrationService
             DefaultLanguage = request.DefaultLanguage,
             LlmModel = string.IsNullOrWhiteSpace(request.LlmModel) ? _options.DefaultLlmModel : request.LlmModel,
             LlmBackend = request.LlmBackend,
+            LlmEndpoint = request.LlmEndpoint?.Trim() ?? string.Empty,
+            LlmApiKey = request.LlmApiKey?.Trim() ?? string.Empty,
             MaxHistoryMessages = _options.MaxHistoryMessages
         };
 

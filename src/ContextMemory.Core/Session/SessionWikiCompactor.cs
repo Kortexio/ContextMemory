@@ -52,7 +52,7 @@ public sealed class SessionWikiCompactor
                 .Replace("{pages}", pagesText)
                 .Replace("{language}", lang);
 
-            var adapter = _adapterResolver.Resolve(config.LlmBackend);
+            var adapter = _adapterResolver.Resolve(config);
             var response = await adapter.GenerateAsync(new OllamaGenerateRequest
             {
                 Model = config.LlmModel,

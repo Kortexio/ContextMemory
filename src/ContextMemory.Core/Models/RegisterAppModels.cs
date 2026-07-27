@@ -19,6 +19,14 @@ public record RegisterAppRequest
     [JsonPropertyName("llmModel")]
     public string LlmModel { get; init; } = "qwen3.5:9b";
 
+    /// <summary>Optional per-app LLM base URL. Empty = host default for the chosen backend.</summary>
+    [JsonPropertyName("llmEndpoint")]
+    public string? LlmEndpoint { get; init; }
+
+    /// <summary>Optional per-app LLM API key for OpenAI-compatible endpoints.</summary>
+    [JsonPropertyName("llmApiKey")]
+    public string? LlmApiKey { get; init; }
+
     [JsonPropertyName("promptPersona")]
     public string PromptPersona { get; init; } = string.Empty;
 }
