@@ -5,9 +5,15 @@
         <h5 class="card-title mb-0">Agentic Gateway</h5>
     </div>
     <div class="card-body">
+        <p class="text-muted small">
+            When enabled (or when Global Wiki is on), the gateway may run a multi-step tool loop on the same
+            <code>/api/chat</code> request. Clients still receive a normal Ollama-style final message.
+        </p>
+
         <div class="form-check mb-3">
             <InputCheckbox class="form-check-input" id="agenticEnabled" @bind-Value="Model.Enabled" />
             <label class="form-check-label" for="agenticEnabled">Enable agentic loop for this tenant</label>
+            <FieldHelp>Turns on ACA/MCP tools for this app. Global Wiki can still work independently.</FieldHelp>
         </div>
 
         <div class="form-row">
@@ -19,6 +25,7 @@
                     <option value="openai">openai</option>
                     <option value="claude">claude</option>
                 </InputSelect>
+                <FieldHelp>Tool-calling prompt style. <code>auto</code> picks based on the backend.</FieldHelp>
             </div>
             <div class="col-md-4 form-group">
                 <label>Validation mode</label>
@@ -27,6 +34,7 @@
                     <option value="deterministic">deterministic</option>
                     <option value="llm-judge">llm-judge</option>
                 </InputSelect>
+                <FieldHelp>How answers are checked before returning to the client.</FieldHelp>
             </div>
             <div class="col-md-4 form-group">
                 <label>Network egress</label>
@@ -34,6 +42,7 @@
                     <option value="restricted">restricted</option>
                     <option value="allowed">allowed</option>
                 </InputSelect>
+                <FieldHelp>Whether tools may reach the public internet (<code>restricted</code> = allow-list only).</FieldHelp>
             </div>
         </div>
 
@@ -41,19 +50,23 @@
             <div class="col-md-3 form-group">
                 <label>Max iterations</label>
                 <InputNumber class="form-control" @bind-Value="Model.Guardrails.MaxIterations" />
+                <FieldHelp>Hard cap on tool/LLM rounds per user turn.</FieldHelp>
             </div>
             <div class="col-md-3 form-group">
                 <label>Loop timeout (s)</label>
                 <InputNumber class="form-control" @bind-Value="Model.Guardrails.LoopTimeoutSeconds" />
+                <FieldHelp>Whole-loop deadline in seconds. <code>0</code> = API default.</FieldHelp>
             </div>
             <div class="col-md-3 form-group">
                 <label>Min answer length</label>
                 <InputNumber class="form-control" @bind-Value="Model.Guardrails.MinAnswerLength" />
+                <FieldHelp>Reject empty/short finals under this character count (0 = off).</FieldHelp>
             </div>
             <div class="col-md-3 form-group">
                 <label>Require confirmation for</label>
                 <InputText class="form-control" @bind-Value="ConfirmationKeywordsText"
                            placeholder="delete, deploy-prod" />
+                <FieldHelp>Comma-separated keywords that pause for human confirmation before tool run.</FieldHelp>
             </div>
         </div>
 
@@ -62,24 +75,29 @@
                 <label>Allowed egress hosts</label>
                 <InputText class="form-control" @bind-Value="AllowedHostsText"
                            placeholder="internal.example.com, api.corp.local" />
+                <FieldHelp>Comma-separated hosts allowed when egress is restricted.</FieldHelp>
             </div>
             <div class="col-md-6 form-group">
                 <label>Expected answer patterns (regex)</label>
                 <InputText class="form-control" @bind-Value="ExpectedPatternsText"
                            placeholder="^## Summary" />
+                <FieldHelp>Optional regexes the final answer should match (comma-separated).</FieldHelp>
             </div>
         </div>
 
         <div class="form-check mb-2">
             <InputCheckbox class="form-check-input" @bind-Value="Model.Guardrails.RequireZeroExitCode" />
             <label class="form-check-label">Require exit code 0 for all tools</label>
+            <FieldHelp>Fail the loop if a shell/python tool returns a non-zero exit code.</FieldHelp>
         </div>
         <div class="form-check mb-3">
             <InputCheckbox class="form-check-input" @bind-Value="Model.Guardrails.HumanReviewOnMaxIterations" />
             <label class="form-check-label">Human review when max iterations is reached</label>
+            <FieldHelp>Escalate instead of returning a partial answer when the iteration cap is hit.</FieldHelp>
         </div>
 
         <h6>Execution tools (ACA)</h6>
+        <FieldHelp>Azure Container Apps Dynamic Sessions (or compatible pool) for isolated shell/python/node.</FieldHelp>
         @for (var i = 0; i < Model.Tools.Execution.Count; i++)
         {
             var index = i;
@@ -93,16 +111,19 @@
                             <option value="node">node</option>
                             <option value="custom">custom</option>
                         </InputSelect>
+                        <FieldHelp>Language runtime inside the session pool.</FieldHelp>
                     </div>
                     <div class="col-md-5 form-group mb-2">
                         <label>Pool endpoint</label>
                         <InputText class="form-control form-control-sm"
                                    @bind-Value="Model.Tools.Execution[index].PoolEndpoint" />
+                        <FieldHelp>ACA / sandbox pool base URL for this runtime.</FieldHelp>
                     </div>
                     <div class="col-md-3 form-group mb-2">
                         <label>Container image (custom)</label>
                         <InputText class="form-control form-control-sm"
                                    @bind-Value="Model.Tools.Execution[index].ContainerImage" />
+                        <FieldHelp>Only for <code>custom</code> runtime.</FieldHelp>
                     </div>
                     <div class="col-md-1 d-flex align-items-end mb-2">
                         <button type="button" class="btn btn-sm btn-outline-danger"
@@ -119,6 +140,7 @@
         <button type="button" class="btn btn-sm btn-outline-secondary mb-3" @onclick="AddExecution">+ ACA runtime</button>
 
         <h6>Integration tools (MCP)</h6>
+        <FieldHelp>Model Context Protocol servers this tenant may call (APIs, internal tools).</FieldHelp>
         @for (var i = 0; i < Model.Tools.Integrations.Count; i++)
         {
             var index = i;

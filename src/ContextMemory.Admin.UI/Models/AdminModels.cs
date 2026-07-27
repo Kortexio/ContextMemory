@@ -66,11 +66,15 @@ public sealed class AppRuntimeConfigDto
     public string DefaultLanguage { get; set; } = "en-US";
     public string LlmModel { get; set; } = string.Empty;
     public string LlmBackend { get; set; } = "ollama";
+    public string LlmEndpoint { get; set; } = string.Empty;
+    public string LlmApiKey { get; set; } = string.Empty;
     public int MaxHistoryMessages { get; set; }
     public int MaxWikiContextChars { get; set; }
     public long WikiCompactionThresholdBytes { get; set; }
     public int WikiCompactionMinPages { get; set; }
     public bool StreamingEnabled { get; set; }
+    public bool GlobalWikiEnabled { get; set; } = true;
+    public int MaxGlobalWikiToolChars { get; set; }
     public RateLimitConfig? RateLimits { get; set; }
     public WebSearchConfig? WebSearch { get; set; }
     public AgenticConfig? Agentic { get; set; }
@@ -127,6 +131,10 @@ public sealed class RegisterAppForm
     [Required]
     public string LlmModel { get; set; } = "qwen3.5:9b";
 
+    public string? LlmEndpoint { get; set; }
+
+    public string? LlmApiKey { get; set; }
+
     public string? PromptPersona { get; set; }
 
     public RegisterAppRequest ToRequest() => new()
@@ -136,6 +144,8 @@ public sealed class RegisterAppForm
         DefaultLanguage = DefaultLanguage.Trim(),
         LlmBackend = LlmBackend.Trim(),
         LlmModel = LlmModel.Trim(),
+        LlmEndpoint = string.IsNullOrWhiteSpace(LlmEndpoint) ? null : LlmEndpoint.Trim(),
+        LlmApiKey = string.IsNullOrWhiteSpace(LlmApiKey) ? null : LlmApiKey.Trim(),
         PromptPersona = string.IsNullOrWhiteSpace(PromptPersona) ? string.Empty : PromptPersona.Trim()
     };
 }

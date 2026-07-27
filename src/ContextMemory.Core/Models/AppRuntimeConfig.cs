@@ -12,6 +12,18 @@ public record AppRuntimeConfig
     public string DefaultLanguage { get; init; } = "en-US";
     public string LlmModel { get; init; } = "qwen3.5:9b";
     public string LlmBackend { get; init; } = "ollama";
+
+    /// <summary>
+    /// Optional per-app LLM base URL. Empty = use the host default for <see cref="LlmBackend"/>
+    /// (<c>OllamaEndpoint</c> / <c>LmStudioEndpoint</c> / <c>OpenAiEndpoint</c>).
+    /// </summary>
+    public string LlmEndpoint { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Optional per-app API key for OpenAI-compatible backends. Empty = use host <c>OpenAiApiKey</c>.
+    /// </summary>
+    public string LlmApiKey { get; init; } = string.Empty;
+
     public int MaxHistoryMessages { get; init; } = 20;
     public int MaxWikiContextChars { get; init; }
     public long WikiCompactionThresholdBytes { get; init; }

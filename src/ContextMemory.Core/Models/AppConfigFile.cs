@@ -14,6 +14,14 @@ public record AppConfigFile
     [JsonPropertyName("llmBackend")]
     public string LlmBackend { get; init; } = "ollama";
 
+    /// <summary>Optional per-app LLM base URL override. Empty = host default for the backend.</summary>
+    [JsonPropertyName("llmEndpoint")]
+    public string LlmEndpoint { get; init; } = string.Empty;
+
+    /// <summary>Optional per-app LLM API key (OpenAI-compatible). Empty = host OpenAiApiKey.</summary>
+    [JsonPropertyName("llmApiKey")]
+    public string LlmApiKey { get; init; } = string.Empty;
+
     [JsonPropertyName("maxHistoryMessages")]
     public int MaxHistoryMessages { get; init; } = 20;
 
@@ -55,6 +63,12 @@ public record AppConfigPatchRequest
 
     [JsonPropertyName("llmBackend")]
     public string? LlmBackend { get; init; }
+
+    [JsonPropertyName("llmEndpoint")]
+    public string? LlmEndpoint { get; init; }
+
+    [JsonPropertyName("llmApiKey")]
+    public string? LlmApiKey { get; init; }
 
     [JsonPropertyName("maxHistoryMessages")]
     public int? MaxHistoryMessages { get; init; }

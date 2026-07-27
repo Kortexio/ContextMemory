@@ -93,6 +93,8 @@ public sealed class AppConfigStore : IAppConfigStore
                 DefaultLanguage = patch.DefaultLanguage ?? current.DefaultLanguage,
                 LlmModel = patch.LlmModel ?? current.LlmModel,
                 LlmBackend = patch.LlmBackend ?? current.LlmBackend,
+                LlmEndpoint = patch.LlmEndpoint ?? current.LlmEndpoint,
+                LlmApiKey = patch.LlmApiKey ?? current.LlmApiKey,
                 MaxHistoryMessages = patch.MaxHistoryMessages ?? current.MaxHistoryMessages,
                 MaxWikiContextChars = patch.MaxWikiContextChars ?? current.MaxWikiContextChars,
                 WikiCompactionThresholdBytes = patch.WikiCompactionThresholdBytes ?? current.WikiCompactionThresholdBytes,
@@ -141,6 +143,8 @@ public sealed class AppConfigStore : IAppConfigStore
             DefaultLanguage = seed.DefaultLanguage,
             LlmModel = seed.LlmModel,
             LlmBackend = seed.LlmBackend,
+            LlmEndpoint = seed.LlmEndpoint,
+            LlmApiKey = seed.LlmApiKey,
             MaxHistoryMessages = seed.MaxHistoryMessages,
             MaxWikiContextChars = seed.MaxWikiContextChars > 0 ? seed.MaxWikiContextChars : _defaults.MaxWikiContextChars,
             WikiCompactionThresholdBytes = seed.WikiCompactionThresholdBytes > 0
@@ -188,6 +192,8 @@ public sealed class AppConfigStore : IAppConfigStore
             DefaultLanguage = configFile.DefaultLanguage,
             LlmModel = string.IsNullOrWhiteSpace(configFile.LlmModel) ? _defaults.DefaultLlmModel : configFile.LlmModel,
             LlmBackend = configFile.LlmBackend,
+            LlmEndpoint = configFile.LlmEndpoint ?? string.Empty,
+            LlmApiKey = configFile.LlmApiKey ?? string.Empty,
             MaxHistoryMessages = configFile.MaxHistoryMessages > 0
                 ? configFile.MaxHistoryMessages
                 : _defaults.MaxHistoryMessages,

@@ -1,0 +1,14 @@
+.dockerignore
+**/.git
+**/.vs
+**/bin
+**/obj
+**/TestResults
+**/*.user
+**/*.md
+!README.md
+.env
+data/
+wikis/
+tests/
+src/ContextMemory.AppHost/

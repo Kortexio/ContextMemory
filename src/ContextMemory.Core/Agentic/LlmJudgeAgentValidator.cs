@@ -24,7 +24,7 @@ public sealed class LlmJudgeAgentValidator
     {
         try
         {
-            var adapter = _adapterResolver.Resolve(request.RuntimeConfig.LlmBackend);
+            var adapter = _adapterResolver.Resolve(request.RuntimeConfig);
             var prompt = AgenticJudgePromptBuilder.Build(request);
 
             var response = await adapter.GenerateAsync(

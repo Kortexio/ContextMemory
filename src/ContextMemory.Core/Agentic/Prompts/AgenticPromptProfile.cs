@@ -26,7 +26,7 @@ public static class AgenticPromptProfileResolver
         if (ContainsAny(model, "claude", "sonnet", "opus", "haiku"))
             return AgenticPromptProfile.Claude;
 
-        if (backend is "openai"
+        if (backend is "openai" or "openai-compatible" or "custom"
             || ContainsAny(model, "gpt", "o1", "o3", "o4", "chatgpt"))
         {
             return AgenticPromptProfile.OpenAi;
