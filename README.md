@@ -115,9 +115,56 @@ That's the entire integration. Session memory works on the next turn automatical
 
 Run the open-source gateway yourself — the path for **on-prem or fully local** deployments. Unlike Cloud (where the dashboard wires up your LLM for you), here **you point the gateway at your own LLM backend** — endpoint and model — in config. Same chat body, same Ollama response as Cloud; you supply the `X-App-Id` and use a `cm_live_` key.
 
-### Fastest: Docker Compose (API + Admin)
+### Fastest: one-liner from GHCR (API)
 
-One command starts the **API** (`:5100`) and **Admin** console (`:5200`). Requires [Docker](https://docs.docker.com/get-docker/) and an LLM reachable from the containers (Ollama on the host by default).
+Images are published to GitHub Container Registry on every push to `main`:
+
+- `ghcr.io/kortexio/contextmemory` — API
+- `ghcr.io/kortexio/contextmemory-admin` — Admin UI
+
+**API only** (needs [Docker](https://docs.docker.com/get-docker/) + Ollama on the host):
+
+```bash
+docker run --rm -p 5100:8080 \
+  --add-host=host.docker.internal:host-gateway \
+  -v contextmemory-data:/app/data \
+  -e ContextMemory__OllamaEndpoint=http://host.docker.internal:11434 \
+  -e ContextMemory__MasterKey=cm_master_dev_key_change_me \
+  -e ContextMemory__Apps__demo-dev__ApiKey=cm_live_dev_key_change_me \
+  -e ContextMemory__Apps__demo-dev__LlmModel=qwen3.5:9b \
+  ghcr.io/kortexio/contextmemory:latest
+```
+
+Then: http://localhost:5100/health
+
+If the package is private the first time, log in once:
+
+```bash
+echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+# or make the package public: GitHub → Packages → contextmemory → Package settings → Change visibility
+```
+
+**API + Admin from GHCR (no local build):**
+
+```bash
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+Or the helper scripts:
+
+```bash
+./scripts/docker-run.sh --with-admin          # pull from GHCR
+./scripts/docker-run.sh --build --with-admin  # build locally instead
+```
+
+```powershell
+.\scripts\docker-run.ps1 -WithAdmin
+.\scripts\docker-run.ps1 -Build -WithAdmin
+```
+
+### Build from source: Docker Compose
+
+Builds and starts the **API** (`:5100`) and **Admin** (`:5200`) locally. Requires [Docker](https://docs.docker.com/get-docker/) and an LLM reachable from the containers (Ollama on the host by default).
 
 ```bash
 git clone https://github.com/Kortexio/ContextMemory.git

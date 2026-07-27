@@ -19,6 +19,8 @@ COPY src/ContextMemory.ServiceDefaults/ src/ContextMemory.ServiceDefaults/
 RUN dotnet publish src/ContextMemory.Api/ContextMemory.Api.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine AS runtime
+LABEL org.opencontainers.image.source="https://github.com/Kortexio/ContextMemory"
+LABEL org.opencontainers.image.description="ContextMemory Agentic Gateway API"
 WORKDIR /app
 RUN apk add --no-cache icu-libs curl && adduser -D -u 10001 appuser
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
