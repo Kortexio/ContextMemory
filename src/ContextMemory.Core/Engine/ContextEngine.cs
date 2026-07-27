@@ -63,7 +63,7 @@ public sealed class ContextEngine : IContextEngine
             .EnrichAsync(appId, userId, sessionId, request, runtimeConfig, _chatTurnContext, cancellationToken)
             .ConfigureAwait(false);
 
-        var adapter = _adapterResolver.Resolve(runtimeConfig.LlmBackend);
+        var adapter = _adapterResolver.Resolve(runtimeConfig);
         OllamaResponse response;
         string assistantContent;
 
@@ -167,7 +167,7 @@ public sealed class ContextEngine : IContextEngine
             yield break;
         }
 
-        var adapter = _adapterResolver.Resolve(runtimeConfig.LlmBackend);
+        var adapter = _adapterResolver.Resolve(runtimeConfig);
         await foreach (var chunk in adapter.ChatStreamAsync(enriched, cancellationToken).ConfigureAwait(false))
             yield return chunk;
     }

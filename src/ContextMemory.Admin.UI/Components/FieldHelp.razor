@@ -1,0 +1,8 @@
+@namespace ContextMemory.Admin.UI.Components
+
+@* Short helper text under form fields *@
+<small class="form-text text-muted d-block mb-0">@ChildContent</small>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

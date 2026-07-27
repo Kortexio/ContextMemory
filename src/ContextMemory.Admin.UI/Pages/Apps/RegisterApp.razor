@@ -13,10 +13,15 @@
                     <h3 class="card-title">Register new application</h3>
                 </div>
                 <div class="card-body">
+                    <p class="text-muted">
+                        Creates a tenant app with its own API key, session wiki, and optional Global Wiki.
+                        You will see the API key <strong>once</strong> after creation — copy it immediately.
+                    </p>
+
                     @if (!Session.IsConfigured)
                     {
                         <div class="alert alert-warning">
-                            Configure the API URL and master key in <NavLink href="/settings">Settings</NavLink>.
+                            Configure the API URL and master key in <NavLink href="/settings">Settings</NavLink> first.
                         </div>
                     }
                     else
@@ -27,15 +32,17 @@
                             <div class="form-group">
                                 <label>Application name</label>
                                 <InputText class="form-control" @bind-Value="_form.AppName" placeholder="Helpdesk Production" />
+                                <FieldHelp>Human-readable label for operators. Not used in HTTP headers.</FieldHelp>
                                 <ValidationMessage For="@(() => _form.AppName)" />
                             </div>
 
                             <div class="form-group">
                                 <label>Domain (App ID prefix)</label>
                                 <InputText class="form-control" @bind-Value="_form.Domain" placeholder="helpdesk" />
-                                <small class="form-text text-muted">
-                                    Generates an ID like <code>helpdesk-prod-a1b2c3</code>. Letters, numbers, and hyphen only.
-                                </small>
+                                <FieldHelp>
+                                    Prefix for the generated App ID (sent as <code>X-App-Id</code>), e.g.
+                                    <code>helpdesk-prod-a1b2c3</code>. Letters, numbers, and hyphen only.
+                                </FieldHelp>
                                 <ValidationMessage For="@(() => _form.Domain)" />
                             </div>
 
@@ -43,6 +50,7 @@
                                 <div class="col-md-6 form-group">
                                     <label>Default language</label>
                                     <InputText class="form-control" @bind-Value="_form.DefaultLanguage" />
+                                    <FieldHelp>BCP-47 tag used in prompts (e.g. <code>en-US</code>, <code>pt-PT</code>).</FieldHelp>
                                 </div>
                                 <div class="col-md-6 form-group">
                                     <label>LLM backend</label>
@@ -50,19 +58,42 @@
                                         <option value="ollama">ollama</option>
                                         <option value="lmstudio">lmstudio</option>
                                         <option value="openai">openai</option>
+                                        <option value="openai-compatible">openai-compatible (custom URL)</option>
                                     </InputSelect>
+                                    <FieldHelp>
+                                        API shape to use. For a custom OpenAI-compatible server, pick
+                                        <code>openai-compatible</code> and set the endpoint URL below.
+                                    </FieldHelp>
                                 </div>
                             </div>
 
                             <div class="form-group">
                                 <label>LLM model</label>
-                                <InputText class="form-control" @bind-Value="_form.LlmModel" placeholder="llama3.2" />
+                                <InputText class="form-control" @bind-Value="_form.LlmModel" placeholder="qwen3.5:9b" />
+                                <FieldHelp>Model id understood by the chosen backend (must already be pulled/available).</FieldHelp>
+                            </div>
+
+                            <div class="form-group">
+                                <label>LLM endpoint URL (optional)</label>
+                                <InputText class="form-control" @bind-Value="_form.LlmEndpoint" placeholder="http://localhost:11434" />
+                                <FieldHelp>
+                                    Leave empty to use the API host default for this backend.
+                                    Examples: another Ollama host, vLLM, LiteLLM, or Azure OpenAI base URL.
+                                    For OpenAI-compatible APIs, <code>/v1</code> is added automatically if missing.
+                                </FieldHelp>
+                            </div>
+
+                            <div class="form-group">
+                                <label>LLM API key (optional)</label>
+                                <InputText class="form-control" type="password" @bind-Value="_form.LlmApiKey" />
+                                <FieldHelp>Per-app key for OpenAI-compatible backends. Empty = host <code>OpenAiApiKey</code>.</FieldHelp>
                             </div>
 
                             <div class="form-group">
                                 <label>Persona (base system prompt)</label>
                                 <InputTextArea class="form-control" rows="4" @bind-Value="_form.PromptPersona"
                                                placeholder="Optional. Uses a generic persona when empty." />
+                                <FieldHelp>Optional system persona merged into every turn. Leave empty for the built-in default.</FieldHelp>
                             </div>
 
                             @if (_error is not null)
@@ -88,14 +119,21 @@
                 <div class="card-body">
                     <div class="alert alert-warning">
                         <strong>Save the API key now.</strong> It will not be shown again on this screen.
+                        Clients send it as <code>Authorization: Bearer …</code> with <code>X-App-Id: @_created.AppId</code>.
                     </div>
 
                     <dl class="row mb-0">
                         <dt class="col-sm-3">App ID</dt>
-                        <dd class="col-sm-9"><code>@_created.AppId</code></dd>
+                        <dd class="col-sm-9">
+                            <code>@_created.AppId</code>
+                            <button type="button" class="btn btn-xs btn-outline-secondary ml-2" @onclick="() => CopyAsync(_created.AppId)">Copy</button>
+                        </dd>
 
                         <dt class="col-sm-3">API key</dt>
-                        <dd class="col-sm-9"><code>@_created.ApiKey</code></dd>
+                        <dd class="col-sm-9">
+                            <code>@_created.ApiKey</code>
+                            <button type="button" class="btn btn-xs btn-outline-secondary ml-2" @onclick="() => CopyAsync(_created.ApiKey)">Copy</button>
+                        </dd>
 
                         <dt class="col-sm-3">Status</dt>
                         <dd class="col-sm-9">@_created.Status</dd>
@@ -103,7 +141,8 @@
                 </div>
                 <div class="card-footer">
                     <NavLink class="btn btn-primary" href="@($"/apps/{_created.AppId}")">View statistics</NavLink>
-                    <NavLink class="btn btn-outline-secondary ml-2" href="/chat">Open Chat Lab</NavLink>
+                    <NavLink class="btn btn-outline-secondary ml-2" href="@($"/apps/{_created.AppId}/config")">Edit config</NavLink>
+                    <NavLink class="btn btn-outline-info ml-2" href="/chat">Open Chat Lab</NavLink>
                     <button type="button" class="btn btn-outline-primary ml-2" @onclick="CreateAnother">Create another</button>
                 </div>
             </div>
@@ -114,6 +153,7 @@
 @code {
     [Inject] private AdminApiClient Api { get; set; } = default!;
     [Inject] private AdminSession Session { get; set; } = default!;
+    [Inject] private IJSRuntime Js { get; set; } = default!;
 
     private RegisterAppForm _form = new();
     private RegisterAppResponse? _created;
@@ -153,6 +193,13 @@
         _created = null;
         _form = new RegisterAppForm();
         _error = null;
+    }
+
+    private async Task CopyAsync(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return;
+        await Js.InvokeVoidAsync("navigator.clipboard.writeText", value);
     }
 
     private static string TryFormatApiError(string body)

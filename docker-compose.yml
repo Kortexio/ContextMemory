@@ -1,0 +1,69 @@
+# One-command local stack: API (:5100) + Admin (:5200)
+# Usage:  docker compose up --build
+# Requires Ollama on the host (default http://host.docker.internal:11434)
+
+name: contextmemory
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: contextmemory-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-5100}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ContextMemory__PersistenceProvider: ${PERSISTENCE_PROVIDER:-File}
+      ContextMemory__DataPath: /app/data
+      ContextMemory__OllamaEndpoint: ${OLLAMA_ENDPOINT:-http://host.docker.internal:11434}
+      ContextMemory__DefaultLlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
+      ContextMemory__MasterKey: ${MASTER_KEY:-cm_master_dev_key_change_me}
+      ContextMemory__AdminCorsOrigins__0: ${ADMIN_PUBLIC_URL:-http://localhost:5200}
+      ContextMemory__Apps__demo-dev__ApiKey: ${DEMO_APP_API_KEY:-cm_live_dev_key_change_me}
+      ContextMemory__Apps__demo-dev__SystemPrompt: You are a helpful, clear, and precise assistant.
+      ContextMemory__Apps__demo-dev__DefaultLanguage: en-US
+      ContextMemory__Apps__demo-dev__LlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
+    volumes:
+      - cm_data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - cm-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 40s
+
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile.admin
+    container_name: contextmemory-admin
+    restart: unless-stopped
+    ports:
+      - "${ADMIN_PORT:-5200}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      # Server-side HttpClient talks to the API container on the Docker network
+      Admin__DefaultApiBaseUrl: http://api:8080
+      Admin__PublicApiBaseUrl: ${PUBLIC_API_URL:-http://localhost:5100}
+      Admin__DefaultMasterKey: ${MASTER_KEY:-cm_master_dev_key_change_me}
+      ApiBaseUrl: http://api:8080
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - cm-net
+
+volumes:
+  cm_data:
+
+networks:
+  cm-net:
+    driver: bridge

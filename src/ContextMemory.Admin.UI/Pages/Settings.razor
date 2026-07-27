@@ -4,6 +4,12 @@
 
 <PageTitle>Settings - ContextMemory Admin</PageTitle>
 
+<div class="alert alert-info">
+    <strong>First-time setup.</strong>
+    Connect this console to a running ContextMemory API using the Master Key from
+    <code>ContextMemory:MasterKey</code>. In Docker Compose these fields are pre-filled for you.
+</div>
+
 <div class="card card-outline card-primary mb-3">
     <div class="card-header"><h3 class="card-title">API connection</h3></div>
     <div class="card-body">
@@ -11,13 +17,29 @@
             <DataAnnotationsValidator />
 
             <div class="form-group">
-                <label>API base URL</label>
-                <InputText class="form-control" @bind-Value="_model.ApiBaseUrl" placeholder="http://localhost:5100" />
+                <label for="apiBaseUrl">API base URL</label>
+                <InputText id="apiBaseUrl" class="form-control" @bind-Value="_model.ApiBaseUrl" placeholder="http://localhost:5100" />
+                <FieldHelp>
+                    Base URL of the ContextMemory API as seen from this Admin host.
+                    Local: <code>http://localhost:5100</code>. Docker Compose: <code>http://api:8080</code>
+                    (server-side calls stay on the Docker network).
+                </FieldHelp>
             </div>
 
             <div class="form-group">
-                <label>Master key</label>
-                <InputText class="form-control" type="password" @bind-Value="_model.MasterKey" />
+                <label for="masterKey">Master key</label>
+                <div class="input-group">
+                    <InputText id="masterKey" class="form-control" type="@(_showMasterKey ? "text" : "password")" @bind-Value="_model.MasterKey" />
+                    <div class="input-group-append">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="() => _showMasterKey = !_showMasterKey">
+                            <i class="fas @(_showMasterKey ? "fa-eye-slash" : "fa-eye")"></i>
+                        </button>
+                    </div>
+                </div>
+                <FieldHelp>
+                    Admin secret (<code>ContextMemory:MasterKey</code>). Required for listing apps, rotating keys, and saving config.
+                    Default demo value: <code>cm_master_dev_key_change_me</code>.
+                </FieldHelp>
             </div>
 
             @if (_message is not null)
@@ -29,9 +51,15 @@
                 <div class="alert alert-danger">@_error</div>
             }
 
-            <button class="btn btn-primary" type="submit" disabled="@_saving">Save</button>
-            <button class="btn btn-outline-secondary ml-2" type="button" @onclick="TestConnectionAsync" disabled="@_saving">Test connection</button>
-            <button class="btn btn-outline-danger ml-2" type="button" @onclick="ClearAsync" disabled="@_saving">Clear</button>
+            <button class="btn btn-primary" type="submit" disabled="@_saving">
+                @(_saving ? "Working…" : "Save")
+            </button>
+            <button class="btn btn-outline-secondary ml-2" type="button" @onclick="TestConnectionAsync" disabled="@_saving">
+                Test connection
+            </button>
+            <button class="btn btn-outline-danger ml-2" type="button" @onclick="ClearAsync" disabled="@_saving">
+                Reset to defaults
+            </button>
         </EditForm>
     </div>
 </div>
@@ -41,7 +69,7 @@
     <div class="card card-outline card-info">
         <div class="card-header"><h3 class="card-title">Health check</h3></div>
         <div class="card-body">
-            <p>Status: <strong>@_health.Status</strong></p>
+            <p>Status: <strong class="@(_health.Status.Equals("Healthy", StringComparison.OrdinalIgnoreCase) ? "text-success" : "text-warning")">@_health.Status</strong></p>
             @if (_health.Checks is not null)
             {
                 <ul class="mb-0">
@@ -74,6 +102,7 @@
     private HealthResponseDto? _health;
     private string? _metricsUrl;
     private bool _saving;
+    private bool _showMasterKey;
     private string? _message;
     private string? _error;
 
@@ -99,7 +128,7 @@
         {
             await Session.SaveAsync(_model);
             _metricsUrl = Api.GetMetricsUrl();
-            _message = "Settings saved.";
+            _message = "Settings saved in this browser.";
         }
         catch (Exception ex)
         {
@@ -128,7 +157,7 @@
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _error = FriendlyConnectionError(ex.Message);
         }
         finally
         {
@@ -146,8 +175,14 @@
         try
         {
             await Session.ClearAsync();
-            _model = new AdminSettings();
-            _message = "Settings cleared.";
+            _model = new AdminSettings
+            {
+                ApiBaseUrl = Session.Settings.ApiBaseUrl,
+                MasterKey = Session.Settings.MasterKey
+            };
+            if (Session.IsConfigured)
+                _metricsUrl = Api.GetMetricsUrl();
+            _message = "Browser settings cleared; host defaults restored.";
         }
         catch (Exception ex)
         {
@@ -157,5 +192,25 @@
         {
             _saving = false;
         }
+    }
+
+    private static string FriendlyConnectionError(string message)
+    {
+        if (message.Contains("Connection refused", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("No connection could be made", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("actively refused", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Cannot reach the API. Check that ContextMemory.Api is running and the base URL is correct "
+                + "(Docker: http://api:8080 from Admin container; local: http://localhost:5100). "
+                + "Details: " + message;
+        }
+
+        if (message.Contains("401", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Unauthorized — Master Key does not match ContextMemory:MasterKey on the API. " + message;
+        }
+
+        return message;
     }
 }

@@ -41,7 +41,7 @@ public sealed class LlmFreshnessDetector : IWebSearchFreshnessClassifier
         CancellationToken cancellationToken = default)
     {
         var config = _appConfigStore.GetConfig(appId);
-        var adapter = _adapterResolver.Resolve(config.LlmBackend);
+        var adapter = _adapterResolver.Resolve(config);
         var lang = config.DefaultLanguage;
         var wikiPages = snapshot.Pages.Count == 0
             ? LlmPrompts.NoneLabel(lang)
