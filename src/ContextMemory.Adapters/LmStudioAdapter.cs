@@ -13,12 +13,34 @@ public sealed class LmStudioAdapterOptions
 
 public sealed class LmStudioAdapter : ILlmAdapter
 {
+    private readonly HttpClient _httpClient;
+    private readonly string _defaultBaseUrl;
     private readonly OpenAiChatClient _client;
 
     public LmStudioAdapter(HttpClient httpClient, IOptions<LmStudioAdapterOptions> options)
     {
-        var baseUrl = $"{options.Value.LmStudioEndpoint.TrimEnd('/')}/v1";
-        _client = new OpenAiChatClient(httpClient, baseUrl, apiKey: null);
+        _httpClient = httpClient;
+        _defaultBaseUrl = OpenAiAdapter.NormalizeOpenAiBase(options.Value.LmStudioEndpoint);
+        _client = new OpenAiChatClient(httpClient, _defaultBaseUrl, apiKey: null);
+    }
+
+    private LmStudioAdapter(HttpClient httpClient, string baseUrl, string? apiKey, string defaultBaseUrl)
+    {
+        _httpClient = httpClient;
+        _defaultBaseUrl = defaultBaseUrl;
+        _client = new OpenAiChatClient(httpClient, baseUrl, apiKey);
+    }
+
+    public LmStudioAdapter WithConnection(string? endpointOverride, string? apiKeyOverride)
+    {
+        if (string.IsNullOrWhiteSpace(endpointOverride) && string.IsNullOrWhiteSpace(apiKeyOverride))
+            return this;
+
+        var baseUrl = string.IsNullOrWhiteSpace(endpointOverride)
+            ? _defaultBaseUrl
+            : OpenAiAdapter.NormalizeOpenAiBase(endpointOverride);
+        var apiKey = string.IsNullOrWhiteSpace(apiKeyOverride) ? null : apiKeyOverride.Trim();
+        return new LmStudioAdapter(_httpClient, baseUrl, apiKey, _defaultBaseUrl);
     }
 
     public Task<OllamaResponse> ChatAsync(OllamaRequest request, CancellationToken cancellationToken = default) =>

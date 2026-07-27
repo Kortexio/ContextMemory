@@ -14,22 +14,27 @@
                 <div class="form-group">
                     <label>App ID</label>
                     <InputText class="form-control form-control-sm" @bind-Value="_settings.AppId" />
+                    <FieldHelp>Sent as <code>X-App-Id</code>. Seed demo: <code>demo-dev</code>.</FieldHelp>
                 </div>
                 <div class="form-group">
                     <label>User ID</label>
                     <InputText class="form-control form-control-sm" @bind-Value="_settings.UserId" />
+                    <FieldHelp>Sent as <code>X-User-Id</code> — scopes session memory per user.</FieldHelp>
                 </div>
                 <div class="form-group">
                     <label>Session ID</label>
                     <InputText class="form-control form-control-sm" @bind-Value="_settings.SessionId" placeholder="empty = API generates" />
+                    <FieldHelp>Optional <code>X-Session-Id</code>. Same id = same session wiki.</FieldHelp>
                 </div>
                 <div class="form-group">
                     <label>App API key</label>
                     <InputText class="form-control form-control-sm" type="password" @bind-Value="_settings.ApiKey" />
+                    <FieldHelp>App Bearer token (not the Master Key). Demo: <code>cm_live_dev_key_change_me</code>.</FieldHelp>
                 </div>
                 <div class="form-group">
                     <label>Model</label>
                     <InputText class="form-control form-control-sm" @bind-Value="_settings.Model" />
+                    <FieldHelp>Body <code>model</code>. Should match the app config / pulled Ollama tag.</FieldHelp>
                 </div>
                 <div class="btn-group btn-group-sm w-100 mb-2">
                     <button type="button" class="btn @ModeBtnClass(ChatEndpointMode.Chat)" @onclick="() => SetMode(ChatEndpointMode.Chat)">Chat</button>
@@ -71,44 +76,53 @@
                 <div class="form-group">
                     <label>System prompt (chat)</label>
                     <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_settings.SystemPrompt" />
+                    <FieldHelp>Optional per-request system message (in addition to app persona).</FieldHelp>
                 </div>
                 <div class="form-row">
                     <div class="col-6 form-group">
                         <label>temperature</label>
                         <InputNumber class="form-control form-control-sm" @bind-Value="_settings.Temperature" />
+                        <FieldHelp>Creativity (higher = more random).</FieldHelp>
                     </div>
                     <div class="col-6 form-group">
                         <label>top_p</label>
                         <InputNumber class="form-control form-control-sm" @bind-Value="_settings.TopP" />
+                        <FieldHelp>Nucleus sampling cutoff.</FieldHelp>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="col-6 form-group">
                         <label>top_k</label>
                         <InputNumber class="form-control form-control-sm" @bind-Value="_settings.TopK" />
+                        <FieldHelp>Limit next-token candidates (Ollama).</FieldHelp>
                     </div>
                     <div class="col-6 form-group">
                         <label>num_ctx</label>
                         <InputNumber class="form-control form-control-sm" @bind-Value="_settings.NumCtx" />
+                        <FieldHelp>Context window size in tokens.</FieldHelp>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="col-6 form-group">
                         <label>repeat_penalty</label>
                         <InputNumber class="form-control form-control-sm" @bind-Value="_settings.RepeatPenalty" />
+                        <FieldHelp>Discourage repeated phrases.</FieldHelp>
                     </div>
                     <div class="col-6 form-group">
                         <label>num_predict</label>
                         <InputNumber class="form-control form-control-sm" @bind-Value="_settings.NumPredict" />
+                        <FieldHelp>Max tokens to generate (−1 = backend default).</FieldHelp>
                     </div>
                 </div>
                 <div class="form-group">
                     <label>keep_alive</label>
                     <InputText class="form-control form-control-sm" @bind-Value="_settings.KeepAlive" />
+                    <FieldHelp>How long Ollama keeps the model loaded (e.g. <code>5m</code>).</FieldHelp>
                 </div>
                 <div class="form-group mb-0">
                     <label>format (e.g. json)</label>
                     <InputText class="form-control form-control-sm" @bind-Value="_settings.Format" />
+                    <FieldHelp>Optional response format hint for the backend.</FieldHelp>
                 </div>
             </div>
         </div>

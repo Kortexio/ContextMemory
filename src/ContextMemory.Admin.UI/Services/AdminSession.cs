@@ -29,8 +29,8 @@ public sealed class AdminSession
 
     public async Task ClearAsync(CancellationToken cancellationToken = default)
     {
-        Settings = new AdminSettings();
         await _storage.ClearAsync(cancellationToken).ConfigureAwait(false);
+        Settings = await _storage.LoadAsync(cancellationToken).ConfigureAwait(false) ?? new AdminSettings();
         Changed?.Invoke();
     }
 }

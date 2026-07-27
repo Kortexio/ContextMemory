@@ -38,7 +38,7 @@ public sealed class SessionWikiMaintainer
 
         var config = _appConfigStore.GetConfig(appId);
         var lang = config.DefaultLanguage;
-        var adapter = _adapterResolver.Resolve(config.LlmBackend);
+        var adapter = _adapterResolver.Resolve(config);
 
         var pagesCompiled = SessionWikiCompiler.Compile(snapshot, userMessage, maintainerBudgetChars, includeIndex: false);
         var pagesText = pagesCompiled.IncludedPages > 0

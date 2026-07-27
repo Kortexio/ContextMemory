@@ -6,10 +6,27 @@
 
 <PageTitle>Applications - ContextMemory Admin</PageTitle>
 
-<div class="mb-3">
-    <NavLink class="btn btn-primary" href="/apps/new">
+@if (!Session.IsConfigured)
+{
+    <div class="card card-outline card-warning">
+        <div class="card-body">
+            <h5 class="mb-2">Connect to the API</h5>
+            <p class="mb-3 text-muted">
+                This console talks to ContextMemory over HTTP. Open Settings, paste the Master Key, and test the connection.
+            </p>
+            <NavLink class="btn btn-primary" href="/settings">Open Settings</NavLink>
+        </div>
+    </div>
+}
+else
+{
+<div class="mb-3 d-flex flex-wrap align-items-center">
+    <NavLink class="btn btn-primary mr-2 mb-1" href="/apps/new">
         <i class="fas fa-plus"></i> New application
     </NavLink>
+    <button type="button" class="btn btn-outline-secondary mb-1" @onclick="LoadAsync" disabled="@_loading">
+        <i class="fas fa-sync-alt"></i> Refresh
+    </button>
 </div>
 
 @if (_loading)
@@ -18,11 +35,21 @@
 }
 else if (_error is not null)
 {
-    <div class="alert alert-danger">@_error</div>
+    <div class="alert alert-danger">
+        @_error
+        <div class="mt-2">
+            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="LoadAsync">Retry</button>
+            <NavLink class="btn btn-sm btn-outline-secondary ml-1" href="/settings">Check Settings</NavLink>
+        </div>
+    </div>
 }
 else if (_apps.Count == 0)
 {
-    <div class="alert alert-info">No registered applications. <NavLink href="/apps/new">Create the first one</NavLink>.</div>
+    <div class="alert alert-info">
+        No registered applications yet.
+        Seed app <code>demo-dev</code> appears after the API starts with default config —
+        or <NavLink href="/apps/new">create a new one</NavLink>.
+    </div>
 }
 else
 {
@@ -30,7 +57,7 @@ else
         @foreach (var app in _apps)
         {
             <div class="col-md-6 col-lg-4 mb-3">
-                <div class="card card-outline card-primary">
+                <div class="card card-outline card-primary h-100">
                     <div class="card-header">
                         <h3 class="card-title">@app.AppId</h3>
                         <span class="badge bg-secondary float-end">@app.Source</span>
@@ -51,6 +78,7 @@ else
             </div>
         }
     </div>
+}
 }
 
 @code {

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -24,18 +25,36 @@ public sealed class OllamaAdapter : ILlmAdapter
 
     private readonly HttpClient _httpClient;
     private readonly string _baseUrl;
+    private readonly string? _apiKey;
 
     public OllamaAdapter(HttpClient httpClient, IOptions<OllamaAdapterOptions> options)
+        : this(httpClient, options.Value.OllamaEndpoint, apiKey: null)
+    {
+    }
+
+    private OllamaAdapter(HttpClient httpClient, string baseUrl, string? apiKey)
     {
         _httpClient = httpClient;
-        _baseUrl = options.Value.OllamaEndpoint.TrimEnd('/');
+        _baseUrl = baseUrl.TrimEnd('/');
+        _apiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
+    }
+
+    /// <summary>Returns this instance or a copy pointed at a per-app endpoint/API key.</summary>
+    public OllamaAdapter WithConnection(string? endpointOverride, string? apiKeyOverride)
+    {
+        if (string.IsNullOrWhiteSpace(endpointOverride) && string.IsNullOrWhiteSpace(apiKeyOverride))
+            return this;
+
+        return new OllamaAdapter(
+            _httpClient,
+            string.IsNullOrWhiteSpace(endpointOverride) ? _baseUrl : endpointOverride,
+            string.IsNullOrWhiteSpace(apiKeyOverride) ? _apiKey : apiKeyOverride);
     }
 
     public async Task<OllamaResponse> ChatAsync(OllamaRequest request, CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient
-            .PostAsJsonAsync($"{_baseUrl}/api/chat", request, JsonOptions, cancellationToken)
-            .ConfigureAwait(false);
+        using var httpRequest = CreateJsonRequest(HttpMethod.Post, $"{_baseUrl}/api/chat", request);
+        using var response = await _httpClient.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -54,10 +73,7 @@ public sealed class OllamaAdapter : ILlmAdapter
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var streamRequest = request with { Stream = true };
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/api/chat")
-        {
-            Content = JsonContent.Create(streamRequest, options: JsonOptions)
-        };
+        using var httpRequest = CreateJsonRequest(HttpMethod.Post, $"{_baseUrl}/api/chat", streamRequest);
 
         using var response = await _httpClient
             .SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
@@ -91,9 +107,8 @@ public sealed class OllamaAdapter : ILlmAdapter
         OllamaGenerateRequest request,
         CancellationToken cancellationToken = default)
     {
-        using var response = await _httpClient
-            .PostAsJsonAsync($"{_baseUrl}/api/generate", request, JsonOptions, cancellationToken)
-            .ConfigureAwait(false);
+        using var httpRequest = CreateJsonRequest(HttpMethod.Post, $"{_baseUrl}/api/generate", request);
+        using var response = await _httpClient.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -112,10 +127,7 @@ public sealed class OllamaAdapter : ILlmAdapter
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var streamRequest = request with { Stream = true };
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/api/generate")
-        {
-            Content = JsonContent.Create(streamRequest, options: JsonOptions)
-        };
+        using var httpRequest = CreateJsonRequest(HttpMethod.Post, $"{_baseUrl}/api/generate", streamRequest);
 
         using var response = await _httpClient
             .SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
@@ -149,14 +161,31 @@ public sealed class OllamaAdapter : ILlmAdapter
     {
         try
         {
-            using var response = await _httpClient
-                .GetAsync($"{_baseUrl}/api/tags", cancellationToken)
-                .ConfigureAwait(false);
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/api/tags");
+            ApplyAuth(httpRequest);
+            using var response = await _httpClient.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
             return response.StatusCode == HttpStatusCode.OK;
         }
         catch
         {
             return false;
         }
+    }
+
+    private HttpRequestMessage CreateJsonRequest<T>(HttpMethod method, string url, T body)
+    {
+        var request = new HttpRequestMessage(method, url)
+        {
+            Content = JsonContent.Create(body, options: JsonOptions)
+        };
+        ApplyAuth(request);
+        return request;
+    }
+
+    private void ApplyAuth(HttpRequestMessage request)
+    {
+        if (_apiKey is null)
+            return;
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
     }
 }

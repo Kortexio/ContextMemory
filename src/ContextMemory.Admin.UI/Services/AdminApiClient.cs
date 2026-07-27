@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using ContextMemory.Admin.UI.Models;
 using ContextMemory.Core.Models;
+using Microsoft.Extensions.Options;
 
 namespace ContextMemory.Admin.UI.Services;
 
@@ -10,11 +11,13 @@ public sealed class AdminApiClient
 {
     private readonly HttpClient _http;
     private readonly AdminSession _session;
+    private readonly AdminUiOptions _uiOptions;
 
-    public AdminApiClient(HttpClient http, AdminSession session)
+    public AdminApiClient(HttpClient http, AdminSession session, IOptions<AdminUiOptions> uiOptions)
     {
         _http = http;
         _session = session;
+        _uiOptions = uiOptions.Value;
     }
 
     public async Task<IReadOnlyList<AdminAppListItem>> GetAppsAsync(CancellationToken cancellationToken = default)
@@ -82,7 +85,11 @@ public sealed class AdminApiClient
         if (!_session.IsConfigured)
             throw new InvalidOperationException("Configure API URL in Settings.");
 
-        return $"{_session.Settings.ApiBaseUrl.TrimEnd('/')}/metrics";
+        // Prefer a browser-reachable URL (Docker maps api→localhost:5100 while server uses http://api:8080).
+        var publicBase = string.IsNullOrWhiteSpace(_uiOptions.PublicApiBaseUrl)
+            ? _session.Settings.ApiBaseUrl
+            : _uiOptions.PublicApiBaseUrl;
+        return $"{publicBase.TrimEnd('/')}/metrics";
     }
 
     private async Task<T?> GetAsync<T>(string path, CancellationToken cancellationToken)

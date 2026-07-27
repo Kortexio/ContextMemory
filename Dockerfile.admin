@@ -1,0 +1,30 @@
+# ContextMemory Admin Web
+FROM mcr.microsoft.com/dotnet/sdk:9.0-alpine AS build
+WORKDIR /src
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 NUGET_XMLDOC_MODE=skip
+
+COPY ContextMemory.sln ./
+COPY src/ContextMemory.Admin.Web/ContextMemory.Admin.Web.csproj src/ContextMemory.Admin.Web/
+COPY src/ContextMemory.Admin.UI/ContextMemory.Admin.UI.csproj src/ContextMemory.Admin.UI/
+COPY src/ContextMemory.Core/ContextMemory.Core.csproj src/ContextMemory.Core/
+RUN dotnet restore src/ContextMemory.Admin.Web/ContextMemory.Admin.Web.csproj
+
+COPY src/ContextMemory.Admin.Web/ src/ContextMemory.Admin.Web/
+COPY src/ContextMemory.Admin.UI/ src/ContextMemory.Admin.UI/
+COPY src/ContextMemory.Core/ src/ContextMemory.Core/
+RUN dotnet publish src/ContextMemory.Admin.Web/ContextMemory.Admin.Web.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore
+
+FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine AS runtime
+WORKDIR /app
+RUN apk add --no-cache icu-libs curl && adduser -D -u 10001 appuser
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
+    DOTNET_EnableDiagnostics=0 \
+    ASPNETCORE_URLS=http://+:8080 \
+    ASPNETCORE_ENVIRONMENT=Production
+COPY --from=build /app/publish .
+RUN chown -R appuser:appuser /app
+USER appuser
+EXPOSE 8080
+HEALTHCHECK --interval=20s --timeout=5s --start-period=30s --retries=5 \
+  CMD curl -fsS http://127.0.0.1:8080/ || exit 1
+ENTRYPOINT ["dotnet", "ContextMemory.Admin.Web.dll"]

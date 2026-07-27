@@ -115,7 +115,63 @@ That's the entire integration. Session memory works on the next turn automatical
 
 Run the open-source gateway yourself — the path for **on-prem or fully local** deployments. Unlike Cloud (where the dashboard wires up your LLM for you), here **you point the gateway at your own LLM backend** — endpoint and model — in config. Same chat body, same Ollama response as Cloud; you supply the `X-App-Id` and use a `cm_live_` key.
 
-### Prerequisites
+### Fastest: Docker Compose (API + Admin)
+
+One command starts the **API** (`:5100`) and **Admin** console (`:5200`). Requires [Docker](https://docs.docker.com/get-docker/) and an LLM reachable from the containers (Ollama on the host by default).
+
+```bash
+git clone https://github.com/Kortexio/ContextMemory.git
+cd ContextMemory
+
+# optional: customize ports / keys / model
+cp .env.example .env
+
+# build + run (File persistence — no Postgres required)
+docker compose up --build
+```
+
+Then open **[http://localhost:5200](http://localhost:5200)** — Settings are pre-filled for the Compose network (`API base URL` = `http://api:8080`, demo Master Key). Click **Test connection**.
+
+| Service | URL / value |
+|---|---|
+| API | http://localhost:5100 |
+| Admin | http://localhost:5200 |
+| Health | http://localhost:5100/health |
+| Demo app | `X-App-Id: demo-dev` / Bearer `cm_live_dev_key_change_me` |
+| Master key | `cm_master_dev_key_change_me` |
+
+**Ollama on the host**
+
+```bash
+ollama pull qwen3.5:9b
+# Compose default: ContextMemory__OllamaEndpoint=http://host.docker.internal:11434
+```
+
+**Useful Compose env vars** (see [`.env.example`](.env.example)):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `API_PORT` / `ADMIN_PORT` | `5100` / `5200` | Host ports |
+| `OLLAMA_ENDPOINT` | `http://host.docker.internal:11434` | LLM from inside the API container |
+| `DEFAULT_LLM_MODEL` | `qwen3.5:9b` | Seed + default model |
+| `MASTER_KEY` | `cm_master_dev_key_change_me` | Admin Master Key |
+| `DEMO_APP_API_KEY` | `cm_live_dev_key_change_me` | Seed app API key |
+| `PERSISTENCE_PROVIDER` | `File` | `File` or `Postgres` |
+
+Stop with `Ctrl+C`, or `docker compose down`. Data for File mode lives in the `cm_data` Docker volume.
+
+**Chat smoke test against the containerized API:**
+
+```bash
+curl -X POST http://localhost:5100/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-App-Id: demo-dev" \
+  -H "X-User-Id: user-123" \
+  -H "Authorization: Bearer cm_live_dev_key_change_me" \
+  -d '{"model":"qwen3.5:9b","messages":[{"role":"user","content":"Hello"}]}'
+```
+
+### Prerequisites (dotnet run)
 
 - .NET 9 SDK
 - Ollama (or another configured backend) reachable on the network
@@ -221,14 +277,14 @@ curl -X POST http://localhost:5100/api/chat \
 
 ### 4. Admin UI and Chat Lab
 
-In a second terminal:
+Prefer Docker Compose above, or run the Admin host locally against a local API:
 
 ```bash
 cd src/ContextMemory.Admin.Web
 dotnet run
 ```
 
-Open **[http://localhost:5200](http://localhost:5200)** → **Settings** → set API URL `http://localhost:5100` and your Master Key (`ContextMemory:MasterKey`) → **Test connection**.
+Open **[http://localhost:5200](http://localhost:5200)** → **Settings** → set API URL `http://localhost:5100` and your Master Key (`ContextMemory:MasterKey`) → **Test connection**. The Admin UI is fully in English with short help text under each field.
 
 - **Applications** — register apps, stats, rotate API keys  
 - **Apps → Config** — LLM, wiki, web search, rate limits, **Agentic Gateway**  
@@ -358,9 +414,32 @@ curl -X POST http://localhost:5100/apps/demo-dev/wiki/query \
 
 ### Supported LLM backends
 
-- **Ollama** (default)
-- **OpenAI-compatible** (OpenAI, Azure OpenAI, etc.)
-- **LM Studio**
+| Backend value | Wire protocol | Host default URL |
+|---|---|---|
+| `ollama` (default) | Ollama `/api/chat` | `ContextMemory:OllamaEndpoint` |
+| `lmstudio` | OpenAI-compatible `/v1` | `ContextMemory:LmStudioEndpoint` |
+| `openai` | OpenAI-compatible `/v1` | `ContextMemory:OpenAiEndpoint` + `OpenAiApiKey` |
+| `openai-compatible` / `custom` | Same as `openai` | same (override per app) |
+
+**Per-app overrides** (Admin → app → Config, or `PATCH /admin/apps/{id}/config`):
+
+| Field | Meaning |
+|---|---|
+| `llmBackend` | Which protocol to use |
+| `llmModel` | Model id sent to that backend |
+| `llmEndpoint` | Optional base URL for this app only. Empty = host default above. For OpenAI-compatible URLs, `/v1` is appended if missing. |
+| `llmApiKey` | Optional API key for this app. Empty = host `OpenAiApiKey`. |
+
+Example — point one tenant at a remote vLLM / LiteLLM server:
+
+```json
+{
+  "llmBackend": "openai-compatible",
+  "llmModel": "my-model",
+  "llmEndpoint": "http://gpu-box:8000",
+  "llmApiKey": "optional-key"
+}
+```
 
 ---
 

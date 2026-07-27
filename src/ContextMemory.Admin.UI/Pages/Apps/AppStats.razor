@@ -168,6 +168,8 @@ else if (_stats is not null)
 
                     <label>App API key</label>
 
+                    <FieldHelp>Tenant key for <code>Authorization: Bearer</code>. Use with <code>X-App-Id: @AppId</code> on chat requests.</FieldHelp>
+
                     <div class="input-group">
 
                         <input class="form-control font-monospace" readonly
@@ -336,7 +338,7 @@ else if (_stats is not null)
 
             if (_credentials is null)
 
-                _credentialsError = "Credenciais não encontradas.";
+                _credentialsError = "Credentials not found.";
 
         }
 
@@ -374,7 +376,7 @@ else if (_stats is not null)
 
         await Js.InvokeVoidAsync("navigator.clipboard.writeText", _credentials.ApiKey);
 
-        _rotateMessage = "API key copiada.";
+        _rotateMessage = "API key copied to clipboard.";
 
     }
 
@@ -384,7 +386,7 @@ else if (_stats is not null)
 
     {
 
-        if (!await Js.InvokeAsync<bool>("confirm", "Gerar nova API key? A key anterior deixa de funcionar."))
+        if (!await Js.InvokeAsync<bool>("confirm", "Generate a new API key? The previous key will stop working immediately."))
 
             return;
 
