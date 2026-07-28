@@ -1,6 +1,8 @@
+using System.Text;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 using ContextMemory.Core.Session;
+using Microsoft.Extensions.Logging;
 
 namespace ContextMemory.Core.GlobalWiki;
 
@@ -10,15 +12,38 @@ public sealed class GlobalWikiService
     public const int DefaultBudgetChars = 8_000;
 
     private readonly IGlobalWikiStore _store;
+    private readonly IGlobalWikiDigestGenerator _digestGenerator;
+    private readonly ILogger<GlobalWikiService> _logger;
 
-    public GlobalWikiService(IGlobalWikiStore store) => _store = store;
+    public GlobalWikiService(
+        IGlobalWikiStore store,
+        IGlobalWikiDigestGenerator digestGenerator,
+        ILogger<GlobalWikiService> logger)
+    {
+        _store = store;
+        _digestGenerator = digestGenerator;
+        _logger = logger;
+    }
 
-    public Task<GlobalWikiUpsertResult> UpsertAsync(
+    public async Task<GlobalWikiUpsertResult> UpsertAsync(
         string appId,
         string documentId,
         GlobalWikiUpsertRequest request,
-        CancellationToken cancellationToken = default) =>
-        _store.UpsertAsync(appId, documentId, request, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        if (GlobalWikiCatalog.IsCatalogDocument(documentId))
+            return await _store.UpsertAsync(appId, documentId, request, cancellationToken).ConfigureAwait(false);
+
+        var enriched = await EnrichWithDigestAsync(appId, documentId, request, cancellationToken)
+            .ConfigureAwait(false);
+        var result = await _store.UpsertAsync(appId, documentId, enriched, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!result.Unchanged)
+            await RefreshCatalogAsync(appId, cancellationToken).ConfigureAwait(false);
+
+        return result;
+    }
 
     public async Task<GlobalWikiBatchUpsertResult> UpsertBatchAsync(
         string appId,
@@ -26,32 +51,48 @@ public sealed class GlobalWikiService
         CancellationToken cancellationToken = default)
     {
         var results = new List<GlobalWikiUpsertResult>();
+        var changed = false;
         foreach (var doc in request.Documents)
         {
             if (string.IsNullOrWhiteSpace(doc.DocumentId) || string.IsNullOrWhiteSpace(doc.Content))
                 continue;
+            if (GlobalWikiCatalog.IsCatalogDocument(doc.DocumentId))
+                continue;
 
-            var result = await _store.UpsertAsync(
-                appId,
-                doc.DocumentId,
-                new GlobalWikiUpsertRequest
-                {
-                    Title = doc.Title,
-                    Content = doc.Content,
-                    Summary = doc.Summary,
-                    SourceId = doc.SourceId,
-                    Metadata = doc.Metadata,
-                    Slug = doc.Slug
-                },
-                cancellationToken).ConfigureAwait(false);
+            var upsertRequest = new GlobalWikiUpsertRequest
+            {
+                Title = doc.Title,
+                Content = doc.Content,
+                Summary = doc.Summary,
+                SourceId = doc.SourceId,
+                Metadata = doc.Metadata,
+                Slug = doc.Slug
+            };
+
+            var enriched = await EnrichWithDigestAsync(appId, doc.DocumentId, upsertRequest, cancellationToken)
+                .ConfigureAwait(false);
+            var result = await _store.UpsertAsync(appId, doc.DocumentId, enriched, cancellationToken)
+                .ConfigureAwait(false);
             results.Add(result);
+            changed |= !result.Unchanged;
         }
+
+        if (changed)
+            await RefreshCatalogAsync(appId, cancellationToken).ConfigureAwait(false);
 
         return new GlobalWikiBatchUpsertResult { Results = results };
     }
 
-    public Task<bool> DeleteAsync(string appId, string documentId, CancellationToken cancellationToken = default) =>
-        _store.DeleteAsync(appId, documentId, cancellationToken);
+    public async Task<bool> DeleteAsync(string appId, string documentId, CancellationToken cancellationToken = default)
+    {
+        if (GlobalWikiCatalog.IsCatalogDocument(documentId))
+            return await _store.DeleteAsync(appId, documentId, cancellationToken).ConfigureAwait(false);
+
+        var deleted = await _store.DeleteAsync(appId, documentId, cancellationToken).ConfigureAwait(false);
+        if (deleted)
+            await RefreshCatalogAsync(appId, cancellationToken).ConfigureAwait(false);
+        return deleted;
+    }
 
     public async Task<GlobalWikiListResult> ListAsync(
         string appId,
@@ -125,7 +166,12 @@ public sealed class GlobalWikiService
 
         // Pack ONLY top-K matches — never the full corpus (index/filler pages would exhaust budget).
         var matchedDocs = scored.Select(s => s.Document).ToList();
-        var pages = matchedDocs.ToDictionary(d => d.Slug, d => d.Content, StringComparer.OrdinalIgnoreCase);
+        var catalogIsPrimary = matchedDocs.Count > 0
+            && GlobalWikiCatalog.IsCatalogDocument(matchedDocs[0].DocumentId);
+        var pages = matchedDocs.ToDictionary(
+            d => d.Slug,
+            d => ResolvePackContent(d, catalogIsPrimary),
+            StringComparer.OrdinalIgnoreCase);
         var lastModified = matchedDocs.ToDictionary(d => d.Slug, d => d.UpdatedAt, StringComparer.OrdinalIgnoreCase);
 
         var snapshot = new SessionSnapshot
@@ -184,6 +230,123 @@ public sealed class GlobalWikiService
         };
     }
 
+    private async Task<GlobalWikiUpsertRequest> EnrichWithDigestAsync(
+        string appId,
+        string documentId,
+        GlobalWikiUpsertRequest request,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _store.GetAsync(appId, documentId, cancellationToken).ConfigureAwait(false);
+        var hash = GlobalWikiSlug.ComputeContentHash(request.Content);
+        if (existing is not null
+            && string.Equals(existing.ContentHash, hash, StringComparison.Ordinal)
+            && !string.IsNullOrWhiteSpace(existing.Summary))
+        {
+            // Content unchanged — keep stored digest; avoid another LLM call.
+            return new GlobalWikiUpsertRequest
+            {
+                Title = request.Title,
+                Content = request.Content,
+                Summary = existing.Summary,
+                SourceId = request.SourceId,
+                Metadata = request.Metadata,
+                Slug = request.Slug
+            };
+        }
+
+        var digest = await _digestGenerator
+            .GenerateAsync(
+                appId,
+                documentId,
+                request.Title,
+                request.SourceId,
+                request.Content,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        // Explicit client summary becomes an extra hint line only when digest is empty.
+        if (string.IsNullOrWhiteSpace(digest) && !string.IsNullOrWhiteSpace(request.Summary))
+            digest = request.Summary.Trim();
+
+        return new GlobalWikiUpsertRequest
+        {
+            Title = request.Title,
+            Content = request.Content,
+            Summary = digest,
+            SourceId = request.SourceId,
+            Metadata = request.Metadata,
+            Slug = request.Slug
+        };
+    }
+
+    private async Task RefreshCatalogAsync(string appId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var docs = await _store.GetAllForQueryAsync(appId, sourceId: null, cancellationToken)
+                .ConfigureAwait(false);
+            var entries = docs
+                .Where(d => !GlobalWikiCatalog.IsCatalogDocument(d.DocumentId))
+                .OrderBy(d => d.DocumentId, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"# {GlobalWikiCatalog.Title}");
+            sb.AppendLine();
+            sb.AppendLine($"_Updated: {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm} UTC · {entries.Count} document(s)_");
+            sb.AppendLine();
+            sb.AppendLine(
+                "Each entry is an LLM digest (keywords + up to 6 lines) that highlights rules from ticket comments.");
+            sb.AppendLine();
+
+            foreach (var doc in entries)
+            {
+                var heading = string.IsNullOrWhiteSpace(doc.Title) ? doc.DocumentId : $"{doc.DocumentId} — {doc.Title}";
+                sb.Append("## ").AppendLine(heading);
+                if (!string.IsNullOrWhiteSpace(doc.SourceId))
+                    sb.Append("Source: ").AppendLine(doc.SourceId);
+
+                var digest = string.IsNullOrWhiteSpace(doc.Summary)
+                    ? GlobalWikiDigestGenerator.BuildFallbackDigest(doc.DocumentId, doc.Title, doc.Content)
+                    : doc.Summary.Trim();
+                sb.AppendLine(digest);
+                sb.AppendLine();
+            }
+
+            await _store.UpsertAsync(
+                appId,
+                GlobalWikiCatalog.DocumentId,
+                new GlobalWikiUpsertRequest
+                {
+                    Title = GlobalWikiCatalog.Title,
+                    Content = sb.ToString().TrimEnd() + "\n",
+                    Summary = $"Catalog of {entries.Count} documents with keyword digests.",
+                    SourceId = "wiki:catalog",
+                    Slug = "wiki-catalog"
+                },
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to refresh global wiki catalog for {AppId}", appId);
+        }
+    }
+
+    private static string ResolvePackContent(GlobalWikiDocument doc, bool catalogIsPrimary)
+    {
+        if (!GlobalWikiCatalog.IsCatalogDocument(doc.DocumentId))
+            return doc.Content;
+
+        // Avoid drowning ticket hits with the full multi-doc catalog body.
+        if (catalogIsPrimary)
+            return doc.Content;
+
+        var pointer = string.IsNullOrWhiteSpace(doc.Summary)
+            ? "Knowledge catalog overview (digests of ingested documents)."
+            : doc.Summary.Trim();
+        return pointer + "\n\n_(Ask specifically for the knowledge catalog to load the full digest index.)_";
+    }
+
     private static string BuildIndex(IReadOnlyList<GlobalWikiDocument> docs)
     {
         if (docs.Count == 0)
@@ -195,9 +358,15 @@ public sealed class GlobalWikiService
                 .Select(d =>
                 {
                     var title = string.IsNullOrWhiteSpace(d.Title) ? d.Slug : d.Title;
-                    var summary = string.IsNullOrWhiteSpace(d.Summary) ? string.Empty : $" — {d.Summary}";
+                    var summary = string.IsNullOrWhiteSpace(d.Summary) ? string.Empty : $" — {FirstLine(d.Summary)}";
                     return $"- [{title}](pages/{d.Slug}.md){summary}";
                 }));
+    }
+
+    private static string FirstLine(string text)
+    {
+        var line = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n')[0].Trim();
+        return line.Length <= 160 ? line : line[..160].TrimEnd() + "…";
     }
 
     private static IEnumerable<(GlobalWikiDocument Document, double Score)> ScoreMatches(
@@ -227,6 +396,10 @@ public sealed class GlobalWikiService
                 else if (body.Contains(token, StringComparison.Ordinal))
                     score += 10;
             }
+
+            // Mild boost so broad questions can surface the catalog overview.
+            if (GlobalWikiCatalog.IsCatalogDocument(doc.DocumentId))
+                score += 15;
         }
 
         var ageHours = (DateTimeOffset.UtcNow - doc.UpdatedAt).TotalHours;

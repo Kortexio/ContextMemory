@@ -42,6 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<WikiUpdateQueue>();
         services.AddSingleton<IWikiUpdateQueue>(sp => sp.GetRequiredService<WikiUpdateQueue>());
         services.AddSingleton<WikiUpdateProcessor>();
+        services.AddSingleton<IGlobalWikiDigestGenerator, GlobalWikiDigestGenerator>();
         services.AddSingleton<GlobalWikiService>();
         services.AddScoped<ChatTurnContext>();
         services.AddSingleton<IWebSearchFreshnessClassifier, LlmFreshnessDetector>();
