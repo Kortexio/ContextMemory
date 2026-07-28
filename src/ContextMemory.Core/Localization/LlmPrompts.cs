@@ -214,4 +214,42 @@ public static class LlmPrompts
 
     public static string WikiLogDefaultSuffix(string? language) =>
         TenantLocale.Select(language, "turn logged", "turno registado");
+
+    public static string WikiTicketDigest(string? language) =>
+        TenantLocale.Select(
+            language,
+            """
+            Summarize this knowledge-base document for retrieval.
+
+            DOCUMENT ID: {documentId}
+            TITLE: {title}
+            SOURCE: {sourceId}
+
+            FULL CONTENT (includes comments — extract rules/policies from them):
+            {content}
+
+            Write at most 6 lines of plain text (no markdown fences, no JSON):
+            - Line 1 MUST be: Keywords: k1, k2, k3, ... (5–12 specific terms: IDs, systems, rules, entities)
+            - Lines 2–6: short factual bullets covering problem, decisions, and especially RULES found in comments/discussion
+            - Prefer concrete constraints ("must", "cannot", SLAs, formulas, owners) over vague summary
+            - Same language as the document
+            - Do not invent facts; omit unknowns
+            """,
+            """
+            Resume este documento da base de conhecimento para pesquisa.
+
+            ID DO DOCUMENTO: {documentId}
+            TÍTULO: {title}
+            FONTE: {sourceId}
+
+            CONTEÚDO COMPLETO (inclui comentários — extrai regras/políticas deles):
+            {content}
+
+            Escreve no máximo 6 linhas de texto simples (sem fences markdown, sem JSON):
+            - A linha 1 DEVE ser: Keywords: k1, k2, k3, ... (5–12 termos específicos: IDs, sistemas, regras, entidades)
+            - Linhas 2–6: factos curtos sobre problema, decisões e sobretudo REGRAS nos comentários/discussão
+            - Prefere restrições concretas ("deve", "não pode", SLAs, fórmulas, owners) a resumos vagos
+            - Mesma língua do documento
+            - Não inventes factos; omite o que não souberes
+            """);
 }

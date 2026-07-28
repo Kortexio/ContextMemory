@@ -61,7 +61,7 @@ public sealed class ContextMemoryDbContext : DbContext
             e.Property(x => x.Slug).HasMaxLength(128);
             e.Property(x => x.Title).HasMaxLength(512);
             e.Property(x => x.Content).HasColumnType("text");
-            e.Property(x => x.Summary).HasMaxLength(512);
+            e.Property(x => x.Summary).HasColumnType("text");
             e.Property(x => x.SourceId).HasMaxLength(128);
             e.Property(x => x.MetadataJson).HasColumnType("jsonb");
             e.Property(x => x.ContentHash).HasMaxLength(64);
