@@ -22,7 +22,24 @@ public static class HealthEndpoint
         var config = options.Value;
         var usePostgres = PersistenceProviders.IsPostgres(config.PersistenceProvider);
 
-        var ollamaHealthy = await adapterResolver.Resolve("ollama").IsHealthyAsync().ConfigureAwait(false);
+        // Cap LLM probe so Docker healthchecks (short curl timeout) do not hang on a slow Ollama.
+        bool ollamaHealthy;
+        using (var ollamaCts = CancellationTokenSource.CreateLinkedTokenSource(httpContext.RequestAborted))
+        {
+            ollamaCts.CancelAfter(TimeSpan.FromSeconds(2));
+            try
+            {
+                ollamaHealthy = await adapterResolver
+                    .Resolve("ollama")
+                    .IsHealthyAsync(ollamaCts.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                ollamaHealthy = false;
+            }
+        }
+
         var appsLoaded = appRegistry.GetAllApps().Count > 0;
 
         bool profilesReady;
@@ -40,9 +57,12 @@ public static class HealthEndpoint
             profilesReady = Directory.Exists(appConfigStore.ProfilesRoot);
         }
 
-        var healthy = ollamaHealthy && appsLoaded && profilesReady;
-        var status = healthy ? "healthy" : "degraded";
-        var code = ollamaHealthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable;
+        // Process is live when persistence/apps are ready. Ollama may be degraded without failing Docker health.
+        var healthy = appsLoaded && profilesReady;
+        var status = healthy
+            ? (ollamaHealthy ? "healthy" : "degraded")
+            : "unhealthy";
+        var code = healthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable;
 
         return Results.Json(new
         {
