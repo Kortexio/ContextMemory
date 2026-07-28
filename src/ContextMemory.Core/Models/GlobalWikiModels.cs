@@ -68,6 +68,34 @@ public sealed class GlobalWikiBatchUpsertRequest
     public List<GlobalWikiBatchDocument> Documents { get; init; } = [];
 }
 
+public sealed class GlobalWikiDigestRebuildRequest
+{
+    /// <summary>When true, regenerates digests for every document. When false, only docs missing an LLM digest.</summary>
+    [JsonPropertyName("force")]
+    public bool Force { get; init; }
+
+    [JsonPropertyName("sourceId")]
+    public string? SourceId { get; init; }
+}
+
+public sealed class GlobalWikiDigestRebuildResult
+{
+    [JsonPropertyName("appId")]
+    public required string AppId { get; init; }
+
+    [JsonPropertyName("processed")]
+    public int Processed { get; init; }
+
+    [JsonPropertyName("updated")]
+    public int Updated { get; init; }
+
+    [JsonPropertyName("skipped")]
+    public int Skipped { get; init; }
+
+    [JsonPropertyName("catalogRefreshed")]
+    public bool CatalogRefreshed { get; init; }
+}
+
 public sealed class GlobalWikiBatchDocument
 {
     [JsonPropertyName("documentId")]

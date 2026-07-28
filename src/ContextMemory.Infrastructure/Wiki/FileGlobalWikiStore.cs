@@ -83,26 +83,83 @@ public sealed class FileGlobalWikiStore : IGlobalWikiStore
 
             var hash = GlobalWikiSlug.ComputeContentHash(request.Content);
             var existing = await GetAsync(appId, documentId, cancellationToken).ConfigureAwait(false);
-            if (existing is not null && string.Equals(existing.ContentHash, hash, StringComparison.Ordinal))
-            {
-                return new GlobalWikiUpsertResult
-                {
-                    AppId = appId,
-                    DocumentId = documentId,
-                    Slug = existing.Slug,
-                    ContentHash = existing.ContentHash,
-                    UpdatedAt = existing.UpdatedAt,
-                    Created = false,
-                    Unchanged = true
-                };
-            }
-
             var slug = GlobalWikiSlug.FromDocumentId(documentId, request.Slug);
             var title = string.IsNullOrWhiteSpace(request.Title)
                 ? GlobalWikiSlug.ExtractTitle(request.Content, documentId)
                 : request.Title.Trim();
             var summary = GlobalWikiSlug.ExtractSummary(request.Content, request.Summary);
+            var sourceId = request.SourceId?.Trim() ?? existing?.SourceId ?? string.Empty;
             var now = DateTimeOffset.UtcNow;
+
+            if (existing is not null && string.Equals(existing.ContentHash, hash, StringComparison.Ordinal))
+            {
+                var metaOnlyChange =
+                    !string.Equals(existing.Summary, summary, StringComparison.Ordinal)
+                    || !string.Equals(existing.Title, title, StringComparison.Ordinal)
+                    || !string.Equals(existing.SourceId, sourceId, StringComparison.Ordinal)
+                    || !string.Equals(existing.Slug, slug, StringComparison.OrdinalIgnoreCase);
+
+                if (!metaOnlyChange)
+                {
+                    return new GlobalWikiUpsertResult
+                    {
+                        AppId = appId,
+                        DocumentId = documentId,
+                        Slug = existing.Slug,
+                        ContentHash = existing.ContentHash,
+                        UpdatedAt = existing.UpdatedAt,
+                        Created = false,
+                        Unchanged = true
+                    };
+                }
+
+                // Content unchanged — still persist digest/title/source updates.
+                if (!string.Equals(existing.Slug, slug, StringComparison.OrdinalIgnoreCase))
+                {
+                    var oldContent = GetContentPath(appId, existing.Slug);
+                    if (File.Exists(oldContent))
+                        File.Delete(oldContent);
+                    await File.WriteAllTextAsync(
+                            GetContentPath(appId, slug),
+                            request.Content ?? string.Empty,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                var metaUpdate = new FileMeta
+                {
+                    DocumentId = documentId,
+                    Slug = slug,
+                    Title = title,
+                    Summary = summary,
+                    SourceId = sourceId,
+                    Metadata = request.Metadata ?? existing.Metadata,
+                    ContentHash = hash,
+                    CreatedAt = existing.CreatedAt,
+                    UpdatedAt = now
+                };
+                await File.WriteAllTextAsync(
+                        GetMetaPath(appId, documentId),
+                        JsonSerializer.Serialize(metaUpdate, JsonOptions),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                return new GlobalWikiUpsertResult
+                {
+                    AppId = appId,
+                    DocumentId = documentId,
+                    Slug = slug,
+                    ContentHash = hash,
+                    UpdatedAt = now,
+                    Created = false,
+                    Unchanged = false
+                };
+            }
+
+            Directory.CreateDirectory(GetAppDir(appId));
+            Directory.CreateDirectory(GetPagesDir(appId));
+            Directory.CreateDirectory(GetMetaDir(appId));
+
             var created = existing is null;
 
             // Remove old content file if slug changed
@@ -119,7 +176,7 @@ public sealed class FileGlobalWikiStore : IGlobalWikiStore
                 Slug = slug,
                 Title = title,
                 Summary = summary,
-                SourceId = request.SourceId?.Trim() ?? existing?.SourceId ?? string.Empty,
+                SourceId = sourceId,
                 Metadata = request.Metadata ?? existing?.Metadata ?? new Dictionary<string, string>(),
                 ContentHash = hash,
                 CreatedAt = existing?.CreatedAt ?? now,

@@ -37,7 +37,7 @@ public sealed class GlobalWikiServiceTests
             Assert.False(first.Unchanged);
             Assert.True(second.Unchanged);
             Assert.Equal(first.ContentHash, second.ContentHash);
-            Assert.Equal(1, digest.Calls);
+            Assert.Equal(0, digest.Calls);
         }
         finally
         {
@@ -47,7 +47,7 @@ public sealed class GlobalWikiServiceTests
     }
 
     [Fact]
-    public async Task Upsert_StoresLlmDigest_AndRefreshesCatalog()
+    public async Task RebuildDigests_RunsAfterIngest_AndRefreshesCatalog()
     {
         var root = Path.Combine(Path.GetTempPath(), "cm-global-wiki-" + Guid.NewGuid().ToString("N"));
         try
@@ -71,6 +71,17 @@ public sealed class GlobalWikiServiceTests
                 SourceId = "jira:PAC"
             });
 
+            Assert.Equal(0, digest.Calls);
+
+            var before = await store.GetAsync("demo", "PAC-668");
+            Assert.NotNull(before);
+            Assert.DoesNotContain("Keywords: PAC-668, Zuora", before!.Summary);
+
+            var rebuild = await service.RebuildDigestsAsync("demo", new GlobalWikiDigestRebuildRequest());
+            Assert.Equal(1, rebuild.Updated);
+            Assert.Equal(1, digest.Calls);
+            Assert.True(rebuild.CatalogRefreshed);
+
             var stored = await store.GetAsync("demo", "PAC-668");
             Assert.NotNull(stored);
             Assert.Contains("Keywords: PAC-668", stored!.Summary);
@@ -80,6 +91,11 @@ public sealed class GlobalWikiServiceTests
             Assert.NotNull(catalog);
             Assert.Contains("PAC-668", catalog!.Content);
             Assert.Contains("Keywords: PAC-668", catalog.Content);
+
+            var second = await service.RebuildDigestsAsync("demo", new GlobalWikiDigestRebuildRequest());
+            Assert.Equal(0, second.Updated);
+            Assert.Equal(1, second.Skipped);
+            Assert.Equal(1, digest.Calls);
         }
         finally
         {
@@ -134,7 +150,6 @@ public sealed class GlobalWikiServiceTests
         {
             var service = CreateService(root);
 
-            // Simulate a large Jira corpus: many short PAC-N pages that would fill a naive packer.
             for (var i = 1; i <= 80; i++)
             {
                 await service.UpsertAsync("companybrain", $"PAC-{i}", new GlobalWikiUpsertRequest
@@ -155,7 +170,6 @@ public sealed class GlobalWikiServiceTests
                 Summary = "Billing reconciliation"
             });
 
-            // Tight budget: old behaviour filled with PAC-1.. index/pages and dropped PAC-668.
             var result = await service.QueryAsync("companybrain", new GlobalWikiQueryRequest
             {
                 Query = "PAC-668",
