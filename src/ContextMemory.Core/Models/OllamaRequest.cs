@@ -97,7 +97,9 @@ public record OllamaToolCall(
 
 public record OllamaFunctionCall(
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("arguments")] string Arguments);
+    [property: JsonPropertyName("arguments")]
+    [property: JsonConverter(typeof(OllamaFunctionArgumentsConverter))]
+    string Arguments);
 
 public record OllamaMcpServer(
     [property: JsonPropertyName("name")] string Name,
