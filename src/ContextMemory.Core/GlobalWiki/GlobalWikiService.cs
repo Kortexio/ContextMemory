@@ -31,18 +31,8 @@ public sealed class GlobalWikiService
         GlobalWikiUpsertRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (GlobalWikiCatalog.IsCatalogDocument(documentId))
-            return await _store.UpsertAsync(appId, documentId, request, cancellationToken).ConfigureAwait(false);
-
-        var enriched = await EnrichWithDigestAsync(appId, documentId, request, cancellationToken)
-            .ConfigureAwait(false);
-        var result = await _store.UpsertAsync(appId, documentId, enriched, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!result.Unchanged)
-            await RefreshCatalogAsync(appId, cancellationToken).ConfigureAwait(false);
-
-        return result;
+        // Ingest is storage-only. LLM digests run afterwards via RebuildDigestsAsync.
+        return await _store.UpsertAsync(appId, documentId, request, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<GlobalWikiBatchUpsertResult> UpsertBatchAsync(
@@ -51,7 +41,6 @@ public sealed class GlobalWikiService
         CancellationToken cancellationToken = default)
     {
         var results = new List<GlobalWikiUpsertResult>();
-        var changed = false;
         foreach (var doc in request.Documents)
         {
             if (string.IsNullOrWhiteSpace(doc.DocumentId) || string.IsNullOrWhiteSpace(doc.Content))
@@ -59,28 +48,110 @@ public sealed class GlobalWikiService
             if (GlobalWikiCatalog.IsCatalogDocument(doc.DocumentId))
                 continue;
 
-            var upsertRequest = new GlobalWikiUpsertRequest
-            {
-                Title = doc.Title,
-                Content = doc.Content,
-                Summary = doc.Summary,
-                SourceId = doc.SourceId,
-                Metadata = doc.Metadata,
-                Slug = doc.Slug
-            };
-
-            var enriched = await EnrichWithDigestAsync(appId, doc.DocumentId, upsertRequest, cancellationToken)
-                .ConfigureAwait(false);
-            var result = await _store.UpsertAsync(appId, doc.DocumentId, enriched, cancellationToken)
-                .ConfigureAwait(false);
+            var result = await _store.UpsertAsync(
+                appId,
+                doc.DocumentId,
+                new GlobalWikiUpsertRequest
+                {
+                    Title = doc.Title,
+                    Content = doc.Content,
+                    Summary = doc.Summary,
+                    SourceId = doc.SourceId,
+                    Metadata = doc.Metadata,
+                    Slug = doc.Slug
+                },
+                cancellationToken).ConfigureAwait(false);
             results.Add(result);
-            changed |= !result.Unchanged;
         }
 
-        if (changed)
-            await RefreshCatalogAsync(appId, cancellationToken).ConfigureAwait(false);
-
         return new GlobalWikiBatchUpsertResult { Results = results };
+    }
+
+    /// <summary>
+    /// After ingest completes, generate LLM digests (keywords + ≤6 lines) and refresh <c>wiki:catalog</c>.
+    /// </summary>
+    public async Task<GlobalWikiDigestRebuildResult> RebuildDigestsAsync(
+        string appId,
+        GlobalWikiDigestRebuildRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        request ??= new GlobalWikiDigestRebuildRequest();
+        var docs = await _store
+            .GetAllForQueryAsync(appId, request.SourceId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var candidates = docs
+            .Where(d => !GlobalWikiCatalog.IsCatalogDocument(d.DocumentId))
+            .OrderBy(d => d.DocumentId, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var updated = 0;
+        var skipped = 0;
+
+        foreach (var doc in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!request.Force && HasLlmDigest(doc.Summary))
+            {
+                skipped++;
+                continue;
+            }
+
+            var digest = await _digestGenerator
+                .GenerateAsync(
+                    appId,
+                    doc.DocumentId,
+                    doc.Title,
+                    doc.SourceId,
+                    doc.Content,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (string.IsNullOrWhiteSpace(digest))
+            {
+                digest = GlobalWikiDigestGenerator.BuildFallbackDigest(doc.DocumentId, doc.Title, doc.Content);
+            }
+
+            if (string.Equals(doc.Summary?.Trim(), digest.Trim(), StringComparison.Ordinal))
+            {
+                skipped++;
+                continue;
+            }
+
+            await _store.UpsertAsync(
+                appId,
+                doc.DocumentId,
+                new GlobalWikiUpsertRequest
+                {
+                    Title = doc.Title,
+                    Content = doc.Content,
+                    Summary = digest,
+                    SourceId = doc.SourceId,
+                    Metadata = doc.Metadata,
+                    Slug = doc.Slug
+                },
+                cancellationToken).ConfigureAwait(false);
+            updated++;
+        }
+
+        await RefreshCatalogAsync(appId, cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Wiki digests rebuilt for {AppId}: processed={Processed}, updated={Updated}, skipped={Skipped}",
+            appId,
+            candidates.Count,
+            updated,
+            skipped);
+
+        return new GlobalWikiDigestRebuildResult
+        {
+            AppId = appId,
+            Processed = candidates.Count,
+            Updated = updated,
+            Skipped = skipped,
+            CatalogRefreshed = true
+        };
     }
 
     public async Task<bool> DeleteAsync(string appId, string documentId, CancellationToken cancellationToken = default)
@@ -93,6 +164,10 @@ public sealed class GlobalWikiService
             await RefreshCatalogAsync(appId, cancellationToken).ConfigureAwait(false);
         return deleted;
     }
+
+    private static bool HasLlmDigest(string? summary) =>
+        !string.IsNullOrWhiteSpace(summary)
+        && summary.TrimStart().StartsWith("Keywords:", StringComparison.OrdinalIgnoreCase);
 
     public async Task<GlobalWikiListResult> ListAsync(
         string appId,
@@ -227,55 +302,6 @@ public sealed class GlobalWikiService
             TotalDocuments = docs.Count,
             Truncated = truncated,
             Matches = matches
-        };
-    }
-
-    private async Task<GlobalWikiUpsertRequest> EnrichWithDigestAsync(
-        string appId,
-        string documentId,
-        GlobalWikiUpsertRequest request,
-        CancellationToken cancellationToken)
-    {
-        var existing = await _store.GetAsync(appId, documentId, cancellationToken).ConfigureAwait(false);
-        var hash = GlobalWikiSlug.ComputeContentHash(request.Content);
-        if (existing is not null
-            && string.Equals(existing.ContentHash, hash, StringComparison.Ordinal)
-            && !string.IsNullOrWhiteSpace(existing.Summary))
-        {
-            // Content unchanged — keep stored digest; avoid another LLM call.
-            return new GlobalWikiUpsertRequest
-            {
-                Title = request.Title,
-                Content = request.Content,
-                Summary = existing.Summary,
-                SourceId = request.SourceId,
-                Metadata = request.Metadata,
-                Slug = request.Slug
-            };
-        }
-
-        var digest = await _digestGenerator
-            .GenerateAsync(
-                appId,
-                documentId,
-                request.Title,
-                request.SourceId,
-                request.Content,
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        // Explicit client summary becomes an extra hint line only when digest is empty.
-        if (string.IsNullOrWhiteSpace(digest) && !string.IsNullOrWhiteSpace(request.Summary))
-            digest = request.Summary.Trim();
-
-        return new GlobalWikiUpsertRequest
-        {
-            Title = request.Title,
-            Content = request.Content,
-            Summary = digest,
-            SourceId = request.SourceId,
-            Metadata = request.Metadata,
-            Slug = request.Slug
         };
     }
 

@@ -14,6 +14,7 @@ public static class GlobalWikiEndpoint
         app.MapDelete("/apps/{appId}/wiki/documents/{documentId}", DeleteAsync);
         app.MapGet("/apps/{appId}/wiki/documents", ListAsync);
         app.MapPost("/apps/{appId}/wiki/query", QueryAsync);
+        app.MapPost("/apps/{appId}/wiki/digests/rebuild", RebuildDigestsAsync);
     }
 
     private static async Task<IResult> UpsertAsync(
@@ -120,6 +121,22 @@ public static class GlobalWikiEndpoint
 
         var result = await wikiService
             .QueryAsync(appId, request, budget, cancellationToken)
+            .ConfigureAwait(false);
+        return Results.Json(result);
+    }
+
+    private static async Task<IResult> RebuildDigestsAsync(
+        HttpContext httpContext,
+        string appId,
+        GlobalWikiService wikiService,
+        CancellationToken cancellationToken,
+        GlobalWikiDigestRebuildRequest? request = null)
+    {
+        if (!ValidateAppAccess(httpContext, appId, out var error))
+            return error!;
+
+        var result = await wikiService
+            .RebuildDigestsAsync(appId, request, cancellationToken)
             .ConfigureAwait(false);
         return Results.Json(result);
     }

@@ -77,20 +77,6 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
             .FirstOrDefaultAsync(x => x.AppId == appId && x.DocumentId == documentId, cancellationToken)
             .ConfigureAwait(false);
 
-        if (existing is not null && string.Equals(existing.ContentHash, hash, StringComparison.Ordinal))
-        {
-            return new GlobalWikiUpsertResult
-            {
-                AppId = appId,
-                DocumentId = documentId,
-                Slug = existing.Slug,
-                ContentHash = existing.ContentHash,
-                UpdatedAt = existing.UpdatedAt,
-                Created = false,
-                Unchanged = true
-            };
-        }
-
         var slug = GlobalWikiSlug.FromDocumentId(documentId, request.Slug);
         var title = string.IsNullOrWhiteSpace(request.Title)
             ? GlobalWikiSlug.ExtractTitle(request.Content, documentId)
@@ -98,6 +84,51 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
         var summary = GlobalWikiSlug.ExtractSummary(request.Content, request.Summary);
         var now = DateTimeOffset.UtcNow;
         var metadataJson = JsonSerializer.Serialize(request.Metadata ?? new Dictionary<string, string>(), JsonOptions);
+        var sourceId = request.SourceId?.Trim() ?? existing?.SourceId ?? string.Empty;
+
+        if (existing is not null && string.Equals(existing.ContentHash, hash, StringComparison.Ordinal))
+        {
+            var metaOnlyChange =
+                !string.Equals(existing.Summary, summary, StringComparison.Ordinal)
+                || !string.Equals(existing.Title, title, StringComparison.Ordinal)
+                || !string.Equals(existing.SourceId, sourceId, StringComparison.Ordinal)
+                || !string.Equals(existing.Slug, slug, StringComparison.OrdinalIgnoreCase)
+                || (request.Metadata is not null && !string.Equals(existing.MetadataJson, metadataJson, StringComparison.Ordinal));
+
+            if (!metaOnlyChange)
+            {
+                return new GlobalWikiUpsertResult
+                {
+                    AppId = appId,
+                    DocumentId = documentId,
+                    Slug = existing.Slug,
+                    ContentHash = existing.ContentHash,
+                    UpdatedAt = existing.UpdatedAt,
+                    Created = false,
+                    Unchanged = true
+                };
+            }
+
+            existing.Slug = slug;
+            existing.Title = title;
+            existing.Summary = summary;
+            existing.SourceId = sourceId;
+            if (request.Metadata is not null)
+                existing.MetadataJson = metadataJson;
+            existing.UpdatedAt = now;
+
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return new GlobalWikiUpsertResult
+            {
+                AppId = appId,
+                DocumentId = documentId,
+                Slug = slug,
+                ContentHash = hash,
+                UpdatedAt = now,
+                Created = false,
+                Unchanged = false
+            };
+        }
 
         if (existing is null)
         {
@@ -109,7 +140,7 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
                 Title = title,
                 Content = request.Content ?? string.Empty,
                 Summary = summary,
-                SourceId = request.SourceId?.Trim() ?? string.Empty,
+                SourceId = sourceId,
                 MetadataJson = metadataJson,
                 ContentHash = hash,
                 CreatedAt = now,
