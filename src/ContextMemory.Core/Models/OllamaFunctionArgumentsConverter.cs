@@ -5,7 +5,8 @@ namespace ContextMemory.Core.Models;
 
 /// <summary>
 /// Ollama may return tool-call <c>arguments</c> as a JSON object or as a JSON string.
-/// Internally we always keep a JSON string so executors can parse uniformly.
+/// Internally we keep a JSON string so executors can parse uniformly; when writing
+/// back to Ollama we emit a JSON object (string form breaks multi-turn tool calling).
 /// </summary>
 public sealed class OllamaFunctionArgumentsConverter : JsonConverter<string>
 {
@@ -27,5 +28,26 @@ public sealed class OllamaFunctionArgumentsConverter : JsonConverter<string>
     }
 
     public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
-        => writer.WriteStringValue(value ?? "{}");
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            writer.WriteStartObject();
+            writer.WriteEndObject();
+            return;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(value);
+            doc.RootElement.WriteTo(writer);
+        }
+        catch (JsonException)
+        {
+            // Non-JSON argument payloads: wrap as a single string property so Ollama
+            // still receives an object (native /api/chat rejects string arguments).
+            writer.WriteStartObject();
+            writer.WriteString("value", value);
+            writer.WriteEndObject();
+        }
+    }
 }
