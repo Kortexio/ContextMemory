@@ -15,10 +15,12 @@ public sealed class OllamaFunctionArgumentsConverter : JsonConverter<string>
         {
             JsonTokenType.String => reader.GetString() ?? "{}",
             JsonTokenType.Null => "{}",
-            JsonTokenType.StartObject or JsonTokenType.StartArray =>
+            JsonTokenType.StartObject
+                or JsonTokenType.StartArray
+                or JsonTokenType.True
+                or JsonTokenType.False
+                or JsonTokenType.Number =>
                 JsonDocument.ParseValue(ref reader).RootElement.GetRawText(),
-            JsonTokenType.True or JsonTokenType.False or JsonTokenType.Number =>
-                reader.GetRawText(),
             _ => throw new JsonException(
                 $"Unexpected token type '{reader.TokenType}' for Ollama function arguments.")
         };
