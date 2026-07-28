@@ -75,11 +75,46 @@ public sealed class OllamaFunctionArgumentsConverterTests
     }
 
     [Fact]
-    public void Serializes_Arguments_As_String()
+    public void Serializes_Arguments_As_Json_Object()
     {
         var call = new OllamaFunctionCall("shell_execute", """{"command":"echo hello"}""");
         var json = JsonSerializer.Serialize(call, JsonOptions);
 
-        Assert.Contains("\"arguments\":\"{\\\"command\\\":\\\"echo hello\\\"}\"", json);
+        Assert.Contains("\"arguments\":{\"command\":\"echo hello\"}", json);
+        Assert.DoesNotContain("\"arguments\":\"{", json);
+    }
+
+    [Fact]
+    public void RoundTrips_Object_Arguments_For_Ollama_Replay()
+    {
+        const string inbound =
+            """
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "function": {
+                    "name": "wiki_search",
+                    "arguments": { "query": "billing", "topK": 3 }
+                  }
+                }
+              ]
+            }
+            """;
+
+        var message = JsonSerializer.Deserialize<OllamaMessage>(inbound, JsonOptions);
+        Assert.NotNull(message);
+
+        var outbound = JsonSerializer.Serialize(message, JsonOptions);
+        using var doc = JsonDocument.Parse(outbound);
+        var args = doc.RootElement
+            .GetProperty("tool_calls")[0]
+            .GetProperty("function")
+            .GetProperty("arguments");
+
+        Assert.Equal(JsonValueKind.Object, args.ValueKind);
+        Assert.Equal("billing", args.GetProperty("query").GetString());
+        Assert.Equal(3, args.GetProperty("topK").GetInt32());
     }
 }
