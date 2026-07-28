@@ -98,14 +98,40 @@ public sealed class GlobalWikiService
             ? request.BudgetChars
             : defaultBudgetChars is > 0 ? defaultBudgetChars.Value : DefaultBudgetChars;
 
-        var pages = docs.ToDictionary(d => d.Slug, d => d.Content, StringComparer.OrdinalIgnoreCase);
-        var lastModified = docs.ToDictionary(d => d.Slug, d => d.UpdatedAt, StringComparer.OrdinalIgnoreCase);
-        var bySlug = docs.ToDictionary(d => d.Slug, d => d, StringComparer.OrdinalIgnoreCase);
+        var scored = ScoreMatches(docs, request.Query).Take(topK).ToList();
+        var matches = scored
+            .Select(m => new GlobalWikiMatch
+            {
+                DocumentId = m.Document.DocumentId,
+                Slug = m.Document.Slug,
+                Title = m.Document.Title,
+                Score = m.Score,
+                SourceId = m.Document.SourceId
+            })
+            .ToList();
+
+        if (scored.Count == 0)
+        {
+            return new GlobalWikiQueryResult
+            {
+                CompiledMarkdown = string.Empty,
+                CharCount = 0,
+                IncludedDocuments = 0,
+                TotalDocuments = docs.Count,
+                Truncated = false,
+                Matches = matches
+            };
+        }
+
+        // Pack ONLY top-K matches — never the full corpus (index/filler pages would exhaust budget).
+        var matchedDocs = scored.Select(s => s.Document).ToList();
+        var pages = matchedDocs.ToDictionary(d => d.Slug, d => d.Content, StringComparer.OrdinalIgnoreCase);
+        var lastModified = matchedDocs.ToDictionary(d => d.Slug, d => d.UpdatedAt, StringComparer.OrdinalIgnoreCase);
 
         var snapshot = new SessionSnapshot
         {
             SessionPath = $"global://{appId}",
-            IndexMd = BuildIndex(docs),
+            IndexMd = string.Empty,
             LogMd = string.Empty,
             SchemaMd = string.Empty,
             Pages = pages,
@@ -117,34 +143,43 @@ public sealed class GlobalWikiService
             snapshot,
             request.Query,
             budget,
-            includeIndex: request.IncludeIndex);
+            includeIndex: false);
 
-        var matches = ScoreMatches(docs, request.Query)
-            .Take(topK)
-            .Select(m => new GlobalWikiMatch
+        var markdown = compiled.Content;
+        var truncated = compiled.Truncated;
+        var charCount = compiled.CharCount;
+
+        // Optional index of matches only, and only after bodies if budget remains.
+        if (request.IncludeIndex)
+        {
+            var remaining = budget - charCount;
+            if (remaining > 120)
             {
-                DocumentId = m.Document.DocumentId,
-                Slug = m.Document.Slug,
-                Title = m.Document.Title,
-                Score = m.Score,
-                SourceId = m.Document.SourceId
-            })
-            .ToList();
+                const string indexTruncatedNote = "\n\n_(… index truncated)_";
+                var indexBlock = "\n\n## Index\n" + BuildIndex(matchedDocs);
+                if (indexBlock.Length > remaining)
+                {
+                    var keep = Math.Max(0, remaining - indexTruncatedNote.Length);
+                    indexBlock = indexBlock[..keep] + indexTruncatedNote;
+                    truncated = true;
+                }
 
-        // Prefer compiler-included pages for includedDocuments count when available
-        var included = compiled.IncludedPages;
-        if (included == 0 && matches.Count > 0)
-            included = Math.Min(matches.Count, topK);
-
-        _ = bySlug;
+                markdown += indexBlock;
+                charCount = markdown.Length;
+            }
+            else if (matchedDocs.Count > compiled.IncludedPages)
+            {
+                truncated = true;
+            }
+        }
 
         return new GlobalWikiQueryResult
         {
-            CompiledMarkdown = compiled.Content,
-            CharCount = compiled.CharCount,
-            IncludedDocuments = included,
+            CompiledMarkdown = markdown,
+            CharCount = charCount,
+            IncludedDocuments = compiled.IncludedPages,
             TotalDocuments = docs.Count,
-            Truncated = compiled.Truncated,
+            Truncated = truncated,
             Matches = matches
         };
     }
@@ -182,10 +217,14 @@ public sealed class GlobalWikiService
         var score = 0.0;
         if (tokens.Count > 0)
         {
-            var haystack = $"{doc.Slug} {doc.Title} {doc.Summary} {doc.Content} {doc.SourceId}".ToLowerInvariant();
+            var identity = $"{doc.DocumentId} {doc.Slug} {doc.Title}".ToLowerInvariant();
+            var body = $"{doc.Summary} {doc.Content} {doc.SourceId}".ToLowerInvariant();
             foreach (var token in tokens)
             {
-                if (haystack.Contains(token, StringComparison.Ordinal))
+                // Identity hits must outrank generic keyword noise across hundreds of tickets.
+                if (identity.Contains(token, StringComparison.Ordinal))
+                    score += 100;
+                else if (body.Contains(token, StringComparison.Ordinal))
                     score += 10;
             }
         }

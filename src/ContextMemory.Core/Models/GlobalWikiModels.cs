@@ -148,8 +148,12 @@ public sealed class GlobalWikiQueryRequest
     [JsonPropertyName("budgetChars")]
     public int BudgetChars { get; init; }
 
+    /// <summary>
+    /// When true, appends a compact index of <em>matched</em> docs after page bodies if budget remains.
+    /// Defaults to false so large corpora do not drown matches under an index of hundreds of pages.
+    /// </summary>
     [JsonPropertyName("includeIndex")]
-    public bool IncludeIndex { get; init; } = true;
+    public bool IncludeIndex { get; init; }
 }
 
 public sealed class GlobalWikiQueryResult
