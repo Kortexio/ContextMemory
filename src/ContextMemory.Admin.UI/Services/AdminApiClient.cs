@@ -54,6 +54,46 @@ public sealed class AdminApiClient
         return await ReadJsonAsync<AppRuntimeConfigDto>(response, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<McpServerAdminDto>> GetMcpServersAsync(
+        string appId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await GetAsync<List<McpServerAdminDto>>(
+                $"/admin/apps/{Uri.EscapeDataString(appId)}/mcp/servers",
+                cancellationToken)
+            .ConfigureAwait(false);
+        return result ?? [];
+    }
+
+    public async Task<IReadOnlyList<McpCatalogSyncAdminDto>> RebuildMcpCatalogAsync(
+        string appId,
+        string? integrationName = null,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(
+            HttpMethod.Post,
+            $"/admin/apps/{Uri.EscapeDataString(appId)}/mcp/catalog/rebuild");
+        request.Content = JsonContent.Create(new McpCatalogSyncRequest { IntegrationName = integrationName });
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+        var result = await ReadJsonAsync<List<McpCatalogSyncAdminDto>>(response, cancellationToken).ConfigureAwait(false);
+        return result ?? [];
+    }
+
+    public async Task UpsertMcpCredentialAsync(
+        string appId,
+        string integrationName,
+        McpCredentialUpsertRequest payload,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(
+            HttpMethod.Post,
+            $"/admin/apps/{Uri.EscapeDataString(appId)}/mcp/credentials/{Uri.EscapeDataString(integrationName)}");
+        request.Content = JsonContent.Create(payload);
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+    }
+
     public async Task<RegisterAppResponse> RegisterAppAsync(
         RegisterAppRequest request,
         CancellationToken cancellationToken = default)

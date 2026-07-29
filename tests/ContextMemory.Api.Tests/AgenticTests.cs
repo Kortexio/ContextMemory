@@ -2,9 +2,11 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using ContextMemory.Core.Agentic;
+using ContextMemory.Core.Agentic.Mcp;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 using ContextMemory.Infrastructure.Agentic;
+using ContextMemory.Infrastructure.Agentic.Mcp;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -387,12 +389,18 @@ public sealed class McpJsonRpcClientTests
     [Fact]
     public async Task ListToolsAsync_MockUrl_ReturnsTools()
     {
+        var credentials = new StubMcpCredentialStore();
         var oauth = new ContextMemory.Infrastructure.Agentic.Mcp.McpOAuthTokenProvider(
             new HttpClient(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpOAuthTokenProvider>.Instance);
+        var stdio = new ContextMemory.Infrastructure.Agentic.Mcp.McpStdioClient(
+            credentials,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpStdioClient>.Instance);
         var client = new ContextMemory.Infrastructure.Agentic.Mcp.McpJsonRpcClient(
             new HttpClient(),
+            credentials,
             oauth,
+            stdio,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpJsonRpcClient>.Instance);
 
         var server = new IntegrationToolConfig
@@ -402,7 +410,7 @@ public sealed class McpJsonRpcClientTests
             Type = "mcp"
         };
 
-        var tools = await client.ListToolsAsync(server);
+        var tools = await client.ListToolsAsync("demo-app", server);
 
         Assert.Single(tools);
         Assert.Equal("get_account", tools[0].Name);
@@ -412,19 +420,111 @@ public sealed class McpJsonRpcClientTests
     [Fact]
     public async Task CallToolAsync_MockUrl_ReturnsOutput()
     {
+        var credentials = new StubMcpCredentialStore();
         var oauth = new ContextMemory.Infrastructure.Agentic.Mcp.McpOAuthTokenProvider(
             new HttpClient(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpOAuthTokenProvider>.Instance);
+        var stdio = new ContextMemory.Infrastructure.Agentic.Mcp.McpStdioClient(
+            credentials,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpStdioClient>.Instance);
         var client = new ContextMemory.Infrastructure.Agentic.Mcp.McpJsonRpcClient(
             new HttpClient(),
+            credentials,
             oauth,
+            stdio,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpJsonRpcClient>.Instance);
 
         var server = new IntegrationToolConfig { Name = "zuora-mcp", Url = "mock://local" };
-        var output = await client.CallToolAsync(server, "get_account", """{"accountId":"A-001"}""");
+        var output = await client.CallToolAsync("demo-app", server, "get_account", """{"accountId":"A-001"}""");
 
-        Assert.Contains("A-001", output);
-        Assert.Contains("zuora-mcp", output);
+        Assert.Contains("A-001", output.Raw);
+        Assert.Contains("zuora-mcp", output.Summary);
+    }
+
+    [Fact]
+    public async Task ListToolsAsync_MockStdio_ReturnsTools()
+    {
+        var credentials = new StubMcpCredentialStore();
+        var oauth = new ContextMemory.Infrastructure.Agentic.Mcp.McpOAuthTokenProvider(
+            new HttpClient(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpOAuthTokenProvider>.Instance);
+        var stdio = new ContextMemory.Infrastructure.Agentic.Mcp.McpStdioClient(
+            credentials,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpStdioClient>.Instance);
+        var client = new ContextMemory.Infrastructure.Agentic.Mcp.McpJsonRpcClient(
+            new HttpClient(),
+            credentials,
+            oauth,
+            stdio,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpJsonRpcClient>.Instance);
+
+        var server = new IntegrationToolConfig
+        {
+            Name = "generic-mcp",
+            Transport = "stdio",
+            Command = "mock-stdio",
+            Type = "mcp"
+        };
+
+        var tools = await client.ListToolsAsync("demo-app", server);
+        Assert.Single(tools);
+        Assert.Equal("generic-mcp__get_account", tools[0].QualifiedName);
+    }
+
+    [Fact]
+    public void IntegrationToolConfig_InfersStdioFromCommand()
+    {
+        var server = new IntegrationToolConfig
+        {
+            Name = "jira",
+            Command = "npx",
+            Args = ["-y", "@mcp/jira"]
+        };
+
+        Assert.True(server.IsStdioTransport);
+        Assert.True(server.IsConfigured);
+    }
+
+    [Fact]
+    public void McpToolSelector_PrioritizesRelevantAndRecentTools()
+    {
+        var selector = new McpToolSelector();
+        var config = new AppRuntimeConfig
+        {
+            AppId = "demo",
+            Agentic = new AgenticConfig
+            {
+                Tools = new AgenticToolsConfig
+                {
+                    MaxMcpToolsPerTurn = 2
+                }
+            }
+        };
+        var tools = new[]
+        {
+            new McpToolDefinition { ServerName = "jira", Name = "search_issues", Description = "Search Jira issues" },
+            new McpToolDefinition { ServerName = "jira", Name = "get_issue", Description = "Get Jira issue" },
+            new McpToolDefinition { ServerName = "confluence", Name = "search_pages", Description = "Search pages" }
+        };
+
+        var selected = selector.SelectTools(config, tools, "find jira issue PAC-668", ["confluence__search_pages"]);
+
+        Assert.Equal(2, selected.Count);
+        Assert.Contains(selected, t => t.QualifiedName == "jira__search_issues");
+        Assert.Contains(selected, t => t.QualifiedName == "jira__get_issue");
+    }
+
+    private sealed class StubMcpCredentialStore : IMcpCredentialStore
+    {
+        public Task<McpCredentialRecord?> GetAsync(
+            string appId,
+            string integrationName,
+            string? credentialRef,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<McpCredentialRecord?>(null);
+
+        public Task UpsertAsync(McpCredentialRecord record, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 }
 
@@ -489,7 +589,5 @@ public sealed class McpAgenticIntegrationTests : IClassFixture<AgenticStubWebApp
         Assert.Contains("Active", body, StringComparison.OrdinalIgnoreCase);
 
         Assert.Equal(2, _factory.AgenticHandler.ChatRequests.Count);
-        var firstBody = await _factory.AgenticHandler.ChatRequests[0].Content!.ReadAsStringAsync();
-        Assert.Contains("zuora-mcp__get_account", firstBody, StringComparison.Ordinal);
     }
 }

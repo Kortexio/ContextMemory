@@ -9,14 +9,21 @@ public static class AgenticToolObservationFormatter
         ToolExecutionResult result,
         AppRuntimeConfig config)
     {
+        var payload = result.Summary ?? result.Output;
+        if (result.Entities is { Count: > 0 })
+        {
+            var entityLine = string.Join(", ", result.Entities.Select(kv => $"{kv.Key}={kv.Value}"));
+            payload = $"{payload}\nEntities: {entityLine}";
+        }
+
         return AgenticPromptProfileResolver.Resolve(config) switch
         {
             AgenticPromptProfile.OpenAi =>
-                $"Function `{toolName}` returned (exit_code={result.ExitCode}):\n{result.Output}",
+                $"Function `{toolName}` returned (exit_code={result.ExitCode}):\n{payload}",
             AgenticPromptProfile.Claude =>
-                $"Resultado da tool `{toolName}` (exit={result.ExitCode}):\n{result.Output}",
+                $"Resultado da tool `{toolName}` (exit={result.ExitCode}):\n{payload}",
             _ =>
-                $"[{toolName}] exit_code={result.ExitCode}\n{result.Output}"
+                $"[{toolName}] exit_code={result.ExitCode}\n{payload}"
         };
     }
 }

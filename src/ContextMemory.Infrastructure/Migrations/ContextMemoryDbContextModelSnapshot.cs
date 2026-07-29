@@ -141,6 +141,113 @@ namespace ContextMemory.Infrastructure.Migrations
                     b.ToTable("global_wiki_documents", (string)null);
                 });
 
+            modelBuilder.Entity("ContextMemory.Infrastructure.Persistence.Postgres.McpCatalogSyncEntity", b =>
+                {
+                    b.Property<string>("AppId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("IntegrationName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SyncStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("ToolCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("AppId", "IntegrationName");
+
+                    b.HasIndex("AppId");
+
+                    b.ToTable("mcp_catalog_sync", (string)null);
+                });
+
+            modelBuilder.Entity("ContextMemory.Infrastructure.Persistence.Postgres.McpCatalogToolEntity", b =>
+                {
+                    b.Property<string>("AppId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("IntegrationName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("QualifiedName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("CapabilitiesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("InputSchemaJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ToolName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("AppId", "IntegrationName", "QualifiedName");
+
+                    b.HasIndex("AppId");
+
+                    b.HasIndex("AppId", "IntegrationName");
+
+                    b.ToTable("mcp_catalog_tools", (string)null);
+                });
+
+            modelBuilder.Entity("ContextMemory.Infrastructure.Persistence.Postgres.McpCredentialEntity", b =>
+                {
+                    b.Property<string>("AppId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("IntegrationName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("CredentialRef")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("AuthMode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SecretJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AppId", "IntegrationName", "CredentialRef");
+
+                    b.HasIndex("AppId");
+
+                    b.ToTable("mcp_credentials", (string)null);
+                });
+
             modelBuilder.Entity("ContextMemory.Infrastructure.Persistence.Postgres.RegisteredAppEntity", b =>
                 {
                     b.Property<string>("AppId")

@@ -24,6 +24,7 @@ public sealed class McpToolExecutor : IToolExecutor
 
         return runtimeConfig.Agentic.Tools.Integrations.Any(i =>
             string.Equals(i.Type, "mcp", StringComparison.OrdinalIgnoreCase)
+            && i.Enabled
             && string.Equals(McpToolNaming.SanitizeForCompare(i.Name), serverName, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -55,6 +56,15 @@ public sealed class McpToolExecutor : IToolExecutor
             };
         }
 
+        if (!server.Enabled)
+        {
+            return new ToolExecutionResult
+            {
+                Output = ToolExecutionMessages.McpServerNotConfigured(serverName, runtimeConfig),
+                ExitCode = 1
+            };
+        }
+
         if (!AgenticNetworkEgressPolicy.IsIntegrationUrlAllowed(runtimeConfig, server))
         {
             _logger.LogWarning(
@@ -65,13 +75,39 @@ public sealed class McpToolExecutor : IToolExecutor
             return AgenticNetworkEgressPolicy.BlockedResult(server.Url, runtimeConfig);
         }
 
+        if (server.ToolAllowlist.Count > 0
+            && !server.ToolAllowlist.Any(t => string.Equals(t, mcpToolName, StringComparison.OrdinalIgnoreCase)))
+        {
+            return new ToolExecutionResult
+            {
+                Output = $"MCP tool `{mcpToolName}` is not allowed on server `{server.Name}`.",
+                ExitCode = 1
+            };
+        }
+
+        if (server.ToolDenylist.Any(t => string.Equals(t, mcpToolName, StringComparison.OrdinalIgnoreCase)))
+        {
+            return new ToolExecutionResult
+            {
+                Output = $"MCP tool `{mcpToolName}` is blocked on server `{server.Name}`.",
+                ExitCode = 1
+            };
+        }
+
         try
         {
             var output = await _client
-                .CallToolAsync(server, mcpToolName, toolCall.Function.Arguments, cancellationToken)
+                .CallToolAsync(appId, server, mcpToolName, toolCall.Function.Arguments, cancellationToken)
                 .ConfigureAwait(false);
 
-            return new ToolExecutionResult { Output = output, ExitCode = 0 };
+            return new ToolExecutionResult
+            {
+                Output = output.Raw,
+                Summary = output.Summary,
+                Entities = output.Entities,
+                OutputTruncated = output.Truncated,
+                ExitCode = 0
+            };
         }
         catch (Exception ex)
         {

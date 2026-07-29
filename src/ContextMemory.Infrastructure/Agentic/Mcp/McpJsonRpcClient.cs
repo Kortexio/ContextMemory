@@ -1,6 +1,8 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using ContextMemory.Core.Agentic.Mcp;
+using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Localization;
 using System.Text.Json.Serialization;
 using ContextMemory.Infrastructure.Agentic;
@@ -18,29 +20,40 @@ public sealed class McpJsonRpcClient
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<McpJsonRpcClient> _logger;
+    private readonly IMcpCredentialStore _credentialStore;
     private readonly McpOAuthTokenProvider _oauthTokenProvider;
+    private readonly McpStdioClient _stdioClient;
     private int _requestId;
 
     public McpJsonRpcClient(
         HttpClient httpClient,
+        IMcpCredentialStore credentialStore,
         McpOAuthTokenProvider oauthTokenProvider,
+        McpStdioClient stdioClient,
         ILogger<McpJsonRpcClient> logger)
     {
         _httpClient = httpClient;
+        _credentialStore = credentialStore;
         _oauthTokenProvider = oauthTokenProvider;
+        _stdioClient = stdioClient;
         _logger = logger;
     }
 
     public async Task<IReadOnlyList<McpToolDefinition>> ListToolsAsync(
+        string appId,
         IntegrationToolConfig server,
         CancellationToken cancellationToken = default)
     {
+        if (server.IsStdioTransport || string.Equals(server.Command, "mock-stdio", StringComparison.OrdinalIgnoreCase))
+            return await _stdioClient.ListToolsAsync(appId, server, cancellationToken).ConfigureAwait(false);
+
         if (server.Url.StartsWith("mock://", StringComparison.OrdinalIgnoreCase))
             return GetMockTools(server);
 
-        await EnsureInitializedAsync(server, cancellationToken).ConfigureAwait(false);
+        var resolvedServer = await ResolveServerAsync(appId, server, cancellationToken).ConfigureAwait(false);
+        await EnsureInitializedAsync(resolvedServer, cancellationToken).ConfigureAwait(false);
 
-        var response = await SendRequestAsync(server, "tools/list", new { }, cancellationToken)
+        var response = await SendRequestAsync(resolvedServer, "tools/list", new { }, cancellationToken)
             .ConfigureAwait(false);
 
         if (response.Error is not null)
@@ -72,23 +85,36 @@ public sealed class McpJsonRpcClient
         return tools;
     }
 
-    public async Task<string> CallToolAsync(
+    public async Task<McpNormalizedResult> CallToolAsync(
+        string appId,
         IntegrationToolConfig server,
         string toolName,
         string argumentsJson,
         CancellationToken cancellationToken = default)
     {
-        if (server.Url.StartsWith("mock://", StringComparison.OrdinalIgnoreCase))
-            return ExecuteMock(server, toolName, argumentsJson);
+        if (server.IsStdioTransport || string.Equals(server.Command, "mock-stdio", StringComparison.OrdinalIgnoreCase))
+            return await _stdioClient.CallToolAsync(appId, server, toolName, argumentsJson, cancellationToken)
+                .ConfigureAwait(false);
 
-        await EnsureInitializedAsync(server, cancellationToken).ConfigureAwait(false);
+        if (server.Url.StartsWith("mock://", StringComparison.OrdinalIgnoreCase))
+        {
+            var mock = ExecuteMock(server, toolName, argumentsJson);
+            return new McpNormalizedResult
+            {
+                Summary = mock,
+                Raw = mock
+            };
+        }
+
+        var resolvedServer = await ResolveServerAsync(appId, server, cancellationToken).ConfigureAwait(false);
+        await EnsureInitializedAsync(resolvedServer, cancellationToken).ConfigureAwait(false);
 
         object? argsObject = new { };
         if (!string.IsNullOrWhiteSpace(argumentsJson))
             argsObject = JsonSerializer.Deserialize<object>(argumentsJson) ?? new { };
 
         var response = await SendRequestAsync(
-                server,
+                resolvedServer,
                 "tools/call",
                 new Dictionary<string, object?> { ["name"] = toolName, ["arguments"] = argsObject },
                 cancellationToken)
@@ -137,10 +163,13 @@ public sealed class McpJsonRpcClient
         };
 
         using var httpRequest = await BuildHttpRequestAsync(server, request, cancellationToken).ConfigureAwait(false);
-        using var httpResponse = await _httpClient.SendAsync(httpRequest, cancellationToken)
+        using var requestCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (server.TimeoutSeconds > 0)
+            requestCts.CancelAfter(TimeSpan.FromSeconds(server.TimeoutSeconds));
+        using var httpResponse = await _httpClient.SendAsync(httpRequest, requestCts.Token)
             .ConfigureAwait(false);
 
-        var body = await httpResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var body = await httpResponse.Content.ReadAsStringAsync(requestCts.Token).ConfigureAwait(false);
 
         if (!httpResponse.IsSuccessStatusCode)
         {
@@ -167,7 +196,10 @@ public sealed class McpJsonRpcClient
         var notification = new McpJsonRpcNotification { Method = method };
         using var httpRequest = await BuildHttpRequestAsync(server, notification, cancellationToken)
             .ConfigureAwait(false);
-        using var httpResponse = await _httpClient.SendAsync(httpRequest, cancellationToken)
+        using var requestCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (server.TimeoutSeconds > 0)
+            requestCts.CancelAfter(TimeSpan.FromSeconds(server.TimeoutSeconds));
+        using var httpResponse = await _httpClient.SendAsync(httpRequest, requestCts.Token)
             .ConfigureAwait(false);
 
         if (!httpResponse.IsSuccessStatusCode)
@@ -193,6 +225,38 @@ public sealed class McpJsonRpcClient
 
         await ApplyAuthAsync(server, request, cancellationToken).ConfigureAwait(false);
         return request;
+    }
+
+    private async Task<IntegrationToolConfig> ResolveServerAsync(
+        string appId,
+        IntegrationToolConfig server,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(server.CredentialRef))
+            return server;
+
+        var secret = await _credentialStore
+            .GetAsync(appId, server.Name, server.CredentialRef, cancellationToken)
+            .ConfigureAwait(false);
+        if (secret is null)
+            return server;
+
+        return server with
+        {
+            AuthMode = string.IsNullOrWhiteSpace(secret.AuthMode) ? server.AuthMode : secret.AuthMode,
+            AuthToken = secret.BearerToken ?? secret.ApiKey ?? server.AuthToken,
+            OAuth = secret.OAuth is null
+                ? server.OAuth
+                : new McpOAuthConfig
+                {
+                    TokenUrl = secret.OAuth.TokenUrl,
+                    ClientId = secret.OAuth.ClientId,
+                    ClientSecret = secret.OAuth.ClientSecret,
+                    Scope = secret.OAuth.Scope,
+                    Audience = secret.OAuth.Audience
+                },
+            Headers = MergeHeaders(server.Headers, secret)
+        };
     }
 
     private async Task ApplyAuthAsync(
@@ -223,15 +287,19 @@ public sealed class McpJsonRpcClient
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
                 break;
             case "api-key":
-                request.Headers.TryAddWithoutValidation("X-Api-Key", bearer);
+                var keyHeader = server.Headers?.Keys.FirstOrDefault(k =>
+                        k.Equals("X-Api-Key", StringComparison.OrdinalIgnoreCase)
+                        || k.Equals("Authorization", StringComparison.OrdinalIgnoreCase))
+                    ?? "X-Api-Key";
+                request.Headers.TryAddWithoutValidation(keyHeader, bearer);
                 break;
         }
     }
 
-    private static string FormatToolResult(JsonElement? result)
+    private static McpNormalizedResult FormatToolResult(JsonElement? result)
     {
         if (result is null)
-            return string.Empty;
+            return new McpNormalizedResult();
 
         if (result.Value.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
         {
@@ -244,13 +312,14 @@ public sealed class McpJsonRpcClient
                     parts.Add(item.GetRawText());
             }
 
-            return string.Join("\n", parts);
+            var raw = string.Join("\n", parts);
+            return Normalize(raw);
         }
 
         if (result.Value.TryGetProperty("isError", out var isError) && isError.GetBoolean())
-            return result.Value.GetRawText();
+            return Normalize(result.Value.GetRawText());
 
-        return result.Value.GetRawText();
+        return Normalize(result.Value.GetRawText());
     }
 
     private static IReadOnlyList<McpToolDefinition> GetMockTools(IntegrationToolConfig server) =>
@@ -278,5 +347,58 @@ public sealed class McpJsonRpcClient
             throw new InvalidOperationException(ToolExecutionMessages.McpMockToolFailed(server.Name, toolName));
 
         return $"[mock:{server.Name}] {toolName}({argumentsJson}) → ok";
+    }
+
+    private static Dictionary<string, string> MergeHeaders(
+        Dictionary<string, string>? headers,
+        McpCredentialRecord secret)
+    {
+        var merged = headers is null
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(headers, StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(secret.ApiKey) && !string.IsNullOrWhiteSpace(secret.HeaderName))
+            merged[secret.HeaderName] = secret.ApiKey;
+
+        return merged;
+    }
+
+    private static McpNormalizedResult Normalize(string raw)
+    {
+        var trimmed = raw.Trim();
+        var summary = trimmed;
+        var entities = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var truncated = false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(trimmed);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    if (prop.Value.ValueKind is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False)
+                        entities[prop.Name] = prop.Value.ToString();
+                }
+            }
+        }
+        catch
+        {
+            // Raw result is not JSON; keep text summary only.
+        }
+
+        if (summary.Length > 1200)
+        {
+            summary = summary[..1200].TrimEnd() + "…";
+            truncated = true;
+        }
+
+        return new McpNormalizedResult
+        {
+            Summary = summary,
+            Entities = entities,
+            Raw = trimmed,
+            Truncated = truncated
+        };
     }
 }

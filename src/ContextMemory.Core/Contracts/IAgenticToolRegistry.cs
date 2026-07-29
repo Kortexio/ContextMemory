@@ -9,10 +9,14 @@ public interface IAgenticToolRegistry
 {
     Task<IReadOnlyList<OllamaTool>> BuildToolsAsync(
         AppRuntimeConfig runtimeConfig,
+        string? userQuery = null,
+        IReadOnlyList<string>? recentToolNames = null,
         CancellationToken cancellationToken = default);
 
     Task<string> BuildToolNamesSummaryAsync(
         AppRuntimeConfig runtimeConfig,
+        string? userQuery = null,
+        IReadOnlyList<string>? recentToolNames = null,
         CancellationToken cancellationToken = default);
 
     List<OllamaMcpServer> BuildMcpServers(AppRuntimeConfig runtimeConfig);

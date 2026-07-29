@@ -1,0 +1,54 @@
+# Network stack overlay — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.network.yml up -d --build
+# Joins network-local, Postgres contextmemory DB, keeps name network-gateway for Laravox.
+# Admin (:5200) is local-only (no public tunnel) and talks to the API on the Docker network.
+
+name: gateway
+
+services:
+  api:
+    container_name: network-gateway
+    environment:
+      ContextMemory__PersistenceProvider: Postgres
+      ConnectionStrings__ContextMemory: >-
+        Host=${POSTGRES_HOST:-postgres};Port=5432;Database=${POSTGRES_DB:-contextmemory};
+        Username=${POSTGRES_USER:-contextmemory};Password=${POSTGRES_PASSWORD:-contextmemory_dev}
+      ContextMemory__WikiPath: /app/wikis
+      ContextMemory__OllamaEndpoint: ${OLLAMA_ENDPOINT:-https://server.kortexio.io}
+      ContextMemory__DefaultLlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
+      ContextMemory__MasterKey: ${MASTER_KEY:-cm_master_local_dev_change_me}
+      ContextMemory__AdminCorsOrigins__0: ${ADMIN_CORS_ORIGIN:-http://localhost:5200}
+      ContextMemory__Apps__demo-dev__ApiKey: ${DEMO_APP_API_KEY:-cm_live_dev_key}
+      ContextMemory__Apps__demo-dev__SystemPrompt: És um assistente útil, claro e preciso.
+      ContextMemory__Apps__demo-dev__DefaultLanguage: pt-PT
+      ContextMemory__Apps__demo-dev__LlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
+      ContextMemory__Apps__laravox__ApiKey: ${LARAVOX_APP_API_KEY:-cm_laravox_local_key}
+      ContextMemory__Apps__laravox__SystemPrompt: És o motor de IA do Laravox para classificação de perfis e geração de mensagens.
+      ContextMemory__Apps__laravox__DefaultLanguage: pt-PT
+      ContextMemory__Apps__laravox__LlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
+    volumes:
+      - gateway_data:/app/data
+      - gateway_wikis:/app/wikis
+    networks:
+      - network-local
+      - cm-net
+
+  admin:
+    container_name: network-contextmemory-admin
+    environment:
+      Admin__DefaultApiBaseUrl: http://api:8080
+      Admin__PublicApiBaseUrl: ${PUBLIC_API_URL:-http://localhost:5100}
+      Admin__DefaultMasterKey: ${MASTER_KEY:-cm_master_local_dev_change_me}
+      ApiBaseUrl: http://api:8080
+    networks:
+      - cm-net
+
+volumes:
+  gateway_data:
+  gateway_wikis:
+
+networks:
+  network-local:
+    external: true
+  cm-net:
+    driver: bridge

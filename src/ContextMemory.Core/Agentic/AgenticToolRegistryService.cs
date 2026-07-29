@@ -16,6 +16,8 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
 
     public async Task<IReadOnlyList<OllamaTool>> BuildToolsAsync(
         AppRuntimeConfig runtimeConfig,
+        string? userQuery = null,
+        IReadOnlyList<string>? recentToolNames = null,
         CancellationToken cancellationToken = default)
     {
         var tools = new List<OllamaTool>();
@@ -25,7 +27,9 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
         if (wikiTool is not null)
             tools.Add(wikiTool);
 
-        var mcpTools = await _mcpCatalog.GetToolsAsync(runtimeConfig, cancellationToken).ConfigureAwait(false);
+        var mcpTools = await _mcpCatalog
+            .GetToolsAsync(runtimeConfig, userQuery, recentToolNames, cancellationToken)
+            .ConfigureAwait(false);
         foreach (var mcpTool in mcpTools)
         {
             tools.Add(new OllamaTool(
@@ -41,16 +45,20 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
 
     public async Task<string> BuildToolNamesSummaryAsync(
         AppRuntimeConfig runtimeConfig,
+        string? userQuery = null,
+        IReadOnlyList<string>? recentToolNames = null,
         CancellationToken cancellationToken = default)
     {
-        var tools = await BuildToolsAsync(runtimeConfig, cancellationToken).ConfigureAwait(false);
+        var tools = await BuildToolsAsync(runtimeConfig, userQuery, recentToolNames, cancellationToken).ConfigureAwait(false);
         return string.Join(", ", tools.Select(t => t.Function.Name));
     }
 
     public List<OllamaMcpServer> BuildMcpServers(AppRuntimeConfig runtimeConfig) =>
         runtimeConfig.Agentic.Tools.Integrations
             .Where(i => string.Equals(i.Type, "mcp", StringComparison.OrdinalIgnoreCase))
-            .Where(i => !string.IsNullOrWhiteSpace(i.Name) && !string.IsNullOrWhiteSpace(i.Url))
+            .Where(i => i.Enabled)
+            .Where(i => i.IsConfigured)
+            .Where(i => i.IsHttpTransport)
             .Where(i => !i.Url.StartsWith("mock://", StringComparison.OrdinalIgnoreCase))
             .Select(i => new OllamaMcpServer(i.Name, i.Url))
             .ToList();

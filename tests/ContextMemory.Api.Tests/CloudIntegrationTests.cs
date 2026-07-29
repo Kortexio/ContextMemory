@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using ContextMemory.Core.Agentic;
+using ContextMemory.Core.Agentic.Mcp;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 using ContextMemory.Infrastructure.Agentic;
@@ -142,6 +143,68 @@ public class CloudIntegrationTests : IClassFixture<ContextMemoryWebApplicationFa
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("mock sandbox", result.Output, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Admin_McpCredentialAndCatalogEndpoints_Work()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var configStore = scope.ServiceProvider.GetRequiredService<IAppConfigStore>();
+
+        await configStore.UpdateAsync(
+            "demo-dev",
+            new AppConfigPatchRequest
+            {
+                Agentic = new AgenticConfig
+                {
+                    Enabled = true,
+                    Tools = new AgenticToolsConfig
+                    {
+                        Integrations =
+                        [
+                            new IntegrationToolConfig
+                            {
+                                Type = "mcp",
+                                Name = "zuora-mcp",
+                                Url = "mock://zuora",
+                                Enabled = true,
+                                CredentialRef = "zuora-prod",
+                                ToolAllowlist = ["get_account"],
+                                RequiresConfirmation = ["get_account"]
+                            }
+                        ]
+                    }
+                }
+            });
+
+        using var cred = new HttpRequestMessage(HttpMethod.Post, "/admin/apps/demo-dev/mcp/credentials/zuora-mcp");
+        cred.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-master-key");
+        cred.Content = JsonContent.Create(new McpCredentialUpsertRequest
+        {
+            IntegrationName = "zuora-mcp",
+            CredentialRef = "zuora-prod",
+            AuthMode = "bearer",
+            BearerToken = "secret"
+        });
+
+        var credResponse = await _client.SendAsync(cred);
+        Assert.Equal(HttpStatusCode.NoContent, credResponse.StatusCode);
+
+        using var sync = new HttpRequestMessage(HttpMethod.Post, "/admin/apps/demo-dev/mcp/catalog/rebuild");
+        sync.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-master-key");
+        sync.Content = JsonContent.Create(new McpCatalogSyncRequest { IntegrationName = "zuora-mcp" });
+
+        var syncResponse = await _client.SendAsync(sync);
+        Assert.Equal(HttpStatusCode.OK, syncResponse.StatusCode);
+
+        var syncBody = await syncResponse.Content.ReadFromJsonAsync<List<McpCatalogSyncResult>>();
+        Assert.NotNull(syncBody);
+        Assert.Contains(syncBody!, x => x.IntegrationName == "zuora-mcp");
+
+        using var servers = new HttpRequestMessage(HttpMethod.Get, "/admin/apps/demo-dev/mcp/servers");
+        servers.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-master-key");
+        var serversResponse = await _client.SendAsync(servers);
+        Assert.Equal(HttpStatusCode.OK, serversResponse.StatusCode);
     }
 
     private sealed class DeleteSessionsResponse
