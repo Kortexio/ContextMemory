@@ -84,14 +84,23 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
         Action<AgenticProgressEvent>? report,
         CancellationToken cancellationToken)
     {
-        var tools = (await _toolRegistry.BuildToolsAsync(runtimeConfig, cancellationToken).ConfigureAwait(false)).ToList();
-        var toolNamesSummary = await _toolRegistry.BuildToolNamesSummaryAsync(runtimeConfig, cancellationToken)
+        var lastUserMessage = enrichedRequest.Messages.GetLastUserMessage()?.Content;
+        var recentToolNames = enrichedRequest.Messages
+            .SelectMany(m => m.ToolCalls ?? [])
+            .Select(t => t.Function.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var tools = (await _toolRegistry
+                .BuildToolsAsync(runtimeConfig, lastUserMessage, recentToolNames, cancellationToken)
+                .ConfigureAwait(false))
+            .ToList();
+        var toolNamesSummary = await _toolRegistry
+            .BuildToolNamesSummaryAsync(runtimeConfig, lastUserMessage, recentToolNames, cancellationToken)
             .ConfigureAwait(false);
         var mcpServers = _toolRegistry.BuildMcpServers(runtimeConfig);
         var messages = AgentInstructionInjector.Inject(enrichedRequest.Messages, runtimeConfig, toolNamesSummary);
         var steps = new List<AgentExecutionStep>();
-
-        var lastUserMessage = enrichedRequest.Messages.GetLastUserMessage()?.Content;
 
         var confirmationOutcome = await _confirmationFlow
             .TryResolvePendingAsync(appId, userId, sessionId, lastUserMessage, report, cancellationToken)

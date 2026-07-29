@@ -140,7 +140,18 @@
         <button type="button" class="btn btn-sm btn-outline-secondary mb-3" @onclick="AddExecution">+ ACA runtime</button>
 
         <h6>Integration tools (MCP)</h6>
-        <FieldHelp>Model Context Protocol servers this tenant may call (APIs, internal tools).</FieldHelp>
+        <FieldHelp>
+            Model Context Protocol servers this tenant may call. Supports
+            <code>http</code> (remote URL) and <code>stdio</code> (local process, Cursor-style).
+        </FieldHelp>
+        <details class="mb-3">
+            <summary class="small text-muted" style="cursor:pointer">Example MCP JSON (stdio + http)</summary>
+            <pre class="small bg-light border rounded p-2 mt-2 mb-0" style="white-space:pre-wrap">@ExampleMcpJson</pre>
+        </details>
+        <div class="form-group mb-3" style="max-width: 12rem;">
+            <label>Max MCP tools / turn</label>
+            <InputNumber class="form-control form-control-sm" @bind-Value="Model.Tools.MaxMcpToolsPerTurn" />
+        </div>
         @for (var i = 0; i < Model.Tools.Integrations.Count; i++)
         {
             var index = i;
@@ -151,12 +162,30 @@
                         <InputText class="form-control form-control-sm"
                                    @bind-Value="Model.Tools.Integrations[index].Name" />
                     </div>
-                    <div class="col-md-5 form-group mb-2">
-                        <label>URL</label>
-                        <InputText class="form-control form-control-sm"
-                                   @bind-Value="Model.Tools.Integrations[index].Url" />
+                    <div class="col-md-2 form-group mb-2">
+                        <label>Transport</label>
+                        <InputSelect class="form-control form-control-sm"
+                                    @bind-Value="Model.Tools.Integrations[index].Transport">
+                            <option value="http">http</option>
+                            <option value="stdio">stdio</option>
+                        </InputSelect>
                     </div>
-                    <div class="col-md-3 form-group mb-2">
+                    <div class="col-md-4 form-group mb-2">
+                        <label>@(Model.Tools.Integrations[index].Transport == "stdio" ? "Command" : "URL")</label>
+                        @if (Model.Tools.Integrations[index].Transport == "stdio")
+                        {
+                            <InputText class="form-control form-control-sm"
+                                       @bind-Value="Model.Tools.Integrations[index].Command"
+                                       placeholder="node / npx / python" />
+                        }
+                        else
+                        {
+                            <InputText class="form-control form-control-sm"
+                                       @bind-Value="Model.Tools.Integrations[index].Url"
+                                       placeholder="https://mcp.example.com" />
+                        }
+                    </div>
+                    <div class="col-md-2 form-group mb-2">
                         <label>Auth mode</label>
                         <InputSelect class="form-control form-control-sm"
                                     @bind-Value="Model.Tools.Integrations[index].AuthMode">
@@ -171,9 +200,62 @@
                                 @onclick="() => RemoveIntegration(index)">×</button>
                     </div>
                 </div>
+                @if (Model.Tools.Integrations[index].Transport == "stdio")
+                {
+                    <div class="form-row">
+                        <div class="col-md-8 form-group mb-2">
+                            <label>Args (comma-separated)</label>
+                            <InputText class="form-control form-control-sm"
+                                       @bind-Value="Model.Tools.Integrations[index].ArgsText"
+                                       placeholder="-y, package-name" />
+                        </div>
+                        <div class="col-md-4 form-group mb-2">
+                            <label>Working directory</label>
+                            <InputText class="form-control form-control-sm"
+                                       @bind-Value="Model.Tools.Integrations[index].WorkingDirectory" />
+                        </div>
+                    </div>
+                    <div class="form-group mb-2">
+                        <label>Env (KEY=value per line; non-secret)</label>
+                        <InputTextArea class="form-control form-control-sm" rows="3"
+                                       @bind-Value="Model.Tools.Integrations[index].EnvText"
+                                       placeholder="API_BASE_URL=https://example.com" />
+                    </div>
+                }
+                <div class="form-row">
+                    <div class="col-md-4 form-group mb-2">
+                        <label>Credential ref</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].CredentialRef"
+                                   placeholder="jira-prod" />
+                        <FieldHelp>Secrets live outside ConfigJson.</FieldHelp>
+                    </div>
+                    <div class="col-md-4 form-group mb-2">
+                        <label>Timeout (s)</label>
+                        <InputNumber class="form-control form-control-sm"
+                                     @bind-Value="Model.Tools.Integrations[index].TimeoutSeconds" />
+                    </div>
+                    <div class="col-md-4 form-group mb-2">
+                        <label>Description</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].Description" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="col-md-6 form-group mb-2">
+                        <label>Tool allowlist (comma-separated)</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].ToolAllowlistText" />
+                    </div>
+                    <div class="col-md-6 form-group mb-2">
+                        <label>Tool denylist (comma-separated)</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].ToolDenylistText" />
+                    </div>
+                </div>
                 <div class="form-row">
                     <div class="col-md-6 form-group mb-0">
-                        <label>Auth token (bearer/api-key)</label>
+                        <label>Auth token (legacy inline; prefer credentialRef)</label>
                         <InputText class="form-control form-control-sm" type="password"
                                    @bind-Value="Model.Tools.Integrations[index].AuthToken" />
                     </div>
@@ -202,6 +284,11 @@
                 </div>
                 <div class="form-check mt-2">
                     <InputCheckbox class="form-check-input"
+                                   @bind-Value="Model.Tools.Integrations[index].Enabled" />
+                    <label class="form-check-label">enabled</label>
+                </div>
+                <div class="form-check mt-2">
+                    <InputCheckbox class="form-check-input"
                                    @bind-Value="Model.Tools.Integrations[index].AllowEgress" />
                     <label class="form-check-label">allowEgress</label>
                 </div>
@@ -212,6 +299,19 @@
 </div>
 
 @code {
+    private static readonly string ExampleMcpJson =
+        "{\n" +
+        "  \"type\": \"mcp\",\n" +
+        "  \"name\": \"example-stdio\",\n" +
+        "  \"transport\": \"stdio\",\n" +
+        "  \"command\": \"npx\",\n" +
+        "  \"args\": [\"-y\", \"@modelcontextprotocol/server-everything\"],\n" +
+        "  \"env\": { \"API_BASE_URL\": \"https://example.com\" },\n" +
+        "  \"credentialRef\": \"example-stdio\",\n" +
+        "  \"enabled\": true,\n" +
+        "  \"timeoutSeconds\": 60\n" +
+        "}";
+
     [Parameter] public AgenticConfigForm Model { get; set; } = new();
 
     private string ConfirmationKeywordsText
@@ -239,7 +339,12 @@
         Model.Tools.Execution.RemoveAt(index);
 
     private void AddIntegration() =>
-        Model.Tools.Integrations.Add(new IntegrationToolForm { OAuth = new IntegrationOAuthForm() });
+        Model.Tools.Integrations.Add(new IntegrationToolForm
+        {
+            Transport = "stdio",
+            Enabled = true,
+            OAuth = new IntegrationOAuthForm()
+        });
 
     private void RemoveIntegration(int index) =>
         Model.Tools.Integrations.RemoveAt(index);
@@ -262,6 +367,7 @@
             PromptProfile = PromptProfile,
             Tools = new AgenticToolsConfig
             {
+                MaxMcpToolsPerTurn = Tools.MaxMcpToolsPerTurn > 0 ? Tools.MaxMcpToolsPerTurn : 12,
                 Execution = Tools.Execution.Select(e => new ExecutionToolConfig
                 {
                     Type = "aca-session",
@@ -274,7 +380,18 @@
                 {
                     Type = "mcp",
                     Name = i.Name,
+                    Transport = string.IsNullOrWhiteSpace(i.Transport) ? "http" : i.Transport,
                     Url = i.Url,
+                    Command = i.Command,
+                    Args = SplitCsv(i.ArgsText),
+                    Env = ParseEnv(i.EnvText),
+                    WorkingDirectory = i.WorkingDirectory,
+                    Enabled = i.Enabled,
+                    Description = i.Description,
+                    CredentialRef = i.CredentialRef,
+                    TimeoutSeconds = i.TimeoutSeconds,
+                    ToolAllowlist = SplitCsv(i.ToolAllowlistText),
+                    ToolDenylist = SplitCsv(i.ToolDenylistText),
                     AuthMode = i.AuthMode,
                     AuthToken = i.AuthToken,
                     AllowEgress = i.AllowEgress,
@@ -313,6 +430,7 @@
                 PromptProfile = config.PromptProfile,
                 Tools = new AgenticToolsForm
                 {
+                    MaxMcpToolsPerTurn = config.Tools.MaxMcpToolsPerTurn > 0 ? config.Tools.MaxMcpToolsPerTurn : 12,
                     Execution = config.Tools.Execution.Select(e => new ExecutionToolForm
                     {
                         Runtime = e.Runtime,
@@ -323,7 +441,18 @@
                     Integrations = config.Tools.Integrations.Select(i => new IntegrationToolForm
                     {
                         Name = i.Name,
+                        Transport = i.IsStdioTransport ? "stdio" : "http",
                         Url = i.Url,
+                        Command = i.Command,
+                        ArgsText = string.Join(", ", i.Args),
+                        EnvText = FormatEnv(i.Env),
+                        WorkingDirectory = i.WorkingDirectory,
+                        Enabled = i.Enabled,
+                        Description = i.Description,
+                        CredentialRef = i.CredentialRef,
+                        TimeoutSeconds = i.TimeoutSeconds,
+                        ToolAllowlistText = string.Join(", ", i.ToolAllowlist),
+                        ToolDenylistText = string.Join(", ", i.ToolDenylist),
                         AuthMode = i.AuthMode,
                         AuthToken = i.AuthToken,
                         AllowEgress = i.AllowEgress,
@@ -351,10 +480,33 @@
                 }
             };
         }
+
+        private static Dictionary<string, string>? ParseEnv(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return null;
+
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var line in text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var idx = line.IndexOf('=');
+                if (idx <= 0)
+                    continue;
+                map[line[..idx].Trim()] = line[(idx + 1)..].Trim();
+            }
+
+            return map.Count == 0 ? null : map;
+        }
+
+        private static string FormatEnv(Dictionary<string, string>? env) =>
+            env is null || env.Count == 0
+                ? string.Empty
+                : string.Join('\n', env.Select(kv => $"{kv.Key}={kv.Value}"));
     }
 
     public sealed class AgenticToolsForm
     {
+        public int MaxMcpToolsPerTurn { get; set; } = 12;
         public List<ExecutionToolForm> Execution { get; set; } = [];
         public List<IntegrationToolForm> Integrations { get; set; } = [];
     }
@@ -370,7 +522,18 @@
     public sealed class IntegrationToolForm
     {
         public string Name { get; set; } = string.Empty;
+        public string Transport { get; set; } = "http";
         public string Url { get; set; } = string.Empty;
+        public string? Command { get; set; }
+        public string ArgsText { get; set; } = string.Empty;
+        public string EnvText { get; set; } = string.Empty;
+        public string? WorkingDirectory { get; set; }
+        public bool Enabled { get; set; } = true;
+        public string? Description { get; set; }
+        public string? CredentialRef { get; set; }
+        public int TimeoutSeconds { get; set; }
+        public string ToolAllowlistText { get; set; } = string.Empty;
+        public string ToolDenylistText { get; set; } = string.Empty;
         public string AuthMode { get; set; } = string.Empty;
         public string? AuthToken { get; set; }
         public bool AllowEgress { get; set; }

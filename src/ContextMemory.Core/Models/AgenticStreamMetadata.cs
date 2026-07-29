@@ -125,6 +125,12 @@ public record AgenticStepSummary
     [JsonPropertyName("label")]
     public string Label { get; init; } = string.Empty;
 
+    [JsonPropertyName("summary")]
+    public string? Summary { get; init; }
+
+    [JsonPropertyName("entities")]
+    public Dictionary<string, string>? Entities { get; init; }
+
     public static AgenticStepSummary FromStep(AgentExecutionStep step, string? defaultLanguage = null) =>
         new()
         {
@@ -133,6 +139,8 @@ public record AgenticStepSummary
             Success = step.Success,
             ExitCode = step.ExitCode,
             DurationMs = step.Duration.TotalMilliseconds,
-            Label = AgenticProgressFormatter.FormatToolCompleted(step, defaultLanguage)
+            Label = AgenticProgressFormatter.FormatToolCompleted(step, defaultLanguage),
+            Summary = step.Summary,
+            Entities = step.Entities
         };
 }

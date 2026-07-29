@@ -35,6 +35,9 @@ public record AgenticToolsConfig
 
     [JsonPropertyName("integrations")]
     public List<IntegrationToolConfig> Integrations { get; init; } = [];
+
+    [JsonPropertyName("maxMcpToolsPerTurn")]
+    public int MaxMcpToolsPerTurn { get; init; } = 12;
 }
 
 public record ExecutionToolConfig
@@ -69,8 +72,39 @@ public record IntegrationToolConfig
     [JsonPropertyName("name")]
     public string Name { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Transport: <c>http</c> (JSON-RPC over URL) or <c>stdio</c> (spawned process).
+    /// When empty, inferred from <see cref="Command"/> / <see cref="Url"/>.
+    /// </summary>
+    [JsonPropertyName("transport")]
+    public string Transport { get; init; } = string.Empty;
+
     [JsonPropertyName("url")]
     public string Url { get; init; } = string.Empty;
+
+    [JsonPropertyName("command")]
+    public string? Command { get; init; }
+
+    [JsonPropertyName("args")]
+    public List<string> Args { get; init; } = [];
+
+    [JsonPropertyName("env")]
+    public Dictionary<string, string>? Env { get; init; }
+
+    [JsonPropertyName("cwd")]
+    public string? WorkingDirectory { get; init; }
+
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; init; } = true;
+
+    [JsonPropertyName("description")]
+    public string? Description { get; init; }
+
+    [JsonPropertyName("serverGroup")]
+    public string? ServerGroup { get; init; }
+
+    [JsonPropertyName("tags")]
+    public List<string> Tags { get; init; } = [];
 
     [JsonPropertyName("authMode")]
     public string AuthMode { get; init; } = string.Empty;
@@ -78,14 +112,46 @@ public record IntegrationToolConfig
     [JsonPropertyName("authToken")]
     public string? AuthToken { get; init; }
 
+    [JsonPropertyName("credentialRef")]
+    public string? CredentialRef { get; init; }
+
     [JsonPropertyName("headers")]
     public Dictionary<string, string>? Headers { get; init; }
 
     [JsonPropertyName("allowEgress")]
     public bool AllowEgress { get; init; }
 
+    [JsonPropertyName("toolAllowlist")]
+    public List<string> ToolAllowlist { get; init; } = [];
+
+    [JsonPropertyName("toolDenylist")]
+    public List<string> ToolDenylist { get; init; } = [];
+
+    [JsonPropertyName("capabilities")]
+    public List<string> Capabilities { get; init; } = [];
+
+    [JsonPropertyName("requiresConfirmation")]
+    public List<string> RequiresConfirmation { get; init; } = [];
+
+    [JsonPropertyName("timeoutSeconds")]
+    public int TimeoutSeconds { get; init; }
+
     [JsonPropertyName("oauth")]
     public McpOAuthConfig? OAuth { get; init; }
+
+    public bool IsStdioTransport =>
+        string.Equals(Transport, "stdio", StringComparison.OrdinalIgnoreCase)
+        || (string.IsNullOrWhiteSpace(Transport)
+            && !string.IsNullOrWhiteSpace(Command)
+            && string.IsNullOrWhiteSpace(Url));
+
+    public bool IsHttpTransport => !IsStdioTransport;
+
+    public bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(Name)
+        && (IsStdioTransport
+            ? !string.IsNullOrWhiteSpace(Command)
+            : !string.IsNullOrWhiteSpace(Url));
 }
 
 public record McpOAuthConfig
@@ -210,6 +276,9 @@ public sealed class AgentExecutionStep
     public int? ExitCode { get; init; }
     public bool Success { get; init; }
     public TimeSpan Duration { get; init; }
+    public string? Summary { get; init; }
+    public Dictionary<string, string>? Entities { get; init; }
+    public bool OutputTruncated { get; init; }
 }
 
 public sealed class ValidationResult
@@ -228,4 +297,7 @@ public sealed class ToolExecutionResult
     public required string Output { get; init; }
     public int ExitCode { get; init; }
     public bool Success => ExitCode == 0;
+    public string? Summary { get; init; }
+    public Dictionary<string, string>? Entities { get; init; }
+    public bool OutputTruncated { get; init; }
 }

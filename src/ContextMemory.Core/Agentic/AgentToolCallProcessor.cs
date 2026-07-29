@@ -37,6 +37,41 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
     {
         if (!skipConfirmation)
         {
+            if (RequiresMcpConfirmation(toolCall, runtimeConfig))
+            {
+                var pending = new AgenticPendingState
+                {
+                    PendingId = Guid.NewGuid().ToString("N")[..12],
+                    ToolName = toolCall.Function.Name,
+                    Arguments = toolCall.Function.Arguments,
+                    MatchedKeyword = "mcp-confirmation",
+                    DefaultLanguage = runtimeConfig.DefaultLanguage,
+                    Iteration = iteration,
+                    Steps = steps.ToList(),
+                    Messages = messages.ToList()
+                };
+
+                await AgenticConfirmationCheckpoint
+                    .WritePendingAsync(_sessionStore, appId, userId, sessionId, pending, cancellationToken)
+                    .ConfigureAwait(false);
+                await _pendingStore
+                    .SaveAsync(appId, userId, sessionId, pending, cancellationToken)
+                    .ConfigureAwait(false);
+
+                Report(report, new AgenticProgressEvent
+                {
+                    Phase = AgenticProgressPhase.AwaitingConfirmation,
+                    Iteration = iteration,
+                    ToolName = toolCall.Function.Name,
+                    Detail = AgenticConfirmationParser.BuildConfirmationPrompt(pending)
+                });
+
+                return new AgentToolCallOutcome
+                {
+                    AwaitingConfirmation = BuildAwaitingConfirmationResult(pending)
+                };
+            }
+
             var destructive = AgenticDestructiveActionDetector.Analyze(
                 toolCall,
                 runtimeConfig.Agentic.Guardrails);
@@ -98,7 +133,10 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
             Output = toolResult.Output,
             ExitCode = toolResult.ExitCode,
             Success = toolResult.Success,
-            Duration = sw.Elapsed
+            Duration = sw.Elapsed,
+            Summary = toolResult.Summary,
+            Entities = toolResult.Entities,
+            OutputTruncated = toolResult.OutputTruncated
         };
         steps.Add(step);
 
@@ -137,6 +175,21 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
         }
 
         return await executor.ExecuteAsync(toolCall, appId, runtimeConfig, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static bool RequiresMcpConfirmation(OllamaToolCall toolCall, AppRuntimeConfig runtimeConfig)
+    {
+        if (!Mcp.McpToolNaming.TryParseQualifiedName(toolCall.Function.Name, out var serverName, out var toolName))
+            return false;
+
+        var server = runtimeConfig.Agentic.Tools.Integrations.FirstOrDefault(i =>
+            string.Equals(i.Type, "mcp", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Mcp.McpToolNaming.SanitizeForCompare(i.Name), serverName, StringComparison.OrdinalIgnoreCase));
+        if (server is null)
+            return false;
+
+        return server.RequiresConfirmation.Any(t => string.Equals(t, toolName, StringComparison.OrdinalIgnoreCase))
+            || server.Capabilities.Any(c => string.Equals(c, "destructive", StringComparison.OrdinalIgnoreCase));
     }
 
     private static AgentResult BuildAwaitingConfirmationResult(AgenticPendingState pending) =>

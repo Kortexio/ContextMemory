@@ -24,6 +24,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<ISessionStore, FileSessionStore>();
         services.AddSingleton<IAgenticPendingStore, FileAgenticPendingStore>();
         services.AddSingleton<IGlobalWikiStore, FileGlobalWikiStore>();
+        services.AddSingleton<IMcpCredentialStore, FileMcpCredentialStore>();
+        services.AddSingleton<IMcpCatalogStore, FileMcpCatalogStore>();
         return services;
     }
 
@@ -53,6 +55,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<ISessionStore, PostgresSessionStore>();
         services.AddSingleton<IAgenticPendingStore, PostgresAgenticPendingStore>();
         services.AddSingleton<IGlobalWikiStore, PostgresGlobalWikiStore>();
+        services.AddSingleton<IMcpCredentialStore, PostgresMcpCredentialStore>();
+        services.AddSingleton<IMcpCatalogStore, PostgresMcpCatalogStore>();
         services.AddSingleton<IPostgresHealthCheck, PostgresHealthCheck>();
 
         return services;
@@ -67,6 +71,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddHttpClient<SelfHostedSandboxClient>(client => client.Timeout = TimeSpan.FromMinutes(5));
         services.AddHttpClient<McpJsonRpcClient>(client => client.Timeout = TimeSpan.FromMinutes(2));
         services.AddHttpClient<McpOAuthTokenProvider>(client => client.Timeout = TimeSpan.FromSeconds(30));
+        services.AddSingleton<McpStdioClient>();
 
         services.AddTransient<AcaExecutionToolExecutor>();
         services.AddTransient<SelfHostedGVisorExecutor>();
@@ -77,6 +82,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<McpToolExecutor>());
         services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<GlobalWikiToolExecutor>());
 
+        services.AddSingleton<IMcpToolSelector, McpToolSelector>();
         services.AddSingleton<IMcpToolCatalog, McpToolCatalog>();
 
         return services;

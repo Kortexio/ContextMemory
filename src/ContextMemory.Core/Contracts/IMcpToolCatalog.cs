@@ -10,7 +10,13 @@ public interface IMcpToolCatalog
 {
     Task<IReadOnlyList<McpToolDefinition>> GetToolsAsync(
         AppRuntimeConfig runtimeConfig,
+        string? userQuery = null,
+        IReadOnlyList<string>? recentToolNames = null,
         CancellationToken cancellationToken = default);
 
     void Invalidate(string appId);
+
+    Task<IReadOnlyList<McpCatalogSyncResult>> SyncAsync(
+        AppRuntimeConfig runtimeConfig,
+        CancellationToken cancellationToken = default);
 }

@@ -14,6 +14,9 @@ public sealed class ContextMemoryDbContext : DbContext
     public DbSet<SessionRecordEntity> SessionRecords => Set<SessionRecordEntity>();
     public DbSet<AgenticPendingRecordEntity> AgenticPendingRecords => Set<AgenticPendingRecordEntity>();
     public DbSet<GlobalWikiDocumentEntity> GlobalWikiDocuments => Set<GlobalWikiDocumentEntity>();
+    public DbSet<McpCredentialEntity> McpCredentials => Set<McpCredentialEntity>();
+    public DbSet<McpCatalogToolEntity> McpCatalogTools => Set<McpCatalogToolEntity>();
+    public DbSet<McpCatalogSyncEntity> McpCatalogSync => Set<McpCatalogSyncEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -69,6 +72,44 @@ public sealed class ContextMemoryDbContext : DbContext
             e.HasIndex(x => new { x.AppId, x.UpdatedAt });
             e.HasIndex(x => new { x.AppId, x.SourceId });
         });
+
+        modelBuilder.Entity<McpCredentialEntity>(e =>
+        {
+            e.ToTable("mcp_credentials");
+            e.HasKey(x => new { x.AppId, x.IntegrationName, x.CredentialRef });
+            e.Property(x => x.AppId).HasMaxLength(64);
+            e.Property(x => x.IntegrationName).HasMaxLength(128);
+            e.Property(x => x.CredentialRef).HasMaxLength(128);
+            e.Property(x => x.AuthMode).HasMaxLength(64);
+            e.Property(x => x.SecretJson).HasColumnType("jsonb");
+            e.HasIndex(x => x.AppId);
+        });
+
+        modelBuilder.Entity<McpCatalogToolEntity>(e =>
+        {
+            e.ToTable("mcp_catalog_tools");
+            e.HasKey(x => new { x.AppId, x.IntegrationName, x.QualifiedName });
+            e.Property(x => x.AppId).HasMaxLength(64);
+            e.Property(x => x.IntegrationName).HasMaxLength(128);
+            e.Property(x => x.QualifiedName).HasMaxLength(256);
+            e.Property(x => x.ToolName).HasMaxLength(128);
+            e.Property(x => x.Description).HasColumnType("text");
+            e.Property(x => x.InputSchemaJson).HasColumnType("jsonb");
+            e.Property(x => x.CapabilitiesJson).HasColumnType("jsonb");
+            e.HasIndex(x => x.AppId);
+            e.HasIndex(x => new { x.AppId, x.IntegrationName });
+        });
+
+        modelBuilder.Entity<McpCatalogSyncEntity>(e =>
+        {
+            e.ToTable("mcp_catalog_sync");
+            e.HasKey(x => new { x.AppId, x.IntegrationName });
+            e.Property(x => x.AppId).HasMaxLength(64);
+            e.Property(x => x.IntegrationName).HasMaxLength(128);
+            e.Property(x => x.LastError).HasColumnType("text");
+            e.Property(x => x.SyncStatus).HasMaxLength(32);
+            e.HasIndex(x => x.AppId);
+        });
     }
 }
 
@@ -94,6 +135,38 @@ public sealed class SessionRecordEntity
     public string SessionId { get; set; } = string.Empty;
     public string DataJson { get; set; } = "{}";
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class McpCredentialEntity
+{
+    public string AppId { get; set; } = string.Empty;
+    public string IntegrationName { get; set; } = string.Empty;
+    public string CredentialRef { get; set; } = string.Empty;
+    public string AuthMode { get; set; } = string.Empty;
+    public string SecretJson { get; set; } = "{}";
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class McpCatalogToolEntity
+{
+    public string AppId { get; set; } = string.Empty;
+    public string IntegrationName { get; set; } = string.Empty;
+    public string QualifiedName { get; set; } = string.Empty;
+    public string ToolName { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string InputSchemaJson { get; set; } = "{}";
+    public string CapabilitiesJson { get; set; } = "[]";
+    public DateTimeOffset LastSyncedAt { get; set; }
+}
+
+public sealed class McpCatalogSyncEntity
+{
+    public string AppId { get; set; } = string.Empty;
+    public string IntegrationName { get; set; } = string.Empty;
+    public int ToolCount { get; set; }
+    public string SyncStatus { get; set; } = "pending";
+    public string? LastError { get; set; }
+    public DateTimeOffset LastSyncedAt { get; set; }
 }
 
 public sealed class AgenticPendingRecordEntity

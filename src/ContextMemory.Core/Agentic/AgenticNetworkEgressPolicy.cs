@@ -19,6 +19,9 @@ public static class AgenticNetworkEgressPolicy
         AppRuntimeConfig runtimeConfig,
         IntegrationToolConfig integration)
     {
+        if (integration.IsStdioTransport)
+            return true;
+
         if (integration.Url.StartsWith("mock://", StringComparison.OrdinalIgnoreCase))
             return true;
 

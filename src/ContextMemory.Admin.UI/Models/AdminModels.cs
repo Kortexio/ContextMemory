@@ -80,6 +80,22 @@ public sealed class AppRuntimeConfigDto
     public AgenticConfig? Agentic { get; set; }
 }
 
+public sealed class McpServerAdminDto
+{
+    public McpServerInfo? Server { get; set; }
+    public McpCatalogSyncAdminDto? Sync { get; set; }
+}
+
+public sealed class McpCatalogSyncAdminDto
+{
+    public string AppId { get; set; } = string.Empty;
+    public string IntegrationName { get; set; } = string.Empty;
+    public int ToolCount { get; set; }
+    public bool Success { get; set; }
+    public string? Error { get; set; }
+    public DateTimeOffset SyncedAt { get; set; }
+}
+
 public sealed class HealthResponseDto
 {
     public string Status { get; set; } = string.Empty;

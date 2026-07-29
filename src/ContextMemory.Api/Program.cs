@@ -65,6 +65,7 @@ app.MapAdminEndpoints();
 app.MapAdminSessionsEndpoints();
 app.MapAppsConfigEndpoints();
 app.MapAppsRegisterEndpoint();
+app.MapMcpEndpoints();
 app.MapGlobalWikiEndpoints();
 app.MapDefaultEndpoints();
 
