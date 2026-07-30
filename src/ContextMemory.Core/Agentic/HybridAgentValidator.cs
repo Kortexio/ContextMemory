@@ -57,6 +57,41 @@ public sealed class HybridAgentValidator : IAgentValidator
                 ValidationMessages.EmptyFinalAnswer(request.RuntimeConfig)));
         }
 
+        var policy = request.RuntimeConfig.ResolvedPolicy;
+
+        if (policy.HasKind(AgenticGuardrailKinds.SandboxClaim)
+            && AgenticSandboxClaimGuardrail.TryGetRejectionFeedback(
+                request.FinalAnswer,
+                request.Steps,
+                request.RuntimeConfig,
+                out var sandboxFeedback))
+        {
+            var configured = AgenticGuardrailConfigReader.GetFeedback(
+                policy.FindByKind(AgenticGuardrailKinds.SandboxClaim)?.ConfigJson ?? "{}",
+                request.RuntimeConfig.DefaultLanguage);
+            return Task.FromResult(ValidationResult.Reject(
+                ValidationMessages.FabricatedSandboxLimitation(
+                    configured ?? sandboxFeedback,
+                    request.RuntimeConfig)));
+        }
+
+        if (policy.HasKind(AgenticGuardrailKinds.UrlFetch)
+            && AgenticUrlFetchGuardrail.TryGetRejectionFeedback(
+                request.UserObjective,
+                request.FinalAnswer,
+                request.Steps,
+                request.RuntimeConfig,
+                out var urlFeedback))
+        {
+            var configured = AgenticGuardrailConfigReader.GetFeedback(
+                policy.FindByKind(AgenticGuardrailKinds.UrlFetch)?.ConfigJson ?? "{}",
+                request.RuntimeConfig.DefaultLanguage);
+            return Task.FromResult(ValidationResult.Reject(
+                ValidationMessages.UrlDescribedWithoutFetch(
+                    configured ?? urlFeedback,
+                    request.RuntimeConfig)));
+        }
+
         return Task.FromResult(ValidationResult.Ok());
     }
 }

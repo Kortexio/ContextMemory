@@ -20,4 +20,12 @@ public interface IMcpCatalogStore
         string? error,
         DateTimeOffset syncedAt,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes catalog tools/sync rows for integrations no longer present in the app config.
+    /// </summary>
+    Task PruneIntegrationsAsync(
+        string appId,
+        IEnumerable<string> keepIntegrationNames,
+        CancellationToken cancellationToken = default);
 }

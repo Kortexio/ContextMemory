@@ -17,23 +17,23 @@ public static class ToolSchemaMessages
         selfHosted
             ? TenantLocale.Select(
                 config.DefaultLanguage,
-                "Python code to run in the self-hosted sandbox (gVisor).",
-                "Código Python a executar no sandbox self-hosted (gVisor).")
+                "Python source to run in the self-hosted sandbox (HTTP egress allowed; ephemeral files).",
+                "Código Python a executar no sandbox self-hosted (HTTP externo permitido; ficheiros efémeros).")
             : TenantLocale.Select(
                 config.DefaultLanguage,
-                "Python code to run in the isolated environment.",
-                "Código Python a executar no ambiente isolado.");
+                "Python code to run in the isolated ACA environment.",
+                "Código Python a executar no ambiente isolado ACA.");
 
     public static string NodeCode(AppRuntimeConfig config, bool selfHosted = false) =>
         selfHosted
             ? TenantLocale.Select(
                 config.DefaultLanguage,
-                "JavaScript/Node code to run in the self-hosted sandbox (gVisor).",
-                "Código JavaScript/Node a executar no sandbox self-hosted (gVisor).")
+                "JavaScript/Node source to run in the self-hosted sandbox (HTTP egress allowed; ephemeral files).",
+                "Código JavaScript/Node a executar no sandbox self-hosted (HTTP externo permitido; ficheiros efémeros).")
             : TenantLocale.Select(
                 config.DefaultLanguage,
-                "JavaScript/Node code to run in the isolated environment.",
-                "Código JavaScript/Node a executar no ambiente isolado.");
+                "JavaScript/Node code to run in the isolated ACA environment.",
+                "Código JavaScript/Node a executar no ambiente isolado ACA.");
 
     public static string ContainerCommand(AppRuntimeConfig config) =>
         TenantLocale.Select(

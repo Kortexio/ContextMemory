@@ -42,12 +42,14 @@ public static class AgenticJudgePromptBuilder
             Criteria:
             - valid=true if the answer addresses the objective usefully and aligns with executed steps.
             - valid=false if it ignores the objective, invents facts, or is incomplete.
+            - valid=false if the user asked about a URL/website and there is no tool step that fetched/searched that host, yet the answer describes the site.
             - feedback must be short and actionable (only when valid=false).
             """,
             """
             Critérios:
             - valid=true se a resposta responde ao objetivo de forma útil e coerente com os passos executados.
             - valid=false se ignora o objetivo, inventa factos, ou é incompleta.
+            - valid=false se o utilizador perguntou sobre um URL/site e não há passo de tool que tenha ido buscar/pesquisado esse host, mas a resposta descreve o site.
             - feedback curto e accionável (só quando valid=false).
             """);
 

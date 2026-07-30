@@ -118,6 +118,10 @@ public sealed class McpToolCatalog : IMcpToolCatalog
             }
         }
 
+        await _store
+            .PruneIntegrationsAsync(runtimeConfig.AppId, integrations.Select(i => i.Name), cancellationToken)
+            .ConfigureAwait(false);
+
         Invalidate(runtimeConfig.AppId);
         return await _store.GetSyncStatusAsync(runtimeConfig.AppId, cancellationToken).ConfigureAwait(false);
     }

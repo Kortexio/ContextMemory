@@ -1,0 +1,6 @@
+
+mcp-runtime/*.sh text eol=lf
+*.sh text eol=lf
+
+sandbox-runtime/*.sh text eol=lf
+

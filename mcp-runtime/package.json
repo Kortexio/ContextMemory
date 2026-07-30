@@ -1,0 +1,14 @@
+{
+  "name": "contextmemory-mcp-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Generic stdio MCP runtime sidecar for ContextMemory",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -26,6 +26,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IGlobalWikiStore, FileGlobalWikiStore>();
         services.AddSingleton<IMcpCredentialStore, FileMcpCredentialStore>();
         services.AddSingleton<IMcpCatalogStore, FileMcpCatalogStore>();
+        services.AddSingleton<IAgenticPolicyCatalogStore, FileAgenticPolicyCatalogStore>();
         return services;
     }
 
@@ -57,6 +58,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IGlobalWikiStore, PostgresGlobalWikiStore>();
         services.AddSingleton<IMcpCredentialStore, PostgresMcpCredentialStore>();
         services.AddSingleton<IMcpCatalogStore, PostgresMcpCatalogStore>();
+        services.AddSingleton<IAgenticPolicyCatalogStore, PostgresAgenticPolicyCatalogStore>();
         services.AddSingleton<IPostgresHealthCheck, PostgresHealthCheck>();
 
         return services;
@@ -71,6 +73,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddHttpClient<SelfHostedSandboxClient>(client => client.Timeout = TimeSpan.FromMinutes(5));
         services.AddHttpClient<McpJsonRpcClient>(client => client.Timeout = TimeSpan.FromMinutes(2));
         services.AddHttpClient<McpOAuthTokenProvider>(client => client.Timeout = TimeSpan.FromSeconds(30));
+        // Must exceed typical Zuora Data Query / REMOTE_MCP_TIMEOUT_MS values (often 3–10 min).
+        services.AddHttpClient("McpRuntime", client => client.Timeout = TimeSpan.FromMinutes(15));
         services.AddSingleton<McpStdioClient>();
 
         services.AddTransient<AcaExecutionToolExecutor>();

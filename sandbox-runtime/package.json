@@ -1,0 +1,14 @@
+{
+  "name": "contextmemory-sandbox-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-dev code sandbox for ContextMemory (shell/python/node)",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

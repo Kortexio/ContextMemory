@@ -2,10 +2,22 @@
 #   docker compose -f docker-compose.yml -f docker-compose.network.yml up -d --build
 # Joins network-local, Postgres contextmemory DB, keeps name network-gateway for Laravox.
 # Admin (:5200) is local-only (no public tunnel) and talks to the API on the Docker network.
+# mcp-runtime hosts generic stdio MCP processes for the gateway.
+# sandbox-runtime runs shell/python/node for self-hosted-sandbox tools.
 
 name: gateway
 
 services:
+  mcp-runtime:
+    container_name: network-mcp-runtime
+    networks:
+      - cm-net
+
+  sandbox-runtime:
+    container_name: network-sandbox-runtime
+    networks:
+      - cm-net
+
   api:
     container_name: network-gateway
     environment:
@@ -17,6 +29,7 @@ services:
       ContextMemory__OllamaEndpoint: ${OLLAMA_ENDPOINT:-https://server.kortexio.io}
       ContextMemory__DefaultLlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
       ContextMemory__MasterKey: ${MASTER_KEY:-cm_master_local_dev_change_me}
+      ContextMemory__McpRuntimeUrl: http://mcp-runtime:8080
       ContextMemory__AdminCorsOrigins__0: ${ADMIN_CORS_ORIGIN:-http://localhost:5200}
       ContextMemory__Apps__demo-dev__ApiKey: ${DEMO_APP_API_KEY:-cm_live_dev_key}
       ContextMemory__Apps__demo-dev__SystemPrompt: És um assistente útil, claro e preciso.
@@ -29,6 +42,11 @@ services:
     volumes:
       - gateway_data:/app/data
       - gateway_wikis:/app/wikis
+    depends_on:
+      mcp-runtime:
+        condition: service_healthy
+      sandbox-runtime:
+        condition: service_healthy
     networks:
       - network-local
       - cm-net
@@ -46,6 +64,7 @@ services:
 volumes:
   gateway_data:
   gateway_wikis:
+  mcp_packages:
 
 networks:
   network-local:

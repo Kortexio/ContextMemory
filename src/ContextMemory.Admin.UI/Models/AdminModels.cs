@@ -80,6 +80,37 @@ public sealed class AppRuntimeConfigDto
     public AgenticConfig? Agentic { get; set; }
 }
 
+public sealed class AgenticCatalogAdminDto
+{
+    public List<AgenticSkillAdminDto> Skills { get; set; } = [];
+    public List<AgenticGuardrailAdminDto> Guardrails { get; set; } = [];
+}
+
+public sealed class AgenticSkillAdminDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string PromptMarkdown { get; set; } = string.Empty;
+    public string Category { get; set; } = "general";
+    public bool IsSystem { get; set; }
+    public bool IsDefaultEnabled { get; set; }
+    public int SortOrder { get; set; }
+    public List<string> LinkedGuardrailIds { get; set; } = [];
+}
+
+public sealed class AgenticGuardrailAdminDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Kind { get; set; } = string.Empty;
+    public string ConfigJson { get; set; } = "{}";
+    public bool IsSystem { get; set; }
+    public bool IsDefaultEnabled { get; set; }
+    public int SortOrder { get; set; }
+}
+
 public sealed class McpServerAdminDto
 {
     public McpServerInfo? Server { get; set; }

@@ -1,0 +1,322 @@
+@page "/skills"
+@inject AdminApiClient Api
+@inject AdminSession Session
+@inject IJSRuntime Js
+@using ContextMemory.Admin.UI.Models
+@using ContextMemory.Admin.UI.Services
+
+<PageTitle>Skills catalog</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="mb-0">Skills catalog</h3>
+        <p class="text-muted mb-0 small">System and custom skills injected into the agentic system prompt.</p>
+    </div>
+    <div>
+        <button class="btn btn-outline-secondary btn-sm mr-2" @onclick="LoadAsync" disabled="@_busy">
+            <i class="fas fa-sync"></i> Refresh
+        </button>
+        <button class="btn btn-primary btn-sm" @onclick="StartCreate" disabled="@_busy">
+            <i class="fas fa-plus"></i> New skill
+        </button>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-danger">@_error</div>
+}
+@if (!string.IsNullOrWhiteSpace(_info))
+{
+    <div class="alert alert-success">@_info</div>
+}
+
+<div class="card mb-3">
+    <div class="card-header"><strong>Import skill</strong></div>
+    <div class="card-body">
+        <InputFile OnChange="OnImportFileAsync" accept=".json,.md,.skill.json" />
+        <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" id="replaceImport" @bind="_replaceOnImport" />
+            <label class="form-check-label" for="replaceImport">Replace if id already exists</label>
+        </div>
+    </div>
+</div>
+
+@if (_editing is not null)
+{
+    <div class="card card-outline card-primary mb-3">
+        <div class="card-header">
+            <strong>@(_isCreate ? "Create skill" : $"Edit {_editing.Id}")</strong>
+            @if (_editing.IsSystem)
+            {
+                <span class="badge badge-secondary ml-2">system (prompt editable)</span>
+            }
+        </div>
+        <div class="card-body">
+            <div class="form-row">
+                <div class="col-md-4 form-group">
+                    <label>Id (slug)</label>
+                    <InputText class="form-control" @bind-Value="_editing.Id" disabled="@(!_isCreate)" />
+                </div>
+                <div class="col-md-4 form-group">
+                    <label>Name</label>
+                    <InputText class="form-control" @bind-Value="_editing.Name" />
+                </div>
+                <div class="col-md-4 form-group">
+                    <label>Category</label>
+                    <InputText class="form-control" @bind-Value="_editing.Category" />
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <InputText class="form-control" @bind-Value="_editing.Description" />
+            </div>
+            <div class="form-group">
+                <label>Prompt markdown</label>
+                <InputTextArea class="form-control" rows="12" @bind-Value="_editing.PromptMarkdown" />
+            </div>
+            <div class="form-row">
+                <div class="col-md-4 form-group">
+                    <label>Sort order</label>
+                    <InputNumber class="form-control" @bind-Value="_editing.SortOrder" />
+                </div>
+                <div class="col-md-4 form-group d-flex align-items-end">
+                    <div class="form-check mb-2">
+                        <InputCheckbox class="form-check-input" @bind-Value="_editing.IsDefaultEnabled" />
+                        <label class="form-check-label">Default enabled for new apps</label>
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-success btn-sm" @onclick="SaveAsync" disabled="@_busy">Save</button>
+            <button class="btn btn-link btn-sm" @onclick="CancelEdit">Cancel</button>
+        </div>
+    </div>
+}
+
+<div class="card">
+    <div class="card-body table-responsive p-0">
+        <table class="table table-striped mb-0">
+            <thead>
+            <tr>
+                <th>Id</th>
+                <th>Name</th>
+                <th>Category</th>
+                <th>Default</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var skill in _skills)
+            {
+                <tr>
+                    <td><code>@skill.Id</code></td>
+                    <td>
+                        @skill.Name
+                        @if (skill.IsSystem)
+                        {
+                            <span class="badge badge-secondary ml-1">system</span>
+                        }
+                    </td>
+                    <td>@skill.Category</td>
+                    <td>@(skill.IsDefaultEnabled ? "yes" : "no")</td>
+                    <td class="text-right text-nowrap">
+                        <button class="btn btn-xs btn-outline-primary" @onclick="() => StartEdit(skill)">Edit</button>
+                        <button class="btn btn-xs btn-outline-secondary" @onclick="() => ExportAsync(skill)">Download</button>
+                        @if (!skill.IsSystem)
+                        {
+                            <button class="btn btn-xs btn-outline-danger" @onclick="() => DeleteAsync(skill)">Delete</button>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (_guardrails.Count > 0)
+{
+    <div class="card mt-3">
+        <div class="card-header"><strong>Guardrail packs</strong> (toggle per app in Agentic config)</div>
+        <div class="card-body table-responsive p-0">
+            <table class="table table-sm mb-0">
+                <thead>
+                <tr><th>Id</th><th>Name</th><th>Kind</th><th>Default</th></tr>
+                </thead>
+                <tbody>
+                @foreach (var g in _guardrails)
+                {
+                    <tr>
+                        <td><code>@g.Id</code></td>
+                        <td>@g.Name</td>
+                        <td><code>@g.Kind</code></td>
+                        <td>@(g.IsDefaultEnabled ? "yes" : "no")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private List<AgenticSkillAdminDto> _skills = [];
+    private List<AgenticGuardrailAdminDto> _guardrails = [];
+    private AgenticSkillAdminDto? _editing;
+    private bool _isCreate;
+    private bool _busy;
+    private bool _replaceOnImport;
+    private string? _error;
+    private string? _info;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        if (!Session.IsConfigured)
+        {
+            _error = "Configure API URL and Master Key in Settings.";
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            var catalog = await Api.GetAgenticCatalogAsync();
+            _skills = catalog?.Skills?.OrderBy(s => s.SortOrder).ThenBy(s => s.Name).ToList() ?? [];
+            _guardrails = catalog?.Guardrails?.OrderBy(g => g.SortOrder).ThenBy(g => g.Name).ToList() ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void StartCreate()
+    {
+        _isCreate = true;
+        _editing = new AgenticSkillAdminDto
+        {
+            Category = "general",
+            SortOrder = 500,
+            IsDefaultEnabled = false,
+            PromptMarkdown = "## My skill\n- Rule one\n- Reply in the user's language.\n"
+        };
+        _info = null;
+    }
+
+    private void StartEdit(AgenticSkillAdminDto skill)
+    {
+        _isCreate = false;
+        _editing = new AgenticSkillAdminDto
+        {
+            Id = skill.Id,
+            Name = skill.Name,
+            Description = skill.Description,
+            PromptMarkdown = skill.PromptMarkdown,
+            Category = skill.Category,
+            IsSystem = skill.IsSystem,
+            IsDefaultEnabled = skill.IsDefaultEnabled,
+            SortOrder = skill.SortOrder,
+            LinkedGuardrailIds = skill.LinkedGuardrailIds.ToList()
+        };
+        _info = null;
+    }
+
+    private void CancelEdit() => _editing = null;
+
+    private async Task SaveAsync()
+    {
+        if (_editing is null) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Api.UpsertAgenticSkillAsync(_editing, _isCreate);
+            _info = $"Saved '{_editing.Id}'.";
+            _editing = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteAsync(AgenticSkillAdminDto skill)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Api.DeleteAgenticSkillAsync(skill.Id);
+            _info = $"Deleted '{skill.Id}'.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ExportAsync(AgenticSkillAdminDto skill)
+    {
+        try
+        {
+            var url = Api.GetSkillExportUrl(skill.Id);
+            // Fetch with master key via JS is awkward; use a data URL from API client path.
+            using var http = new HttpClient();
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", Session.Settings.MasterKey);
+            using var res = await http.SendAsync(req);
+            res.EnsureSuccessStatusCode();
+            var bytes = await res.Content.ReadAsByteArrayAsync();
+            var b64 = Convert.ToBase64String(bytes);
+            await Js.InvokeVoidAsync(
+                "eval",
+                $@"(function(){{var a=document.createElement('a');a.href='data:application/json;base64,{b64}';a.download='{skill.Id}.skill.json';a.click();}})()");
+            _info = $"Downloaded {skill.Id}.skill.json";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task OnImportFileAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            await using var stream = file.OpenReadStream(maxAllowedSize: 2_000_000);
+            var imported = await Api.ImportAgenticSkillAsync(stream, file.Name, _replaceOnImport);
+            _info = $"Imported '{imported.Id}'.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

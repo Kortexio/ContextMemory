@@ -1,0 +1,36 @@
+# Generic MCP stdio runtime for ContextMemory gateway.
+# Speaks HTTP to the API; spawns Cursor-style command/args/env MCP servers.
+FROM node:22-alpine
+
+LABEL org.opencontainers.image.source="https://github.com/Kortexio/ContextMemory"
+LABEL org.opencontainers.image.description="ContextMemory MCP stdio runtime sidecar"
+
+RUN apk add --no-cache python3 py3-pip git curl bash ca-certificates \
+  && mkdir -p /opt/mcps /app /opt/mcps-builtin \
+  && adduser -D -u 10001 mcpuser
+
+WORKDIR /opt/mcps-builtin
+RUN npm init -y >/dev/null \
+  && npm install zuora-mcp@1.1.0 --omit=dev \
+  && ln -sfn node_modules/zuora-mcp zuora-mcp \
+  && test -f /opt/mcps-builtin/zuora-mcp/dist/index.cjs
+
+WORKDIR /app
+COPY mcp-runtime/package.json ./
+COPY mcp-runtime/server.mjs ./
+COPY mcp-runtime/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh \
+  && chown -R mcpuser:mcpuser /opt/mcps /opt/mcps-builtin /app
+
+ENV PORT=8080 \
+    NODE_ENV=production \
+    MCP_SESSION_IDLE_MS=300000 \
+    MCP_DEFAULT_TIMEOUT_MS=120000 \
+    npm_config_update_notifier=false
+
+USER mcpuser
+EXPOSE 8080
+HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
+  CMD curl -fsS http://127.0.0.1:8080/health || exit 1
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

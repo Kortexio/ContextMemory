@@ -12,11 +12,45 @@ public sealed class DeterministicAgentValidator
         var finalAnswer = request.FinalAnswer;
         var steps = request.Steps;
         var guardrails = request.RuntimeConfig.Agentic.Guardrails;
+        var policy = request.RuntimeConfig.ResolvedPolicy;
 
         if (string.IsNullOrWhiteSpace(finalAnswer))
         {
             return Task.FromResult(ValidationResult.Reject(
                 ValidationMessages.EmptyFinalAnswer(request.RuntimeConfig)));
+        }
+
+        if (policy.HasKind(AgenticGuardrailKinds.SandboxClaim)
+            && AgenticSandboxClaimGuardrail.TryGetRejectionFeedback(
+                finalAnswer,
+                steps,
+                request.RuntimeConfig,
+                out var sandboxFeedback))
+        {
+            var configured = AgenticGuardrailConfigReader.GetFeedback(
+                policy.FindByKind(AgenticGuardrailKinds.SandboxClaim)?.ConfigJson ?? "{}",
+                request.RuntimeConfig.DefaultLanguage);
+            return Task.FromResult(ValidationResult.Reject(
+                ValidationMessages.FabricatedSandboxLimitation(
+                    configured ?? sandboxFeedback,
+                    request.RuntimeConfig)));
+        }
+
+        if (policy.HasKind(AgenticGuardrailKinds.UrlFetch)
+            && AgenticUrlFetchGuardrail.TryGetRejectionFeedback(
+                request.UserObjective,
+                finalAnswer,
+                steps,
+                request.RuntimeConfig,
+                out var urlFeedback))
+        {
+            var configured = AgenticGuardrailConfigReader.GetFeedback(
+                policy.FindByKind(AgenticGuardrailKinds.UrlFetch)?.ConfigJson ?? "{}",
+                request.RuntimeConfig.DefaultLanguage);
+            return Task.FromResult(ValidationResult.Reject(
+                ValidationMessages.UrlDescribedWithoutFetch(
+                    configured ?? urlFeedback,
+                    request.RuntimeConfig)));
         }
 
         if (guardrails.MinAnswerLength > 0 && finalAnswer.Trim().Length < guardrails.MinAnswerLength)
@@ -25,7 +59,15 @@ public sealed class DeterministicAgentValidator
                 ValidationMessages.TooShort(guardrails.MinAnswerLength, request.RuntimeConfig)));
         }
 
-        foreach (var pattern in guardrails.BlockedAnswerPatterns)
+        var blockedPatterns = new List<string>(guardrails.BlockedAnswerPatterns);
+        if (policy.HasKind(AgenticGuardrailKinds.BlockedPatterns))
+        {
+            var pack = policy.FindByKind(AgenticGuardrailKinds.BlockedPatterns);
+            if (pack is not null)
+                blockedPatterns.AddRange(AgenticGuardrailConfigReader.GetBlockedPatterns(pack.ConfigJson));
+        }
+
+        foreach (var pattern in blockedPatterns.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (string.IsNullOrWhiteSpace(pattern))
                 continue;
@@ -45,10 +87,12 @@ public sealed class DeterministicAgentValidator
                 ValidationMessages.ToolsFailedExitCode(toolList, request.RuntimeConfig)));
         }
 
-        if (failedSteps.Count > 0
+        if (policy.HasKind(AgenticGuardrailKinds.ToolFailureDisclosure)
+            && failedSteps.Count > 0
             && !finalAnswer.Contains("erro", StringComparison.OrdinalIgnoreCase)
             && !finalAnswer.Contains("falhou", StringComparison.OrdinalIgnoreCase)
-            && !finalAnswer.Contains("failed", StringComparison.OrdinalIgnoreCase))
+            && !finalAnswer.Contains("failed", StringComparison.OrdinalIgnoreCase)
+            && !finalAnswer.Contains("error", StringComparison.OrdinalIgnoreCase))
         {
             var toolList = string.Join(", ", failedSteps.Select(s => s.ToolName).Distinct());
             return Task.FromResult(ValidationResult.Reject(

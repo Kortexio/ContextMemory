@@ -45,4 +45,20 @@ public static class ValidationMessages
             config.DefaultLanguage,
             $"The action related to '{keyword}' requires human confirmation. Ask for explicit user confirmation before proceeding.",
             $"A ação relacionada com '{keyword}' requer confirmação humana. Pede confirmação explícita ao utilizador antes de prosseguir.");
+
+    public static string FabricatedSandboxLimitation(string feedback, AppRuntimeConfig config) =>
+        string.IsNullOrWhiteSpace(feedback)
+            ? TenantLocale.Select(
+                config.DefaultLanguage,
+                "Rejected fabricated sandbox limitation. Call real tools instead.",
+                "Rejeitada limitação inventada do sandbox. Chama as tools reais.")
+            : feedback;
+
+    public static string UrlDescribedWithoutFetch(string feedback, AppRuntimeConfig config) =>
+        string.IsNullOrWhiteSpace(feedback)
+            ? TenantLocale.Select(
+                config.DefaultLanguage,
+                "Rejected: website described without fetching it. Call tools first.",
+                "Rejeitado: site descrito sem o ir buscar. Chama tools primeiro.")
+            : feedback;
 }

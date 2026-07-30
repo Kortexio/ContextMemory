@@ -120,4 +120,32 @@ public sealed class PostgresMcpCatalogStore : IMcpCatalogStore
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    public async Task PruneIntegrationsAsync(
+        string appId,
+        IEnumerable<string> keepIntegrationNames,
+        CancellationToken cancellationToken = default)
+    {
+        var keep = keepIntegrationNames
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var tools = await db.McpCatalogTools.Where(x => x.AppId == appId).ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var sync = await db.McpCatalogSync.Where(x => x.AppId == appId).ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var orphanTools = tools.Where(x => !keep.Contains(x.IntegrationName)).ToList();
+        var orphanSync = sync.Where(x => !keep.Contains(x.IntegrationName)).ToList();
+        if (orphanTools.Count == 0 && orphanSync.Count == 0)
+            return;
+
+        if (orphanTools.Count > 0)
+            db.McpCatalogTools.RemoveRange(orphanTools);
+        if (orphanSync.Count > 0)
+            db.McpCatalogSync.RemoveRange(orphanSync);
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
 }

@@ -1,17 +1,22 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ContextMemory.Core.Agentic.Mcp;
+using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Localization;
 using ContextMemory.Infrastructure.Agentic;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace ContextMemory.Infrastructure.Agentic.Mcp;
 
 /// <summary>
 /// MCP client over stdio (Cursor-style command/args/env processes).
+/// When <see cref="ContextMemoryOptions.McpRuntimeUrl"/> is configured, execution is delegated
+/// to the mcp-runtime sidecar instead of spawning processes inside the API container.
 /// </summary>
 public sealed class McpStdioClient : IAsyncDisposable
 {
@@ -22,15 +27,26 @@ public sealed class McpStdioClient : IAsyncDisposable
     };
 
     private readonly IMcpCredentialStore _credentialStore;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ContextMemoryOptions _options;
     private readonly ILogger<McpStdioClient> _logger;
     private readonly ConcurrentDictionary<string, Lazy<Task<StdioSession>>> _sessions = new(StringComparer.OrdinalIgnoreCase);
     private int _requestId;
 
-    public McpStdioClient(IMcpCredentialStore credentialStore, ILogger<McpStdioClient> logger)
+    public McpStdioClient(
+        IMcpCredentialStore credentialStore,
+        IHttpClientFactory httpClientFactory,
+        IOptions<ContextMemoryOptions> options,
+        ILogger<McpStdioClient> logger)
     {
         _credentialStore = credentialStore;
+        _httpClientFactory = httpClientFactory;
+        _options = options.Value;
         _logger = logger;
     }
+
+    private bool UseRemoteRuntime =>
+        !string.IsNullOrWhiteSpace(_options.McpRuntimeUrl);
 
     public async Task<IReadOnlyList<McpToolDefinition>> ListToolsAsync(
         string appId,
@@ -39,6 +55,9 @@ public sealed class McpStdioClient : IAsyncDisposable
     {
         if (IsMock(server))
             return GetMockTools(server);
+
+        if (UseRemoteRuntime)
+            return await ListToolsRemoteAsync(appId, server, cancellationToken).ConfigureAwait(false);
 
         var session = await GetOrCreateSessionAsync(appId, server, cancellationToken).ConfigureAwait(false);
         var response = await session.SendRequestAsync("tools/list", new { }, cancellationToken).ConfigureAwait(false);
@@ -84,6 +103,10 @@ public sealed class McpStdioClient : IAsyncDisposable
             return new McpNormalizedResult { Summary = mock, Raw = mock };
         }
 
+        if (UseRemoteRuntime)
+            return await CallToolRemoteAsync(appId, server, toolName, argumentsJson, cancellationToken)
+                .ConfigureAwait(false);
+
         var session = await GetOrCreateSessionAsync(appId, server, cancellationToken).ConfigureAwait(false);
 
         object? argsObject = new { };
@@ -101,6 +124,125 @@ public sealed class McpStdioClient : IAsyncDisposable
             throw new InvalidOperationException($"MCP tools/call failed: {response.Error.Message}");
 
         return Normalize(FormatToolResult(response.Result));
+    }
+
+    private async Task<IReadOnlyList<McpToolDefinition>> ListToolsRemoteAsync(
+        string appId,
+        IntegrationToolConfig server,
+        CancellationToken cancellationToken)
+    {
+        var payload = await BuildRemotePayloadAsync(appId, server, cancellationToken).ConfigureAwait(false);
+        using var response = await PostRemoteAsync("/v1/stdio/tools/list", payload, cancellationToken)
+            .ConfigureAwait(false);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"MCP runtime tools/list failed: {(int)response.StatusCode} {body}");
+
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+        if (!doc.RootElement.TryGetProperty("result", out var result)
+            || !result.TryGetProperty("tools", out var toolsElement))
+        {
+            return [];
+        }
+
+        var tools = new List<McpToolDefinition>();
+        foreach (var tool in toolsElement.EnumerateArray())
+        {
+            var name = tool.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            object? schema = null;
+            if (tool.TryGetProperty("inputSchema", out var schemaEl))
+                schema = JsonSerializer.Deserialize<object>(schemaEl.GetRawText());
+
+            tools.Add(new McpToolDefinition
+            {
+                ServerName = server.Name,
+                Name = name,
+                Description = tool.TryGetProperty("description", out var descEl) ? descEl.GetString() : null,
+                InputSchema = schema
+            });
+        }
+
+        return tools;
+    }
+
+    private async Task<McpNormalizedResult> CallToolRemoteAsync(
+        string appId,
+        IntegrationToolConfig server,
+        string toolName,
+        string argumentsJson,
+        CancellationToken cancellationToken)
+    {
+        var payload = await BuildRemotePayloadAsync(appId, server, cancellationToken).ConfigureAwait(false);
+        payload["toolName"] = toolName;
+        payload["arguments"] = string.IsNullOrWhiteSpace(argumentsJson) ? "{}" : argumentsJson;
+
+        using var response = await PostRemoteAsync("/v1/stdio/tools/call", payload, cancellationToken)
+            .ConfigureAwait(false);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(FormatRemoteCallFailure((int)response.StatusCode, body));
+        }
+
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+        if (!doc.RootElement.TryGetProperty("result", out var result))
+            return new McpNormalizedResult();
+
+        return Normalize(FormatToolResult(result));
+    }
+
+    private static string FormatRemoteCallFailure(int statusCode, string body)
+    {
+        var hint = string.Empty;
+        if (body.Contains("504", StringComparison.Ordinal)
+            || body.Contains("timed out", StringComparison.OrdinalIgnoreCase)
+            || body.Contains("timeout", StringComparison.OrdinalIgnoreCase))
+        {
+            hint =
+                " Zuora MCP timed out (~60s on their gateway). Narrow the query, reduce result size, or call with help:true first.";
+        }
+        else if (body.Contains("sending the request", StringComparison.OrdinalIgnoreCase))
+        {
+            hint = " Transient network error to Zuora MCP — retry once.";
+        }
+
+        return $"MCP runtime tools/call failed: {statusCode} {body}.{hint}";
+    }
+
+    private async Task<Dictionary<string, object?>> BuildRemotePayloadAsync(
+        string appId,
+        IntegrationToolConfig server,
+        CancellationToken cancellationToken)
+    {
+        var env = await ResolveEnvAsync(appId, server, cancellationToken).ConfigureAwait(false);
+        var (command, args, cwd) = McpStdioPathNormalizer.NormalizeForLinuxContainer(
+            server.Command ?? string.Empty,
+            server.Args,
+            server.WorkingDirectory);
+
+        return new Dictionary<string, object?>
+        {
+            ["command"] = command,
+            ["args"] = args,
+            ["env"] = env,
+            ["cwd"] = string.IsNullOrWhiteSpace(cwd) ? null : cwd,
+            ["timeoutSeconds"] = server.TimeoutSeconds
+        };
+    }
+
+    private async Task<HttpResponseMessage> PostRemoteAsync(
+        string path,
+        object payload,
+        CancellationToken cancellationToken)
+    {
+        var client = _httpClientFactory.CreateClient("McpRuntime");
+        var baseUrl = _options.McpRuntimeUrl.TrimEnd('/');
+        return await client
+            .PostAsJsonAsync($"{baseUrl}{path}", payload, JsonOptions, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()
@@ -249,6 +391,10 @@ public sealed class McpStdioClient : IAsyncDisposable
             env.TryAdd("MCP_BEARER_TOKEN", secret.BearerToken);
         if (!string.IsNullOrWhiteSpace(secret.ApiKey))
             env.TryAdd("MCP_API_KEY", secret.ApiKey);
+
+        // zuora-mcp remote bridge default is 120s; keep it aligned with integration timeout.
+        if (server.TimeoutSeconds > 0)
+            env.TryAdd("REMOTE_MCP_TIMEOUT_MS", (server.TimeoutSeconds * 1000).ToString());
 
         return env;
     }
