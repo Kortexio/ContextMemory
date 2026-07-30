@@ -38,23 +38,36 @@ public sealed class AgenticPromptProfileResolverTests
 public sealed class AgenticSystemPromptBuilderTests
 {
     [Fact]
-    public void Build_OllamaProfile_MentionsToolCalls()
+    public void Build_IncludesToolsAndActiveSkills()
     {
         var config = new AppRuntimeConfig
         {
             AppId = "test",
             LlmBackend = "ollama",
-            LlmModel = "qwen3.5:9b"
+            LlmModel = "qwen3.5:9b",
+            ResolvedPolicy = new ResolvedAgenticPolicy
+            {
+                ActiveSkills =
+                [
+                    new AgenticSkillDefinition
+                    {
+                        Id = "tool-calling-discipline",
+                        Name = "Tool-calling discipline",
+                        PromptMarkdown = "## Tool-calling discipline\n- Emit tool_calls with valid JSON."
+                    }
+                ]
+            }
         };
 
         var prompt = AgenticSystemPromptBuilder.Build(config, "shell_execute");
 
+        Assert.Contains("shell_execute", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("tool_calls", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Ollama", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("## Active skills", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Build_OpenAiProfile_MentionsFunctions()
+    public void Build_OpenAi_StillListsTools()
     {
         var config = new AppRuntimeConfig
         {
@@ -65,12 +78,11 @@ public sealed class AgenticSystemPromptBuilderTests
 
         var prompt = AgenticSystemPromptBuilder.Build(config, "shell_execute");
 
-        Assert.Contains("Function calling", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("OpenAI", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Available tools: shell_execute", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void Build_ClaudeProfile_EmphasizesReflection()
+    public void Build_WithoutSkills_HasNoActiveSkillsSection()
     {
         var config = new AppRuntimeConfig
         {
@@ -81,8 +93,8 @@ public sealed class AgenticSystemPromptBuilderTests
 
         var prompt = AgenticSystemPromptBuilder.Build(config, "shell_execute");
 
-        Assert.Contains("Before using", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("economical", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("## Active skills", prompt, StringComparison.Ordinal);
+        Assert.Contains("Agentic mode", prompt, StringComparison.OrdinalIgnoreCase);
     }
 }
 

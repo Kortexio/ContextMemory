@@ -33,6 +33,12 @@ public record AppRuntimeConfig
     public WebSearchConfig WebSearch { get; init; } = WebSearchConfig.Disabled;
     public AgenticConfig Agentic { get; init; } = AgenticConfig.Disabled;
 
+    /// <summary>
+    /// Runtime-only resolved skills/guardrails (not persisted in ConfigJson).
+    /// Populated by <c>IAgenticPolicyPackResolver</c> at chat start.
+    /// </summary>
+    public ResolvedAgenticPolicy ResolvedPolicy { get; init; } = new();
+
     /// <summary>When true, exposes the built-in <c>wiki_search</c> tool for app-scoped global docs.</summary>
     public bool GlobalWikiEnabled { get; init; } = true;
 

@@ -1,10 +1,54 @@
-# One-command local stack: API (:5100) + Admin (:5200)
+# One-command local stack: API (:5100) + Admin (:5200) + MCP runtime + code sandbox
 # Usage:  docker compose up --build
 # Requires Ollama on the host (default http://host.docker.internal:11434)
+#
+# mcp-runtime  = hosts MCP stdio servers (e.g. zuora-mcp)
+# sandbox-runtime = runs shell/python/node via POST /execute (self-hosted-sandbox)
 
 name: contextmemory
 
 services:
+  mcp-runtime:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp-runtime
+    container_name: contextmemory-mcp-runtime
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      MCP_SESSION_IDLE_MS: "300000"
+      MCP_DEFAULT_TIMEOUT_MS: "120000"
+    volumes:
+      - mcp_packages:/opt/mcps
+    networks:
+      - cm-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  sandbox-runtime:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox-runtime
+    container_name: contextmemory-sandbox-runtime
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      SANDBOX_TIMEOUT_MS: "60000"
+      SANDBOX_MAX_OUTPUT_CHARS: "32000"
+      SANDBOX_ALLOW_EGRESS: "true"
+    networks:
+      - cm-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
+
   api:
     build:
       context: .
@@ -21,6 +65,7 @@ services:
       ContextMemory__OllamaEndpoint: ${OLLAMA_ENDPOINT:-http://host.docker.internal:11434}
       ContextMemory__DefaultLlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
       ContextMemory__MasterKey: ${MASTER_KEY:-cm_master_dev_key_change_me}
+      ContextMemory__McpRuntimeUrl: http://mcp-runtime:8080
       ContextMemory__AdminCorsOrigins__0: ${ADMIN_PUBLIC_URL:-http://localhost:5200}
       ContextMemory__Apps__demo-dev__ApiKey: ${DEMO_APP_API_KEY:-cm_live_dev_key_change_me}
       ContextMemory__Apps__demo-dev__SystemPrompt: You are a helpful, clear, and precise assistant.
@@ -28,6 +73,11 @@ services:
       ContextMemory__Apps__demo-dev__LlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
     volumes:
       - cm_data:/app/data
+    depends_on:
+      mcp-runtime:
+        condition: service_healthy
+      sandbox-runtime:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -63,6 +113,7 @@ services:
 
 volumes:
   cm_data:
+  mcp_packages:
 
 networks:
   cm-net:

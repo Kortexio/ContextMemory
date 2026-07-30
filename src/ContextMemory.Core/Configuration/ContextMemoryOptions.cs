@@ -26,6 +26,11 @@ public class ContextMemoryOptions
     public List<string> AdminCorsOrigins { get; set; } = [];
     public string PersistenceProvider { get; set; } = "File";
     public string DefaultLlmModel { get; set; } = "qwen3.5:9b";
+    /// <summary>
+    /// Optional HTTP base URL of the MCP stdio runtime sidecar (e.g. http://mcp-runtime:8080).
+    /// When set, stdio MCP servers are executed in the sidecar instead of the API process.
+    /// </summary>
+    public string McpRuntimeUrl { get; set; } = string.Empty;
     public Dictionary<string, AppOptionsEntry> Apps { get; set; } = new();
     public WebSearchOptions WebSearch { get; set; } = new();
 }

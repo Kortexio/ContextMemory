@@ -94,6 +94,64 @@ public sealed class AdminApiClient
         await EnsureSuccessAsync(response).ConfigureAwait(false);
     }
 
+    public Task<AgenticCatalogAdminDto?> GetAgenticCatalogAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<AgenticCatalogAdminDto>("/admin/agentic/catalog", cancellationToken);
+
+    public Task<AgenticSkillAdminDto?> GetAgenticSkillAsync(string id, CancellationToken cancellationToken = default) =>
+        GetAsync<AgenticSkillAdminDto>($"/admin/agentic/skills/{Uri.EscapeDataString(id)}", cancellationToken);
+
+    public async Task<AgenticSkillAdminDto> UpsertAgenticSkillAsync(
+        AgenticSkillAdminDto skill,
+        bool create,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(
+            create ? HttpMethod.Post : HttpMethod.Put,
+            create
+                ? "/admin/agentic/skills"
+                : $"/admin/agentic/skills/{Uri.EscapeDataString(skill.Id)}");
+        request.Content = JsonContent.Create(skill);
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+        return await ReadJsonAsync<AgenticSkillAdminDto>(response, cancellationToken).ConfigureAwait(false)
+               ?? throw new InvalidOperationException("Empty skill response.");
+    }
+
+    public async Task DeleteAgenticSkillAsync(string id, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Delete, $"/admin/agentic/skills/{Uri.EscapeDataString(id)}");
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+    }
+
+    public async Task<AgenticSkillAdminDto> ImportAgenticSkillAsync(
+        Stream fileStream,
+        string fileName,
+        bool replace,
+        CancellationToken cancellationToken = default)
+    {
+        using var content = new MultipartFormDataContent();
+        var streamContent = new StreamContent(fileStream);
+        content.Add(streamContent, "file", fileName);
+        content.Add(new StringContent(replace ? "true" : "false"), "replace");
+
+        using var request = CreateRequest(
+            HttpMethod.Post,
+            $"/admin/agentic/skills/import?replace={(replace ? "true" : "false")}");
+        request.Content = content;
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+        return await ReadJsonAsync<AgenticSkillAdminDto>(response, cancellationToken).ConfigureAwait(false)
+               ?? throw new InvalidOperationException("Empty import response.");
+    }
+
+    public string GetSkillExportUrl(string id)
+    {
+        if (!_session.IsConfigured)
+            throw new InvalidOperationException("Configure API URL and master key in Settings.");
+        return $"{_session.Settings.ApiBaseUrl.TrimEnd('/')}/admin/agentic/skills/{Uri.EscapeDataString(id)}/export";
+    }
+
     public async Task<RegisterAppResponse> RegisterAppAsync(
         RegisterAppRequest request,
         CancellationToken cancellationToken = default)

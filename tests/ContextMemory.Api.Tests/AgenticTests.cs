@@ -234,8 +234,7 @@ public sealed class AgenticIntegrationTests : IClassFixture<AgenticStubWebApplic
         Assert.Contains("agentic-ok", body, StringComparison.OrdinalIgnoreCase);
 
         Assert.Equal(2, _factory.AgenticHandler.ChatRequests.Count);
-        var firstBody = await _factory.AgenticHandler.ChatRequests[0].Content!.ReadAsStringAsync();
-        Assert.Contains("\"tools\"", firstBody, StringComparison.Ordinal);
+        Assert.Contains("\"tools\"", _factory.AgenticHandler.ChatRequestBodies[0], StringComparison.Ordinal);
     }
 }
 
@@ -395,6 +394,8 @@ public sealed class McpJsonRpcClientTests
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpOAuthTokenProvider>.Instance);
         var stdio = new ContextMemory.Infrastructure.Agentic.Mcp.McpStdioClient(
             credentials,
+            new SingleHttpClientFactory(),
+            Microsoft.Extensions.Options.Options.Create(new ContextMemory.Core.Configuration.ContextMemoryOptions()),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpStdioClient>.Instance);
         var client = new ContextMemory.Infrastructure.Agentic.Mcp.McpJsonRpcClient(
             new HttpClient(),
@@ -426,6 +427,8 @@ public sealed class McpJsonRpcClientTests
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpOAuthTokenProvider>.Instance);
         var stdio = new ContextMemory.Infrastructure.Agentic.Mcp.McpStdioClient(
             credentials,
+            new SingleHttpClientFactory(),
+            Microsoft.Extensions.Options.Options.Create(new ContextMemory.Core.Configuration.ContextMemoryOptions()),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpStdioClient>.Instance);
         var client = new ContextMemory.Infrastructure.Agentic.Mcp.McpJsonRpcClient(
             new HttpClient(),
@@ -450,6 +453,8 @@ public sealed class McpJsonRpcClientTests
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpOAuthTokenProvider>.Instance);
         var stdio = new ContextMemory.Infrastructure.Agentic.Mcp.McpStdioClient(
             credentials,
+            new SingleHttpClientFactory(),
+            Microsoft.Extensions.Options.Options.Create(new ContextMemory.Core.Configuration.ContextMemoryOptions()),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpStdioClient>.Instance);
         var client = new ContextMemory.Infrastructure.Agentic.Mcp.McpJsonRpcClient(
             new HttpClient(),
@@ -483,6 +488,18 @@ public sealed class McpJsonRpcClientTests
 
         Assert.True(server.IsStdioTransport);
         Assert.True(server.IsConfigured);
+    }
+
+    [Fact]
+    public void McpStdioPathNormalizer_RewritesWindowsZuoraPaths()
+    {
+        var (command, args, _) = ContextMemory.Infrastructure.Agentic.Mcp.McpStdioPathNormalizer.NormalizeForLinuxContainer(
+            @"C:\Program Files\nodejs\node.exe",
+            [@"C:\Users\vitor\.cursor\zuora-mcp-runtime\node_modules\zuora-mcp\dist\index.cjs"],
+            null);
+
+        Assert.Equal("node", command);
+        Assert.Equal("/opt/mcps/zuora-mcp/dist/index.cjs", args[0]);
     }
 
     [Fact]
@@ -525,6 +542,11 @@ public sealed class McpJsonRpcClientTests
 
         public Task UpsertAsync(McpCredentialRecord record, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+    }
+
+    private sealed class SingleHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new();
     }
 }
 

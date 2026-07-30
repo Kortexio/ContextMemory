@@ -37,7 +37,7 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
                 new OllamaFunction(
                     mcpTool.QualifiedName,
                     AgenticToolDescriptionBuilder.BuildMcpDescription(mcpTool, runtimeConfig),
-                    mcpTool.InputSchema ?? new { type = "object", properties = new { } })));
+                    McpInputSchemaSanitizer.Sanitize(mcpTool.InputSchema))));
         }
 
         return tools;

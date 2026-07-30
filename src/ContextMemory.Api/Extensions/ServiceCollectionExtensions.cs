@@ -60,12 +60,15 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<LlmJudgeAgentValidator>();
         services.AddSingleton<IAgentValidator, HybridAgentValidator>();
         services.AddSingleton<IAgentExecutionLogger, AgentExecutionLogger>();
+        services.AddSingleton<IAgenticPolicyPackResolver, AgenticPolicyPackResolver>();
 
         services.AddSingleton<IAgentConfirmationFlow, AgentConfirmationFlow>();
         services.AddSingleton<IAgentToolCallProcessor, AgentToolCallProcessor>();
         services.AddSingleton<IAgentLoopRunner, AgentLoopRunner>();
         services.AddScoped<IAgenticToolRegistry, AgenticToolRegistryService>();
         services.AddScoped<IAgentOrchestrator, AgentOrchestrator>();
+
+        services.AddHostedService<AgenticCatalogSeedHostedService>();
 
         var llmTimeoutSeconds = ResolveLlmTimeoutSeconds(configuration);
         var llmTimeout = TimeSpan.FromSeconds(llmTimeoutSeconds);

@@ -18,6 +18,9 @@ public record AgenticConfig
     [JsonPropertyName("promptProfile")]
     public string PromptProfile { get; init; } = "auto";
 
+    [JsonPropertyName("policyPacks")]
+    public PolicyPacksConfig PolicyPacks { get; init; } = new();
+
     public bool HasExecutionTools => Tools.Execution.Count > 0;
 
     public bool HasIntegrationTools => Tools.Integrations.Count > 0;

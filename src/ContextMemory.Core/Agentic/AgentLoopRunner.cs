@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Http;
 using ContextMemory.Core.Localization;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
@@ -83,7 +84,34 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 Stream = false
             };
 
-            var response = await adapter.ChatAsync(llmRequest, cancellationToken).ConfigureAwait(false);
+            OllamaResponse response;
+            try
+            {
+                response = await adapter.ChatAsync(llmRequest, cancellationToken).ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex) when (IsLlmGrammarError(ex))
+            {
+                _logger.LogWarning(
+                    ex,
+                    "LLM rejected tool grammars for {AppId}; retrying with simplified MCP parameter schemas",
+                    request.AppId);
+
+                var simplifiedTools = SimplifyToolSchemas(llmRequest.Tools);
+                var retryRequest = llmRequest with { Tools = simplifiedTools };
+                try
+                {
+                    response = await adapter.ChatAsync(retryRequest, cancellationToken).ConfigureAwait(false);
+                }
+                catch (HttpRequestException retryEx) when (IsLlmGrammarError(retryEx))
+                {
+                    _logger.LogError(retryEx, "LLM grammar still failing for {AppId} after schema simplify", request.AppId);
+                    throw new InvalidOperationException(
+                        "O modelo LLM rejeitou os schemas das tools (grammar). " +
+                        "Reduza maxMcpToolsPerTurn ou simplifique as tools MCP.",
+                        retryEx);
+                }
+            }
+
             var assistantMessage = response.Message;
 
             if (assistantMessage?.ToolCalls is { Count: > 0 } toolCalls)
@@ -268,4 +296,31 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             AgentPartialResponseFormatter.FormatTimeoutResponse(lastAnswer, steps, language),
             steps,
             iterations);
+
+    private static bool IsLlmGrammarError(HttpRequestException ex)
+    {
+        var msg = ex.Message ?? string.Empty;
+        return msg.Contains("failed to parse grammar", StringComparison.OrdinalIgnoreCase)
+               || msg.Contains("Failed to initialize samplers", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static List<OllamaTool>? SimplifyToolSchemas(List<OllamaTool>? tools)
+    {
+        if (tools is null || tools.Count == 0)
+            return tools;
+
+        // Aggressive fallback: keep tool names/descriptions, drop complex parameter grammars.
+        object minimal = new Dictionary<string, object?>
+        {
+            ["type"] = "object",
+            ["properties"] = new Dictionary<string, object?>(),
+            ["additionalProperties"] = true
+        };
+
+        return tools
+            .Select(t => new OllamaTool(
+                t.Type,
+                new OllamaFunction(t.Function.Name, t.Function.Description, minimal)))
+            .ToList();
+    }
 }

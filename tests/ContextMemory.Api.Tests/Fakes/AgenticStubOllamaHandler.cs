@@ -10,7 +10,10 @@ namespace ContextMemory.Api.Tests.Fakes;
 public sealed class AgenticStubOllamaHandler : HttpMessageHandler
 {
     public IReadOnlyList<HttpRequestMessage> ChatRequests => _chatRequests;
+    public IReadOnlyList<string> ChatRequestBodies => _chatRequestBodies;
+
     private readonly List<HttpRequestMessage> _chatRequests = [];
+    private readonly List<string> _chatRequestBodies = [];
 
     /// <summary>Quando activo, responde sempre com tool_calls (para testes de timeout).</summary>
     public bool InfiniteToolLoop { get; set; }
@@ -28,8 +31,9 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
 
         if (path.EndsWith("/api/chat", StringComparison.OrdinalIgnoreCase))
         {
-            _chatRequests.Add(request);
             var body = request.Content?.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult() ?? "";
+            _chatRequests.Add(request);
+            _chatRequestBodies.Add(body);
 
             var awaitingToolResult = body.Contains("\"tools\"", StringComparison.Ordinal)
                 && !body.Contains("\"role\":\"tool\"", StringComparison.Ordinal)

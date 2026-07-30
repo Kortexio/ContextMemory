@@ -1,4 +1,7 @@
 @using ContextMemory.Core.Agentic
+@using ContextMemory.Admin.UI.Models
+@using ContextMemory.Admin.UI.Services
+@inject AdminApiClient Api
 
 <div class="card card-outline card-warning mb-3">
     <div class="card-header">
@@ -96,40 +99,124 @@
             <FieldHelp>Escalate instead of returning a partial answer when the iteration cap is hit.</FieldHelp>
         </div>
 
-        <h6>Execution tools (ACA)</h6>
-        <FieldHelp>Azure Container Apps Dynamic Sessions (or compatible pool) for isolated shell/python/node.</FieldHelp>
+        <h6 class="mt-3">Skills &amp; guardrail packs</h6>
+        <p class="text-muted small mb-2">
+            Loaded into the model on every chat. Manage catalog text on
+            <a href="/skills">Skills</a>.
+        </p>
+        @if (_catalogError is not null)
+        {
+            <div class="alert alert-warning py-2">@_catalogError</div>
+        }
+        else if (!_catalogLoaded)
+        {
+            <p class="text-muted small"><i class="fas fa-spinner fa-spin"></i> Loading catalog…</p>
+        }
+        else
+        {
+            <div class="row">
+                <div class="col-md-6">
+                    <strong class="d-block mb-2">Skills</strong>
+                    @foreach (var skill in _catalogSkills)
+                    {
+                        var sid = skill.Id;
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="checkbox" id="@($"skill-{sid}")"
+                                   checked="@Model.EnabledSkillIds.Contains(sid)"
+                                   @onchange="e => ToggleSkill(sid, (bool)(e.Value ?? false))" />
+                            <label class="form-check-label" for="@($"skill-{sid}")">
+                                @skill.Name
+                                @if (skill.IsSystem)
+                                {
+                                    <span class="badge badge-secondary ml-1">system</span>
+                                }
+                            </label>
+                            <div class="text-muted small">@skill.Description</div>
+                        </div>
+                    }
+                </div>
+                <div class="col-md-6">
+                    <strong class="d-block mb-2">Guardrail packs</strong>
+                    @foreach (var g in _catalogGuardrails)
+                    {
+                        var gid = g.Id;
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="checkbox" id="@($"gr-{gid}")"
+                                   checked="@Model.EnabledGuardrailIds.Contains(gid)"
+                                   @onchange="e => ToggleGuardrail(gid, (bool)(e.Value ?? false))" />
+                            <label class="form-check-label" for="@($"gr-{gid}")">
+                                @g.Name
+                                <span class="badge badge-light ml-1">@g.Kind</span>
+                            </label>
+                            <div class="text-muted small">@g.Description</div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <h6 class="mt-4">Execution tools</h6>
+        <FieldHelp>
+            Code runners for shell/python/node.
+            Use <code>self-hosted-sandbox</code> with <code>http://sandbox-runtime:8080</code> in Docker,
+            or <code>aca-session</code> with an Azure Dynamic Sessions pool URL.
+            (Different from MCP runtime.)
+        </FieldHelp>
         @for (var i = 0; i < Model.Tools.Execution.Count; i++)
         {
             var index = i;
             <div class="border rounded p-2 mb-2">
                 <div class="form-row">
                     <div class="col-md-3 form-group mb-2">
+                        <label>Type</label>
+                        <InputSelect class="form-control form-control-sm" @bind-Value="Model.Tools.Execution[index].Type">
+                            <option value="self-hosted-sandbox">self-hosted-sandbox</option>
+                            <option value="aca-session">aca-session</option>
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-3 form-group mb-2">
                         <label>Runtime</label>
                         <InputSelect class="form-control form-control-sm" @bind-Value="Model.Tools.Execution[index].Runtime">
                             <option value="shell">shell</option>
                             <option value="python">python</option>
                             <option value="node">node</option>
-                            <option value="custom">custom</option>
+                            @if (Model.Tools.Execution[index].Type == "aca-session")
+                            {
+                                <option value="custom">custom</option>
+                            }
                         </InputSelect>
-                        <FieldHelp>Language runtime inside the session pool.</FieldHelp>
+                        <FieldHelp>Language runtime inside the sandbox/pool.</FieldHelp>
                     </div>
                     <div class="col-md-5 form-group mb-2">
-                        <label>Pool endpoint</label>
-                        <InputText class="form-control form-control-sm"
-                                   @bind-Value="Model.Tools.Execution[index].PoolEndpoint" />
-                        <FieldHelp>ACA / sandbox pool base URL for this runtime.</FieldHelp>
-                    </div>
-                    <div class="col-md-3 form-group mb-2">
-                        <label>Container image (custom)</label>
-                        <InputText class="form-control form-control-sm"
-                                   @bind-Value="Model.Tools.Execution[index].ContainerImage" />
-                        <FieldHelp>Only for <code>custom</code> runtime.</FieldHelp>
+                        <label>@(Model.Tools.Execution[index].Type == "self-hosted-sandbox" ? "Sandbox endpoint" : "Pool endpoint")</label>
+                        @if (Model.Tools.Execution[index].Type == "self-hosted-sandbox")
+                        {
+                            <InputText class="form-control form-control-sm"
+                                       @bind-Value="Model.Tools.Execution[index].SandboxEndpoint"
+                                       placeholder="http://sandbox-runtime:8080" />
+                            <FieldHelp>Base URL of the sandbox service (<code>POST /execute</code>).</FieldHelp>
+                        }
+                        else
+                        {
+                            <InputText class="form-control form-control-sm"
+                                       @bind-Value="Model.Tools.Execution[index].PoolEndpoint"
+                                       placeholder="https://….azurecontainerapps.io" />
+                            <FieldHelp>ACA Dynamic Sessions pool base URL.</FieldHelp>
+                        }
                     </div>
                     <div class="col-md-1 d-flex align-items-end mb-2">
                         <button type="button" class="btn btn-sm btn-outline-danger"
                                 @onclick="() => RemoveExecution(index)">×</button>
                     </div>
                 </div>
+                @if (Model.Tools.Execution[index].Type == "aca-session" && Model.Tools.Execution[index].Runtime == "custom")
+                {
+                    <div class="form-group mb-2">
+                        <label>Container image (custom)</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Execution[index].ContainerImage" />
+                    </div>
+                }
                 <div class="form-check">
                     <InputCheckbox class="form-check-input"
                                    @bind-Value="Model.Tools.Execution[index].AllowEgress" />
@@ -137,7 +224,7 @@
                 </div>
             </div>
         }
-        <button type="button" class="btn btn-sm btn-outline-secondary mb-3" @onclick="AddExecution">+ ACA runtime</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary mb-3" @onclick="AddExecution">+ execution runtime</button>
 
         <h6>Integration tools (MCP)</h6>
         <FieldHelp>
@@ -309,10 +396,66 @@
         "  \"env\": { \"API_BASE_URL\": \"https://example.com\" },\n" +
         "  \"credentialRef\": \"example-stdio\",\n" +
         "  \"enabled\": true,\n" +
-        "  \"timeoutSeconds\": 60\n" +
+        "  \"timeoutSeconds\": 300\n" +
         "}";
 
     [Parameter] public AgenticConfigForm Model { get; set; } = new();
+
+    private bool _catalogLoaded;
+    private string? _catalogError;
+    private List<AgenticSkillAdminDto> _catalogSkills = [];
+    private List<AgenticGuardrailAdminDto> _catalogGuardrails = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var catalog = await Api.GetAgenticCatalogAsync().ConfigureAwait(true);
+            _catalogSkills = catalog?.Skills?.ToList() ?? [];
+            _catalogGuardrails = catalog?.Guardrails?.ToList() ?? [];
+            if (Model.EnabledSkillIds.Count == 0 && Model.EnabledGuardrailIds.Count == 0 && !Model.PolicyPacksExplicit)
+            {
+                Model.EnabledSkillIds = _catalogSkills.Where(s => s.IsDefaultEnabled).Select(s => s.Id).ToList();
+                Model.EnabledGuardrailIds = _catalogGuardrails.Where(g => g.IsDefaultEnabled).Select(g => g.Id).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            _catalogError = ex.Message;
+        }
+        finally
+        {
+            _catalogLoaded = true;
+        }
+    }
+
+    private void ToggleSkill(string id, bool enabled)
+    {
+        Model.PolicyPacksExplicit = true;
+        if (enabled)
+        {
+            if (!Model.EnabledSkillIds.Contains(id))
+                Model.EnabledSkillIds.Add(id);
+        }
+        else
+        {
+            Model.EnabledSkillIds.RemoveAll(x => string.Equals(x, id, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private void ToggleGuardrail(string id, bool enabled)
+    {
+        Model.PolicyPacksExplicit = true;
+        if (enabled)
+        {
+            if (!Model.EnabledGuardrailIds.Contains(id))
+                Model.EnabledGuardrailIds.Add(id);
+        }
+        else
+        {
+            Model.EnabledGuardrailIds.RemoveAll(x => string.Equals(x, id, StringComparison.OrdinalIgnoreCase));
+        }
+    }
 
     private string ConfirmationKeywordsText
     {
@@ -360,19 +503,28 @@
         public string PromptProfile { get; set; } = "auto";
         public AgenticToolsForm Tools { get; set; } = new();
         public AgenticGuardrailsForm Guardrails { get; set; } = new();
+        public List<string> EnabledSkillIds { get; set; } = [];
+        public List<string> EnabledGuardrailIds { get; set; } = [];
+        public bool PolicyPacksExplicit { get; set; }
 
         public AgenticConfig ToConfig() => new()
         {
             Enabled = Enabled,
             PromptProfile = PromptProfile,
+            PolicyPacks = new PolicyPacksConfig
+            {
+                EnabledSkillIds = EnabledSkillIds.ToList(),
+                EnabledGuardrailIds = EnabledGuardrailIds.ToList()
+            },
             Tools = new AgenticToolsConfig
             {
                 MaxMcpToolsPerTurn = Tools.MaxMcpToolsPerTurn > 0 ? Tools.MaxMcpToolsPerTurn : 12,
                 Execution = Tools.Execution.Select(e => new ExecutionToolConfig
                 {
-                    Type = "aca-session",
+                    Type = string.IsNullOrWhiteSpace(e.Type) ? "self-hosted-sandbox" : e.Type,
                     Runtime = e.Runtime,
                     PoolEndpoint = e.PoolEndpoint,
+                    SandboxEndpoint = e.SandboxEndpoint,
                     ContainerImage = e.ContainerImage,
                     AllowEgress = e.AllowEgress
                 }).ToList(),
@@ -424,17 +576,23 @@
         public static AgenticConfigForm FromConfig(AgenticConfig? config)
         {
             config ??= AgenticConfig.Disabled;
+            var packs = config.PolicyPacks ?? new PolicyPacksConfig();
             return new AgenticConfigForm
             {
                 Enabled = config.Enabled,
                 PromptProfile = config.PromptProfile,
+                PolicyPacksExplicit = packs.EnabledSkillIds is not null || packs.EnabledGuardrailIds is not null,
+                EnabledSkillIds = packs.EnabledSkillIds?.ToList() ?? [],
+                EnabledGuardrailIds = packs.EnabledGuardrailIds?.ToList() ?? [],
                 Tools = new AgenticToolsForm
                 {
                     MaxMcpToolsPerTurn = config.Tools.MaxMcpToolsPerTurn > 0 ? config.Tools.MaxMcpToolsPerTurn : 12,
                     Execution = config.Tools.Execution.Select(e => new ExecutionToolForm
                     {
+                        Type = string.IsNullOrWhiteSpace(e.Type) ? "aca-session" : e.Type,
                         Runtime = e.Runtime,
                         PoolEndpoint = e.PoolEndpoint,
+                        SandboxEndpoint = e.SandboxEndpoint,
                         ContainerImage = e.ContainerImage,
                         AllowEgress = e.AllowEgress
                     }).ToList(),
@@ -513,10 +671,12 @@
 
     public sealed class ExecutionToolForm
     {
-        public string Runtime { get; set; } = "shell";
+        public string Type { get; set; } = "self-hosted-sandbox";
+        public string Runtime { get; set; } = "python";
         public string? PoolEndpoint { get; set; }
+        public string? SandboxEndpoint { get; set; } = "http://sandbox-runtime:8080";
         public string? ContainerImage { get; set; }
-        public bool AllowEgress { get; set; }
+        public bool AllowEgress { get; set; } = true;
     }
 
     public sealed class IntegrationToolForm

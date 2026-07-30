@@ -91,6 +91,28 @@ public sealed class FileMcpCatalogStore : IMcpCatalogStore
         await File.WriteAllTextAsync(GetPath(appId, integrationName), json, cancellationToken).ConfigureAwait(false);
     }
 
+    public Task PruneIntegrationsAsync(
+        string appId,
+        IEnumerable<string> keepIntegrationNames,
+        CancellationToken cancellationToken = default)
+    {
+        var keep = keepIntegrationNames
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var appDir = GetAppDir(appId);
+        if (!Directory.Exists(appDir))
+            return Task.CompletedTask;
+
+        foreach (var file in Directory.EnumerateFiles(appDir, "*.json"))
+        {
+            var integrationName = Path.GetFileNameWithoutExtension(file);
+            if (!keep.Contains(integrationName))
+                File.Delete(file);
+        }
+
+        return Task.CompletedTask;
+    }
+
     private string GetAppDir(string appId) => Path.Combine(_root, appId);
 
     private string GetPath(string appId, string integrationName) => Path.Combine(GetAppDir(appId), integrationName + ".json");

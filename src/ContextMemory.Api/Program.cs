@@ -62,6 +62,7 @@ app.MapChatEndpoint();
 app.MapGenerateEndpoint();
 app.MapAppsEndpoint();
 app.MapAdminEndpoints();
+app.MapAdminAgenticCatalogEndpoints();
 app.MapAdminSessionsEndpoints();
 app.MapAppsConfigEndpoints();
 app.MapAppsRegisterEndpoint();

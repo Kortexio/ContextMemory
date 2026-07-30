@@ -12,6 +12,7 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
     private readonly IAgentConfirmationFlow _confirmationFlow;
     private readonly IAgentToolCallProcessor _toolCallProcessor;
     private readonly IAgentLoopRunner _loopRunner;
+    private readonly IAgenticPolicyPackResolver _policyResolver;
     private readonly ILogger<AgentOrchestrator> _logger;
 
     public AgentOrchestrator(
@@ -19,12 +20,14 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
         IAgentConfirmationFlow confirmationFlow,
         IAgentToolCallProcessor toolCallProcessor,
         IAgentLoopRunner loopRunner,
+        IAgenticPolicyPackResolver policyResolver,
         ILogger<AgentOrchestrator> logger)
     {
         _toolRegistry = toolRegistry;
         _confirmationFlow = confirmationFlow;
         _toolCallProcessor = toolCallProcessor;
         _loopRunner = loopRunner;
+        _policyResolver = policyResolver;
         _logger = logger;
     }
 
@@ -84,6 +87,10 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
         Action<AgenticProgressEvent>? report,
         CancellationToken cancellationToken)
     {
+        runtimeConfig = await _policyResolver
+            .ResolveAsync(runtimeConfig, cancellationToken)
+            .ConfigureAwait(false);
+
         var lastUserMessage = enrichedRequest.Messages.GetLastUserMessage()?.Content;
         var recentToolNames = enrichedRequest.Messages
             .SelectMany(m => m.ToolCalls ?? [])

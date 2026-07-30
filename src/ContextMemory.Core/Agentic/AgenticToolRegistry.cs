@@ -76,20 +76,20 @@ public static class AgenticToolRegistry
     {
         if (string.Equals(execution.Runtime, "shell", StringComparison.OrdinalIgnoreCase))
         {
-            tools.Add(BuildShellTool(runtimeConfig));
+            tools.Add(BuildShellTool(runtimeConfig, execution));
         }
         else if (string.Equals(execution.Runtime, "python", StringComparison.OrdinalIgnoreCase))
         {
             tools.Add(BuildCodeTool(
                 PythonExecuteToolName,
-                AgenticToolDescriptionBuilder.BuildPythonDescription(runtimeConfig),
+                AgenticToolDescriptionBuilder.BuildPythonDescription(runtimeConfig, execution),
                 ToolSchemaMessages.PythonCode(runtimeConfig)));
         }
         else if (string.Equals(execution.Runtime, "node", StringComparison.OrdinalIgnoreCase))
         {
             tools.Add(BuildCodeTool(
                 NodeExecuteToolName,
-                AgenticToolDescriptionBuilder.BuildNodeDescription(runtimeConfig),
+                AgenticToolDescriptionBuilder.BuildNodeDescription(runtimeConfig, execution),
                 ToolSchemaMessages.NodeCode(runtimeConfig)));
         }
         else if (string.Equals(execution.Runtime, "custom", StringComparison.OrdinalIgnoreCase))
@@ -106,7 +106,7 @@ public static class AgenticToolRegistry
         if (string.Equals(execution.Runtime, "shell", StringComparison.OrdinalIgnoreCase))
         {
             if (!tools.Any(t => string.Equals(t.Function.Name, ShellExecuteToolName, StringComparison.Ordinal)))
-                tools.Add(BuildShellTool(runtimeConfig));
+                tools.Add(BuildShellTool(runtimeConfig, execution));
         }
         else if (string.Equals(execution.Runtime, "python", StringComparison.OrdinalIgnoreCase))
         {
@@ -114,7 +114,7 @@ public static class AgenticToolRegistry
             {
                 tools.Add(BuildCodeTool(
                     PythonExecuteToolName,
-                    AgenticToolDescriptionBuilder.BuildPythonDescription(runtimeConfig),
+                    AgenticToolDescriptionBuilder.BuildPythonDescription(runtimeConfig, execution),
                     ToolSchemaMessages.PythonCode(runtimeConfig, selfHosted: true)));
             }
         }
@@ -124,18 +124,18 @@ public static class AgenticToolRegistry
             {
                 tools.Add(BuildCodeTool(
                     NodeExecuteToolName,
-                    AgenticToolDescriptionBuilder.BuildNodeDescription(runtimeConfig),
+                    AgenticToolDescriptionBuilder.BuildNodeDescription(runtimeConfig, execution),
                     ToolSchemaMessages.NodeCode(runtimeConfig, selfHosted: true)));
             }
         }
     }
 
-    private static OllamaTool BuildShellTool(AppRuntimeConfig runtimeConfig) =>
+    private static OllamaTool BuildShellTool(AppRuntimeConfig runtimeConfig, ExecutionToolConfig? execution = null) =>
         new(
             "function",
             new OllamaFunction(
                 ShellExecuteToolName,
-                AgenticToolDescriptionBuilder.BuildShellDescription(runtimeConfig),
+                AgenticToolDescriptionBuilder.BuildShellDescription(runtimeConfig, execution),
                 new
                 {
                     type = "object",
