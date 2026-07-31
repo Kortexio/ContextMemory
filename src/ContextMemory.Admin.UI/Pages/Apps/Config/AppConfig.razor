@@ -46,15 +46,18 @@ else
                         <div class="form-group">
                             <label>Backend</label>
                             <InputSelect class="form-control" @bind-Value="_form.LlmBackend">
-                                <option value="ollama">ollama</option>
+                                <option value="ollama">ollama (OpenAI /v1 on OllamaEndpoint)</option>
+                                <option value="vllm">vllm</option>
                                 <option value="lmstudio">lmstudio</option>
                                 <option value="openai">openai</option>
                                 <option value="openai-compatible">openai-compatible</option>
                                 <option value="custom">custom (alias of openai-compatible)</option>
+                                <option value="ollama-native">ollama-native (/api/chat fallback)</option>
                             </InputSelect>
                             <FieldHelp>
-                                Protocol used to talk to the LLM.
-                                Use <code>openai-compatible</code> / <code>custom</code> with a Base URL for vLLM, LiteLLM, Azure OpenAI, etc.
+                                Backend protocol. Default <code>ollama</code> uses OpenAI-compatible <code>/v1</code> against
+                                <code>OllamaEndpoint</code>. Use <code>vllm</code> / <code>openai-compatible</code> with a Base URL for vLLM, LiteLLM, Azure OpenAI, etc.
+                                Prefer client API <code>POST /v1/chat/completions</code>.
                             </FieldHelp>
                         </div>
                         <div class="form-group">

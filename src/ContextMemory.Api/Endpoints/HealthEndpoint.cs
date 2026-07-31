@@ -22,23 +22,26 @@ public static class HealthEndpoint
         var config = options.Value;
         var usePostgres = PersistenceProviders.IsPostgres(config.PersistenceProvider);
 
-        // Cap LLM probe so Docker healthchecks (short curl timeout) do not hang on a slow Ollama.
-        bool ollamaHealthy;
-        using (var ollamaCts = CancellationTokenSource.CreateLinkedTokenSource(httpContext.RequestAborted))
+        // Cap LLM probe so Docker healthchecks (short curl timeout) do not hang on a slow backend.
+        // Default backend is OpenAI-compatible (/v1/models) via OllamaEndpoint or OpenAiEndpoint.
+        bool llmHealthy;
+        using (var llmCts = CancellationTokenSource.CreateLinkedTokenSource(httpContext.RequestAborted))
         {
-            ollamaCts.CancelAfter(TimeSpan.FromSeconds(2));
+            llmCts.CancelAfter(TimeSpan.FromSeconds(2));
             try
             {
-                ollamaHealthy = await adapterResolver
+                llmHealthy = await adapterResolver
                     .Resolve("ollama")
-                    .IsHealthyAsync(ollamaCts.Token)
+                    .IsHealthyAsync(llmCts.Token)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
-                ollamaHealthy = false;
+                llmHealthy = false;
             }
         }
+
+        var ollamaHealthy = llmHealthy;
 
         var appsLoaded = appRegistry.GetAllApps().Count > 0;
 

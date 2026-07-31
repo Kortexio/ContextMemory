@@ -14,11 +14,13 @@ public static class SwaggerServiceCollectionExtensions
                 Title = "ContextMemory Middleware API",
                 Version = "v1",
                 Description = """
-                    Ollama-compatible context middleware. Most routes require:
+                    OpenAI-compatible context middleware (preferred: POST /v1/chat/completions).
+                    Most routes require:
                     - `X-App-Id` and `X-User-Id` headers
                     - `Authorization: Bearer {app-api-key}`
 
                     Admin and app registration use `Authorization: Bearer {master-key}`.
+                    Legacy Ollama routes `/api/chat` and `/api/generate` remain available.
                     """
             });
 
@@ -118,12 +120,18 @@ internal sealed class ContextMemoryHeadersOperationFilter : Swashbuckle.AspNetCo
     private static readonly Dictionary<string, (string Summary, string Description)> EndpointDocs =
         new(StringComparer.OrdinalIgnoreCase)
         {
+            ["v1/chat/completions"] = (
+                "Chat completions (OpenAI-compatible)",
+                "OpenAI-compatible chat with session wiki enrichment, optional SSE streaming, web search, and agentic tools. Preferred public API."),
+            ["v1/models"] = (
+                "List models (OpenAI-compatible)",
+                "Returns the tenant's configured LLM model id in OpenAI /v1/models shape."),
             ["api/chat"] = (
-                "Chat completion",
-                "Ollama-compatible chat with session wiki enrichment, optional streaming (NDJSON), web search, and agentic tools."),
+                "Chat completion (deprecated Ollama wire)",
+                "Deprecated: prefer POST /v1/chat/completions. Ollama-compatible chat with session wiki enrichment, optional streaming (NDJSON), web search, and agentic tools."),
             ["api/generate"] = (
-                "Text generation",
-                "Ollama-compatible generate endpoint (non-chat) with tenant LLM configuration."),
+                "Text generation (deprecated Ollama wire)",
+                "Deprecated: prefer POST /v1/chat/completions. Ollama-compatible generate endpoint (non-chat) with tenant LLM configuration."),
             ["apps/{appid}"] = (
                 "Get app metadata",
                 "Returns runtime metadata for the authenticated tenant."),

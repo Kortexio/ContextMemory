@@ -60,6 +60,8 @@ app.MapHealthEndpoint();
 app.MapMetricsEndpoint();
 app.MapChatEndpoint();
 app.MapGenerateEndpoint();
+app.MapChatCompletionsEndpoint();
+app.MapOpenAiModelsEndpoint();
 app.MapAppsEndpoint();
 app.MapAdminEndpoints();
 app.MapAdminAgenticCatalogEndpoints();

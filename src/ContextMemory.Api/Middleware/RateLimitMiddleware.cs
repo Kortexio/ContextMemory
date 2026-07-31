@@ -24,7 +24,8 @@ public sealed class RateLimitMiddleware
     {
         var path = context.Request.Path;
         var isLlmRoute = path.StartsWithSegments("/api/chat", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWithSegments("/api/generate", StringComparison.OrdinalIgnoreCase);
+            || path.StartsWithSegments("/api/generate", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWithSegments("/v1/chat", StringComparison.OrdinalIgnoreCase);
 
         if (!isLlmRoute)
         {

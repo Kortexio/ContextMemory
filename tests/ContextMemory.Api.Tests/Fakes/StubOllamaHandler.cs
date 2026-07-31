@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace ContextMemory.Api.Tests.Fakes;
 
 /// <summary>
-/// Returns deterministic Ollama-shaped JSON for contract and passthrough tests.
+/// Deterministic stub for Ollama native (/api/*) and OpenAI-compatible (/v1/*) backends.
 /// </summary>
 public sealed class StubOllamaHandler : HttpMessageHandler
 {
@@ -27,9 +27,69 @@ public sealed class StubOllamaHandler : HttpMessageHandler
         LastRequest = request;
         var path = request.RequestUri?.AbsolutePath ?? string.Empty;
 
+        if (path.EndsWith("/v1/models", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith("/models", StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(JsonResponse(
+                """{"object":"list","data":[{"id":"llama3.2","object":"model","created":0,"owned_by":"stub"}]}""",
+                HttpStatusCode.OK));
+        }
+
         if (path.EndsWith("/api/tags", StringComparison.OrdinalIgnoreCase))
         {
             return Task.FromResult(JsonResponse("""{"models":[]}""", HttpStatusCode.OK));
+        }
+
+        if (path.EndsWith("/v1/chat/completions", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
+        {
+            var body = request.Content?.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult() ?? "";
+            var stream = body.Contains("\"stream\":true", StringComparison.Ordinal);
+
+            if (stream)
+            {
+                const string chunk = """data: {"id":"chatcmpl-stub","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":"Hi"},"finish_reason":null}]}""";
+                const string done = """data: {"id":"chatcmpl-stub","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}""";
+                var streamBody = chunk + "\n\n" + done + "\n\ndata: [DONE]\n\n";
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(streamBody, Encoding.UTF8, "text/event-stream")
+                });
+            }
+
+            if (IsWikiMaintainerPrompt(body))
+            {
+                var wikiContent = JsonSerializer.Serialize(WikiGenerateJson);
+                return Task.FromResult(JsonResponse(
+                    $$"""
+                    {
+                      "id": "chatcmpl-wiki",
+                      "object": "chat.completion",
+                      "model": "llama3.2",
+                      "choices": [{
+                        "index": 0,
+                        "message": { "role": "assistant", "content": {{wikiContent}} },
+                        "finish_reason": "stop"
+                      }]
+                    }
+                    """,
+                    HttpStatusCode.OK));
+            }
+
+            return Task.FromResult(JsonResponse(
+                """
+                {
+                  "id": "chatcmpl-stub",
+                  "object": "chat.completion",
+                  "model": "llama3.2",
+                  "choices": [{
+                    "index": 0,
+                    "message": { "role": "assistant", "content": "Hello from stub" },
+                    "finish_reason": "stop"
+                  }]
+                }
+                """,
+                HttpStatusCode.OK));
         }
 
         if (path.EndsWith("/api/generate", StringComparison.OrdinalIgnoreCase))

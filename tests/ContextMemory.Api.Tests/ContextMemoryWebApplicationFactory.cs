@@ -40,8 +40,12 @@ public sealed class ContextMemoryWebApplicationFactory : WebApplicationFactory<P
         {
             foreach (var d in services.Where(d => d.ServiceType == typeof(OllamaAdapter)).ToList())
                 services.Remove(d);
+            foreach (var d in services.Where(d => d.ServiceType == typeof(OpenAiAdapter)).ToList())
+                services.Remove(d);
 
             services.AddHttpClient<OllamaAdapter>()
+                .ConfigurePrimaryHttpMessageHandler(_ => new StubOllamaHandler());
+            services.AddHttpClient<OpenAiAdapter>()
                 .ConfigurePrimaryHttpMessageHandler(_ => new StubOllamaHandler());
         });
     }
