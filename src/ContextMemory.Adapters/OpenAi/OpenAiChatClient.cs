@@ -77,14 +77,21 @@ internal sealed class OpenAiChatClient
                 yield break;
 
             var chunk = JsonSerializer.Deserialize<OpenAiStreamChunk>(data, JsonOptions);
-            var content = chunk?.Choices?.FirstOrDefault()?.Delta?.Content;
-            if (string.IsNullOrEmpty(content))
+            var choice = chunk?.Choices?.FirstOrDefault();
+            var delta = choice?.Delta;
+            var content = delta?.Content;
+            if (string.IsNullOrEmpty(content) && (delta?.ToolCalls is null || delta.ToolCalls.Count == 0))
                 continue;
 
             yield return new OllamaResponse
             {
                 Model = request.Model,
-                Message = new OllamaMessage { Role = "assistant", Content = content },
+                Message = new OllamaMessage
+                {
+                    Role = "assistant",
+                    Content = content ?? string.Empty,
+                    ToolCalls = MapToolCallsFromOpenAi(delta?.ToolCalls)
+                },
                 Done = false
             };
         }
@@ -173,26 +180,125 @@ internal sealed class OpenAiChatClient
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
     }
 
-    private static OpenAiChatRequest MapRequest(OllamaRequest request, bool stream) =>
-        new()
+    internal static OpenAiChatRequest MapRequest(OllamaRequest request, bool stream)
+    {
+        var pendingToolCallIds = new Queue<string>();
+        var messages = new List<OpenAiChatMessage>();
+
+        foreach (var m in request.Messages)
+        {
+            if (string.Equals(m.Role, "tool", StringComparison.OrdinalIgnoreCase))
+            {
+                var toolCallId = pendingToolCallIds.Count > 0
+                    ? pendingToolCallIds.Dequeue()
+                    : $"call_{messages.Count}";
+                messages.Add(new OpenAiChatMessage
+                {
+                    Role = "tool",
+                    Content = m.Content ?? string.Empty,
+                    ToolCallId = toolCallId
+                });
+                continue;
+            }
+
+            List<OpenAiToolCall>? toolCalls = null;
+            if (m.ToolCalls is { Count: > 0 })
+            {
+                toolCalls = new List<OpenAiToolCall>(m.ToolCalls.Count);
+                for (var i = 0; i < m.ToolCalls.Count; i++)
+                {
+                    var tc = m.ToolCalls[i];
+                    var id = $"call_{messages.Count}_{i}";
+                    pendingToolCallIds.Enqueue(id);
+                    toolCalls.Add(new OpenAiToolCall
+                    {
+                        Id = id,
+                        Type = "function",
+                        Function = new OpenAiFunctionCall
+                        {
+                            Name = tc.Function.Name,
+                            Arguments = string.IsNullOrWhiteSpace(tc.Function.Arguments)
+                                ? "{}"
+                                : tc.Function.Arguments
+                        }
+                    });
+                }
+            }
+
+            messages.Add(new OpenAiChatMessage
+            {
+                Role = m.Role,
+                Content = toolCalls is { Count: > 0 } && string.IsNullOrEmpty(m.Content) ? null : m.Content,
+                ToolCalls = toolCalls
+            });
+        }
+
+        List<OpenAiTool>? tools = null;
+        if (request.Tools is { Count: > 0 })
+        {
+            tools = request.Tools.Select(t => new OpenAiTool
+            {
+                Type = string.IsNullOrWhiteSpace(t.Type) ? "function" : t.Type,
+                Function = new OpenAiFunction
+                {
+                    Name = t.Function.Name,
+                    Description = t.Function.Description,
+                    Parameters = t.Function.Parameters
+                }
+            }).ToList();
+        }
+
+        return new OpenAiChatRequest
         {
             Model = request.Model,
             Stream = stream,
-            Messages = request.Messages
-                .Select(m => new OpenAiChatMessage { Role = m.Role, Content = m.Content })
-                .ToList()
+            Messages = messages,
+            Tools = tools,
+            Temperature = request.Options?.Temperature,
+            TopP = request.Options?.TopP,
+            MaxTokens = request.Options?.NumPredict,
+            Stop = request.Options?.Stop,
+            Seed = request.Options?.Seed
         };
+    }
 
     private static OllamaResponse MapResponse(string model, OpenAiChatResponse? response)
     {
-        var content = response?.Choices?.FirstOrDefault()?.Message?.Content ?? string.Empty;
+        var choice = response?.Choices?.FirstOrDefault();
+        var message = choice?.Message;
+        var content = message?.Content ?? string.Empty;
+        var toolCalls = MapToolCallsFromOpenAi(message?.ToolCalls);
+        var finish = choice?.FinishReason;
+        var doneReason = string.Equals(finish, "tool_calls", StringComparison.OrdinalIgnoreCase)
+            ? "tool_calls"
+            : (finish ?? "stop");
+
         return new OllamaResponse
         {
-            Model = model,
-            Message = new OllamaMessage { Role = "assistant", Content = content },
+            Model = string.IsNullOrWhiteSpace(response?.Model) ? model : response!.Model!,
+            Message = new OllamaMessage
+            {
+                Role = "assistant",
+                Content = content,
+                ToolCalls = toolCalls
+            },
             Response = content,
             Done = true,
-            DoneReason = "stop"
+            DoneReason = doneReason
         };
+    }
+
+    private static List<OllamaToolCall>? MapToolCallsFromOpenAi(List<OpenAiToolCall>? toolCalls)
+    {
+        if (toolCalls is null || toolCalls.Count == 0)
+            return null;
+
+        return toolCalls
+            .Where(tc => !string.IsNullOrWhiteSpace(tc.Function?.Name))
+            .Select(tc => new OllamaToolCall(
+                new OllamaFunctionCall(
+                    tc.Function!.Name,
+                    string.IsNullOrWhiteSpace(tc.Function.Arguments) ? "{}" : tc.Function.Arguments)))
+            .ToList();
     }
 }

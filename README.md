@@ -7,9 +7,11 @@
 
 **Give an LLM memory by swapping a URL. That same URL can also act when it needs to.**
 
-ContextMemory is a context and agent proxy for applications that already talk to LLMs. The public wire format is **Ollama-compatible**: you keep using `POST /api/chat` with the same message schema and get back an Ollama-style response (`message.content` / `done`) — not OpenAI `choices[]`. Behind the scenes, the gateway enriches each turn with session memory (a per-session markdown wiki), optional **Global Wiki** retrieval via the `wiki_search` tool, optional web search, and — when enabled — an **agentic loop** with tools isolated per tenant.
+ContextMemory is a context and agent proxy for applications that talk to LLMs. The **preferred public wire format is OpenAI-compatible**: `POST /v1/chat/completions` (response with `choices[]`) and `GET /v1/models`. The same OpenAI-compatible protocol is used **downstream** to talk to Ollama (`/v1`), vLLM, LM Studio, OpenAI, or any compatible server.
 
-OpenAI, Azure OpenAI, Anthropic, and similar providers are supported as **LLM backends**; the gateway maps them to the Ollama response shape your client already reads.
+Legacy Ollama-native routes `POST /api/chat` and `POST /api/generate` remain available (deprecated) for older clients.
+
+Behind the scenes, the gateway enriches each turn with session memory (a per-session markdown wiki), optional **Global Wiki** retrieval via the `wiki_search` tool, optional web search, and — when enabled — an **agentic loop** with tools isolated per tenant.
 
 **Contents:** [Why](#why-it-exists) · [Cloud vs self-host](#two-ways-to-run-it) · [Cloud quick start](#quick-start--kortexio-cloud) · [Self-host / Docker](#quick-start--self-host) · [Architecture](#architecture-in-30-seconds) · [Features](#features) · [API](#api--stable-contract) · [Troubleshooting](#troubleshooting) · [License](#licensing)
 
@@ -18,7 +20,7 @@ OpenAI, Azure OpenAI, Anthropic, and similar providers are supported as **LLM ba
 > ### Don't want to self-host?
 > **[Kortexio Cloud](https://kortexio.io)** is the hosted version of this gateway — same request body and response schema, zero infrastructure, **bring your own LLM key** (no markup on tokens). Get an API key and point your chat endpoint at it in minutes. **[Start free →](https://kortexio.io)**
 >
-> Self-hosting this open-source core and running on Kortexio Cloud share the **same chat body and Ollama response**. The only differences are the API key prefix and whether you send `X-App-Id`. Prototype locally, move to the cloud without rewriting your chat payload — or the other way around.
+> Self-hosting this open-source core and running on Kortexio Cloud share the **same OpenAI-compatible chat body** (`/v1/chat/completions`). The only differences are the API key prefix and whether you send `X-App-Id`. Prototype locally, move to the cloud without rewriting your chat payload — or the other way around.
 
 ---
 
@@ -28,7 +30,7 @@ OpenAI, Azure OpenAI, Anthropic, and similar providers are supported as **LLM ba
 |---|---|
 | The LLM forgets context between messages | Per-session compiled wiki + recent history injected automatically |
 | Product/ops docs live outside the chat session | **Global Wiki** — app-scoped knowledge base searched on demand via `wiki_search` |
-| You need actions (shell, APIs, MCP) without a new endpoint | Agentic loop on the same `/api/chat`, invisible to the client |
+| You need actions (shell, APIs, MCP) without a new endpoint | Agentic loop on the same `/v1/chat/completions`, invisible to the client |
 | Each client/tenant needs different tools and rules | Per-app configuration: ACA, self-hosted sandbox, MCP, guardrails, prompts |
 | Destructive actions need human control | Blocking human-in-the-loop with wiki checkpoints |
 | Streaming with multi-step loops is complex | Internal buffer: client only receives final text; optional progress via metadata |
@@ -43,11 +45,11 @@ OpenAI, Azure OpenAI, Anthropic, and similar providers are supported as **LLM ba
 | LLM | BYOK via dashboard — set provider + model + key | You point the gateway at your own backend in `appsettings` |
 | API key format | `cmk_live_...` | `cm_live_...` |
 | Tenant selection | Bound to your key — no `X-App-Id` | `X-App-Id` header per app |
-| Request body & response | **Identical** (Ollama schema) | **Identical** (Ollama schema) |
+| Request body & response | **Identical** (OpenAI `/v1`) | **Identical** (OpenAI `/v1`) |
 | Best for | Shipping fast, no ops | Full control, air-gapped / on-prem |
 | Get started | [kortexio.io](https://kortexio.io) | [Quick start ↓](#quick-start--self-host) |
 
-Both speak the **same `POST /api/chat`** contract. The only auth differences are the key prefix and whether you pass `X-App-Id`. Never `choices[]` — the response is always Ollama-style `message.content` / `done`.
+Both speak the **same `POST /v1/chat/completions`** contract. The only auth differences are the key prefix and whether you pass `X-App-Id`. Response is OpenAI-style `choices[]`.
 
 ---
 
@@ -63,20 +65,20 @@ Kortexio Cloud is **bring-your-own-key**: Kortexio orchestrates memory and agent
 
 ### 2. Point your endpoint here
 
-If you already call an Ollama-compatible `POST /api/chat`, change one URL and keep the same body and response parsing:
+If you already call an OpenAI-compatible `POST /v1/chat/completions`, change one URL and keep the same body and response parsing:
 
 ```diff
-- POST http://localhost:11434/api/chat
-+ POST https://api.kortexio.io/api/chat
+- POST http://localhost:11434/v1/chat/completions
++ POST https://api.kortexio.io/v1/chat/completions
 ```
 
-Coming from the OpenAI Chat Completions API? Keep a similar message body, but parse the **Ollama** response (`message.content` / `done`), not `choices[]`.
+Coming from Ollama native `/api/chat`? Switch to `/v1/chat/completions` and parse `choices[0].message.content`.
 
 ### 3. First chat request
 
 ```bash
 # Turn 1 — teach it something
-curl -X POST https://api.kortexio.io/api/chat \
+curl -X POST https://api.kortexio.io/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-User-Id: user-42" \
   -H "X-Session-Id: sess-abc" \
@@ -89,7 +91,7 @@ curl -X POST https://api.kortexio.io/api/chat \
 
 ```bash
 # Turn 2 — same X-Session-Id, memory recalled automatically
-curl -X POST https://api.kortexio.io/api/chat \
+curl -X POST https://api.kortexio.io/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-User-Id: user-42" \
   -H "X-Session-Id: sess-abc" \
@@ -100,13 +102,18 @@ curl -X POST https://api.kortexio.io/api/chat \
   }'
 ```
 
-**Response (Ollama schema — same as self-host):**
+**Response (OpenAI schema — same as self-host):**
 
 ```json
 {
+  "id": "chatcmpl-...",
+  "object": "chat.completion",
   "model": "gpt-4o-mini",
-  "message": { "role": "assistant", "content": "The secret word is KORTEX-PINEAPPLE." },
-  "done": true
+  "choices": [{
+    "index": 0,
+    "message": { "role": "assistant", "content": "The secret word is KORTEX-PINEAPPLE." },
+    "finish_reason": "stop"
+  }]
 }
 ```
 
@@ -465,7 +472,10 @@ curl -X POST http://localhost:5100/apps/demo-dev/wiki/query \
 
 | Backend value | Wire protocol | Host default URL |
 |---|---|---|
-| `ollama` (default) | Ollama `/api/chat` | `ContextMemory:OllamaEndpoint` |
+| `ollama` (default) | OpenAI `/v1` on `OllamaEndpoint` | `ContextMemory:OllamaEndpoint` |
+| `vllm` / `openai-compatible` / `openai` / `custom` | OpenAI `/v1/chat/completions` | `ContextMemory:OpenAiEndpoint` or per-app `llmEndpoint` |
+| `lmstudio` | OpenAI `/v1` | `ContextMemory:LmStudioEndpoint` |
+| `ollama-native` | Ollama `/api/chat` (fallback) | `ContextMemory:OllamaEndpoint` |
 | `lmstudio` | OpenAI-compatible `/v1` | `ContextMemory:LmStudioEndpoint` |
 | `openai` | OpenAI-compatible `/v1` | `ContextMemory:OpenAiEndpoint` + `OpenAiApiKey` |
 | `openai-compatible` / `custom` | Same as `openai` | same (override per app) |
@@ -556,7 +566,10 @@ Everything is recorded in the session `log.md` for audit.
 
 | Endpoint | Description |
 |---|---|
-| `POST /api/chat` | Ollama-compatible chat (+ agentic, session memory, Global Wiki tool, web search) |
+| `POST /v1/chat/completions` | **Preferred** OpenAI-compatible chat (+ agentic, session memory, Global Wiki tool, web search) |
+| `GET /v1/models` | OpenAI-compatible model list for the tenant |
+| `POST /api/chat` | Deprecated Ollama-compatible chat |
+| `POST /api/generate` | Deprecated Ollama-compatible generate |
 | `POST /api/generate` | Ollama-compatible completion |
 | `PUT /apps/{id}/wiki/documents/{documentId}` | Upsert Global Wiki document |
 | `POST /apps/{id}/wiki/documents/batch` | Batch upsert Global Wiki documents |
@@ -568,7 +581,7 @@ Everything is recorded in the session `log.md` for audit.
 | `GET /health` | API, Ollama, Postgres health |
 | `GET /admin` | HTML pointer to the Admin UI host |
 
-The chat response is always the **Ollama schema** — `message.content` / `done`, never `choices[]` — with optional extensions under `context_memory` (see the self-host response above).
+The preferred chat response is the **OpenAI schema** — `choices[0].message.content`. Legacy `/api/chat` still returns Ollama `message.content` / `done`.
 
 ---
 

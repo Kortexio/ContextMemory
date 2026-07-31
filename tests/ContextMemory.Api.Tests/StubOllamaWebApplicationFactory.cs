@@ -41,8 +41,12 @@ public sealed class StubOllamaWebApplicationFactory : WebApplicationFactory<Prog
         {
             foreach (var d in services.Where(d => d.ServiceType == typeof(OllamaAdapter)).ToList())
                 services.Remove(d);
+            foreach (var d in services.Where(d => d.ServiceType == typeof(OpenAiAdapter)).ToList())
+                services.Remove(d);
 
             services.AddHttpClient<OllamaAdapter>()
+                .ConfigurePrimaryHttpMessageHandler(_ => OllamaHandler);
+            services.AddHttpClient<OpenAiAdapter>()
                 .ConfigurePrimaryHttpMessageHandler(_ => OllamaHandler);
         });
     }

@@ -171,6 +171,7 @@ public sealed class AuthMiddleware
     private static bool RequiresAuth(PathString path) =>
         path.StartsWithSegments("/api/chat", StringComparison.OrdinalIgnoreCase)
         || path.StartsWithSegments("/api/generate", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWithSegments("/v1", StringComparison.OrdinalIgnoreCase)
         || path.StartsWithSegments("/apps", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>

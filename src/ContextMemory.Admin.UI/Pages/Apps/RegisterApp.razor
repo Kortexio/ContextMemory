@@ -55,14 +55,17 @@
                                 <div class="col-md-6 form-group">
                                     <label>LLM backend</label>
                                     <InputSelect class="form-control" @bind-Value="_form.LlmBackend">
-                                        <option value="ollama">ollama</option>
+                                        <option value="ollama">ollama (OpenAI /v1)</option>
+                                        <option value="vllm">vllm</option>
                                         <option value="lmstudio">lmstudio</option>
                                         <option value="openai">openai</option>
                                         <option value="openai-compatible">openai-compatible (custom URL)</option>
+                                        <option value="ollama-native">ollama-native (/api/chat)</option>
                                     </InputSelect>
                                     <FieldHelp>
-                                        API shape to use. For a custom OpenAI-compatible server, pick
-                                        <code>openai-compatible</code> and set the endpoint URL below.
+                                        API shape to the LLM backend. Clients should call ContextMemory via
+                                        <code>POST /v1/chat/completions</code>. For a custom OpenAI-compatible server, pick
+                                        <code>openai-compatible</code> or <code>vllm</code> and set the endpoint URL below.
                                     </FieldHelp>
                                 </div>
                             </div>
