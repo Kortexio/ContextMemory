@@ -39,6 +39,10 @@ services:
       ContextMemory__Apps__laravox__SystemPrompt: És o motor de IA do Laravox para classificação de perfis e geração de mensagens.
       ContextMemory__Apps__laravox__DefaultLanguage: pt-PT
       ContextMemory__Apps__laravox__LlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
+      ContextMemory__Apps__kyc__ApiKey: ${KYC_APP_API_KEY:-cm_kyc_local_key}
+      ContextMemory__Apps__kyc__SystemPrompt: És o motor de IA do KYC para scoring de risco, OCR e relatórios de conformidade.
+      ContextMemory__Apps__kyc__DefaultLanguage: pt-PT
+      ContextMemory__Apps__kyc__LlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
     volumes:
       - gateway_data:/app/data
       - gateway_wikis:/app/wikis
