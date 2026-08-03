@@ -112,8 +112,8 @@ public static class AgenticToolDescriptionBuilder
     public static string BuildWikiSearchDescription(AppRuntimeConfig config) =>
         TenantLocale.Select(
             config.DefaultLanguage,
-            "Search the app's global knowledge base (Jira, Confluence, SQL exports, and other ingested documents). Use when the question needs documented facts not present in session memory. Do not use for greetings or pure conversational replies.",
-            "Pesquisa a base de conhecimento global da app (Jira, Confluence, exports SQL e outros documentos ingeridos). Usa quando a pergunta precisar de factos documentados que não estão na memória da sessão. Não uses para saudações ou conversa pura.");
+            "Search the app's global knowledge base (Jira, Confluence, SQL exports, and other ingested documents). Use when the question needs documented facts not present in session memory. Optional asOf (ISO-8601) retrieves what was valid at that time. Do not use for greetings or pure conversational replies.",
+            "Pesquisa a base de conhecimento global da app (Jira, Confluence, exports SQL e outros documentos ingeridos). Usa quando a pergunta precisar de factos documentados que não estão na memória da sessão. asOf opcional (ISO-8601) devolve o que era válido nessa data. Não uses para saudações ou conversa pura.");
 
     private static bool IsSelfHosted(ExecutionToolConfig? execution) =>
         execution is not null

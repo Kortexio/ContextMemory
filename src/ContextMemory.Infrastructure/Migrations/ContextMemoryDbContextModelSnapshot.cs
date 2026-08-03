@@ -187,6 +187,10 @@ namespace ContextMemory.Infrastructure.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<string>("RevisionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("text");
@@ -213,9 +217,18 @@ namespace ContextMemory.Infrastructure.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("Summary")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("SupersedesRevisionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -225,13 +238,23 @@ namespace ContextMemory.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("AppId", "DocumentId");
+                    b.Property<DateTimeOffset>("ValidFrom")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("ValidTo")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AppId", "DocumentId", "RevisionId");
 
                     b.HasIndex("AppId");
+
+                    b.HasIndex("AppId", "DocumentId", "Status");
 
                     b.HasIndex("AppId", "SourceId");
 
                     b.HasIndex("AppId", "UpdatedAt");
+
+                    b.HasIndex("AppId", "ValidFrom", "ValidTo");
 
                     b.ToTable("global_wiki_documents", (string)null);
                 });

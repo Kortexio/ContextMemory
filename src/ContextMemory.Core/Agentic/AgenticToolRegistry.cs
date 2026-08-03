@@ -44,6 +44,11 @@ public static class AgenticToolRegistry
                         {
                             type = "integer",
                             description = "Max documents to return (default 5)."
+                        },
+                        asOf = new
+                        {
+                            type = "string",
+                            description = "Optional ISO-8601 timestamp for point-in-time facts (what was true at this moment). Default = now."
                         }
                     },
                     required = new[] { "query" }

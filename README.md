@@ -5,7 +5,9 @@
 [![Docker](https://img.shields.io/badge/ghcr.io-contextmemory-blue?logo=docker)](https://github.com/users/Kortexio/packages/container/package/contextmemory)
 [![CI](https://github.com/Kortexio/ContextMemory/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/Kortexio/ContextMemory/actions/workflows/docker-publish.yml)
 
-**Give an LLM memory by swapping a URL. That same URL can also act when it needs to.**
+**Give Cursor and Claude permanent memory — one MCP config. Same gateway can also be your OpenAI-compatible chat URL when you need retrieval + action.**
+
+> **Wedge (start here):** [Permanent memory for Cursor / Claude in ~5 minutes](#give-cursor--claude-permanent-memory-5-minutes) · [Record the 20s aha GIF](docs/aha-demo.html)
 
 ContextMemory is a context and agent proxy for applications that talk to LLMs. The **preferred public wire format is OpenAI-compatible**: `POST /v1/chat/completions` (response with `choices[]`) and `GET /v1/models`. The same OpenAI-compatible protocol is used **downstream** to talk to Ollama (`/v1`), vLLM, LM Studio, OpenAI, or any compatible server.
 
@@ -13,7 +15,54 @@ Legacy Ollama-native routes `POST /api/chat` and `POST /api/generate` remain ava
 
 Behind the scenes, the gateway enriches each turn with session memory (a per-session markdown wiki), optional web search, and — when Global Wiki and/or agentic tools are enabled — an **agentic loop** where **retrieval is a tool** (`wiki_search`) alongside sandbox/MCP, not a separate RAG inject.
 
-**Contents:** [Why](#why-it-exists) · [Cloud vs self-host](#two-ways-to-run-it) · [Cloud quick start](#quick-start--kortexio-cloud) · [Self-host / Docker](#quick-start--self-host) · [Admin UI guide](#admin-ui-guide) · [Architecture](#architecture-in-30-seconds) · [Features](#features) · [Retrieval + agentic](#retrieval--agentic-loop) · [API](#api--stable-contract) · [Docs backlog](#documentation-backlog) · [Troubleshooting](#troubleshooting) · [License](#licensing)
+**Contents:** [Cursor memory (5 min)](#give-cursor--claude-permanent-memory-5-minutes) · [Why](#why-it-exists) · [How we compare](#how-we-compare) · [Cloud vs self-host](#two-ways-to-run-it) · [Cloud quick start](#quick-start--kortexio-cloud) · [Self-host / Docker](#quick-start--self-host) · [Admin UI guide](#admin-ui-guide) · [Architecture](#architecture-in-30-seconds) · [Features](#features) · [Retrieval + agentic](#retrieval--agentic-loop) · [API](#api--stable-contract) · [Docs backlog](#documentation-backlog) · [Troubleshooting](#troubleshooting) · [License](#licensing)
+
+---
+
+## Give Cursor / Claude permanent memory (5 minutes)
+
+This is the sharpest path: not “memory infrastructure,” but **your coding agent remembers across chats**.
+
+### 1. Start the gateway (~30s)
+
+```bash
+docker run --rm -p 5100:8080 \
+  -v contextmemory-data:/app/data \
+  -e ContextMemory__MasterKey=cm_master_dev_key_change_me \
+  -e ContextMemory__Apps__demo-dev__ApiKey=cm_live_dev_key_change_me \
+  -e ContextMemory__Apps__demo-dev__LlmModel=qwen3.5:9b \
+  -e ContextMemory__OllamaEndpoint=http://host.docker.internal:11434 \
+  --add-host=host.docker.internal:host-gateway \
+  ghcr.io/kortexio/contextmemory:latest
+```
+
+Prefer zero Docker? Use **[Kortexio Cloud](https://kortexio.io)** (`cmk_live_…`) and point `CONTEXTMEMORY_BASE_URL` at the cloud API.
+
+### 2. Wire MCP into Cursor (~1 min)
+
+```bash
+git clone https://github.com/Kortexio/ContextMemory.git
+cd ContextMemory/mcp-server
+npm install
+node print-mcp-config.mjs
+```
+
+Paste the printed JSON into **Cursor → Settings → MCP** (or `~/.cursor/mcp.json`). Same snippet works for Claude Desktop’s `claude_desktop_config.json`.
+
+### 3. Aha moment (~1 min)
+
+| Chat | You say | Agent should |
+|---|---|---|
+| **A** | `Remember: staging DB is postgres-staging-01` | Call `memory_save` |
+| **B** (new chat) | `What is our staging DB?` | Call `memory_search` and answer |
+
+No SDK. No embeddings setup. Facts land in the Global Wiki (markdown + temporal supersede under the hood).
+
+**CLI proof (no Cursor):** with the gateway up, run `./scripts/aha-demo.sh` or `.\scripts\aha-demo.ps1`.
+
+**GIF asset:** open [`docs/aha-demo.html`](docs/aha-demo.html) fullscreen and screen-record ~20s (auto-loops). That clip is the shareable demo — more important than any paragraph below.
+
+Details: [`mcp-server/README.md`](mcp-server/README.md).
 
 ---
 
@@ -34,6 +83,40 @@ Behind the scenes, the gateway enriches each turn with session memory (a per-ses
 | Each client/tenant needs different tools and rules | Per-app configuration: ACA, self-hosted sandbox, MCP, guardrails, prompts |
 | Destructive actions need human control | Blocking human-in-the-loop with wiki checkpoints |
 | Streaming with multi-step loops is complex | Internal buffer: client only receives final text; optional progress via metadata |
+
+---
+
+## How we compare
+
+ContextMemory is an **agentic context gateway**, not a memory library or an LLM router. Adjacent tools solve different layers of the stack:
+
+| | **ContextMemory** | **Mem0** | **Zep** | **LiteLLM** |
+|---|---|---|---|---|
+| Category | Gateway: memory + retrieval + action | Memory library / layer | Temporal memory / context graphs (cloud-first) | LLM proxy / router |
+| OpenAI chat wire | Yes — you **are** the `/v1/chat/completions` endpoint | No — you wire an SDK into the app | No — separate memory API/SDK | Yes — routing only, no session wiki |
+| Full self-host | Yes (AGPL, no gated core features) | OSS core; advanced graph memory on paid tiers | Full product is cloud; OSS path is Graphiti + your own graph DB | Yes (different problem) |
+| Session memory | Per-session markdown wiki injected automatically | Extracted memories via add/search | Temporal facts / context graphs | No |
+| Retrieval | `wiki_search` inside the agentic loop | Your RAG / their search APIs | In the Zep layer | No |
+| Action (sandbox / MCP / HITL) | Same URL | No | No | Limited pass-through |
+| Typical integration | Change `base_url` | SDK + wiring | SDK + wiring | Change `base_url` (no memory) |
+
+**LangChain** (and LlamaIndex, Vercel AI SDK, etc.) are **client frameworks**, not direct competitors. Mem0/Zep plug *into* the framework; ContextMemory sits **underneath** — point the OpenAI-compatible chat client at this gateway:
+
+```python
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    base_url="http://localhost:5100/v1",
+    api_key="cm_live_...",
+    default_headers={
+        "X-App-Id": "demo-dev",
+        "X-User-Id": "user-42",
+        "X-Session-Id": "sess-abc",
+    },
+)
+```
+
+Same pattern works for any OpenAI-compatible client: one URL carries session memory, on-demand Global Wiki retrieval, and optional tools — without a separate memory SDK.
 
 ---
 
@@ -576,9 +659,39 @@ Shared Markdown documents for an entire `appId` (all users/sessions). Unlike ses
 | **Ingest** | `PUT /apps/{appId}/wiki/documents/{documentId}` — idempotent upsert by content hash; batch via `POST .../documents/batch` (storage-only; no LLM on the write path) |
 | **Digests** | `POST /apps/{appId}/wiki/digests/rebuild` — LLM digests (`Keywords:` + short bullets) into `summary`; refreshes the `wiki:catalog` document. Use after bulk ingest or with `force: true` to regenerate |
 | **List / delete** | `GET` / `DELETE` under `/apps/{appId}/wiki/documents...` |
-| **Query** | `POST /apps/{appId}/wiki/query` — keyword search returning a compact Markdown pack of top matches (not the full corpus index) |
-| **Chat** | Tool `wiki_search` in the agentic loop when `GlobalWikiEnabled` is true (default) |
+| **Query** | `POST /apps/{appId}/wiki/query` — keyword/FTS search returning a compact Markdown pack of top matches (supports `asOf` for point-in-time facts) |
+| **Revisions / audit** | `GET .../documents/{id}/revisions` timeline; `GET .../wiki/audit?from=&to=` export |
+| **Chat** | Tool `wiki_search` in the agentic loop when `GlobalWikiEnabled` is true (default); optional `asOf` |
 | **Config** | Toggle / budget via app runtime config (`GlobalWikiEnabled`, max chars) |
+
+### Temporal facts
+
+Global Wiki documents are **revisioned**. Updating content (default) **supersedes** the previous revision: the old row keeps `valid_from`/`valid_to` and `status=superseded`; a new `active` revision is written. Pass `overwrite: true` on upsert for legacy in-place replace.
+
+- `wiki_search` / `/wiki/query` without `asOf` → only facts valid **now**
+- `asOf: "2026-03-01T00:00:00Z"` → what was valid at that instant
+- Soft delete closes the active validity window (history retained)
+
+```bash
+# Point-in-time query
+curl -X POST http://localhost:5100/apps/demo-dev/wiki/query \
+  -H "Content-Type: application/json" \
+  -H "X-App-Id: demo-dev" \
+  -H "Authorization: Bearer cm_live_dev_key_change_me" \
+  -d '{"query":"KYC status","asOf":"2026-03-01T00:00:00Z","topK":5}'
+```
+
+### MCP server (Cursor / Claude Desktop)
+
+**Primary wedge** — see [Give Cursor / Claude permanent memory](#give-cursor--claude-permanent-memory-5-minutes).
+
+Tools: `memory_save`, `memory_search`, `memory_get` (plus `wiki_search`, `session_recall`).
+
+```bash
+cd mcp-server && npm install && node print-mcp-config.mjs
+```
+
+Paste into Cursor MCP settings. Recordable demo: [`docs/aha-demo.html`](docs/aha-demo.html).
 
 Typical sources: Jira issues, Confluence pages, SQL exports, or any pipeline that emits Markdown with a stable `documentId` (e.g. `jira:PROJ-123`).
 
@@ -864,12 +977,16 @@ Everything is recorded in the session `log.md` for audit.
 | `GET /v1/models` | OpenAI-compatible model list for the tenant |
 | `POST /api/chat` | Deprecated Ollama-compatible chat |
 | `POST /api/generate` | Deprecated Ollama-compatible generate |
-| `PUT /apps/{id}/wiki/documents/{documentId}` | Upsert Global Wiki document (storage-only) |
+| `PUT /apps/{id}/wiki/documents/{documentId}` | Upsert Global Wiki document (storage-only; default supersede on content change) |
 | `POST /apps/{id}/wiki/documents/batch` | Batch upsert Global Wiki documents |
 | `POST /apps/{id}/wiki/digests/rebuild` | Rebuild LLM digests + `wiki:catalog` |
-| `GET /apps/{id}/wiki/documents` | List Global Wiki documents |
-| `DELETE /apps/{id}/wiki/documents/{documentId}` | Delete Global Wiki document |
-| `POST /apps/{id}/wiki/query` | Keyword search over Global Wiki |
+| `GET /apps/{id}/wiki/documents/{documentId}` | Get active Global Wiki document |
+| `GET /apps/{id}/wiki/documents/{documentId}/revisions` | Revision timeline for a document |
+| `GET /apps/{id}/wiki/documents` | List Global Wiki documents (`includeSuperseded` optional) |
+| `GET /apps/{id}/wiki/audit` | Export wiki revisions (`from` / `to` optional) |
+| `DELETE /apps/{id}/wiki/documents/{documentId}` | Soft-delete active revision (closes validity window) |
+| `POST /apps/{id}/wiki/query` | Search Global Wiki (`asOf` for point-in-time) |
+| `GET /apps/{id}/sessions/{userId}/{sessionId}/wiki` | Compiled session wiki recall |
 | `GET /apps/{id}/mcp/servers` | List MCP servers / catalog status for the app |
 | `POST /apps/{id}/mcp/catalog/rebuild` | Refresh MCP tool catalog (HTTP + stdio) |
 | `POST /apps/{id}/mcp/test/{name}` | Probe an MCP server |

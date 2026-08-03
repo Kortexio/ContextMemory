@@ -104,7 +104,7 @@ public static class SessionWikiCompiler
             }
 
             var header = $"## {page.Name}\n";
-            var body = page.Content.Trim();
+            var body = PreferActiveFacts(page.Content.Trim());
             var fullBlock = header + body;
 
             if (fullBlock.Length <= remaining)
@@ -150,6 +150,30 @@ public static class SessionWikiCompiler
             TotalPages = totalPages,
             Truncated = truncated
         };
+    }
+
+    /// <summary>
+    /// For injection, drop superseded fact lines so the model sees current truth;
+    /// history remains on disk for audit/compaction.
+    /// </summary>
+    internal static string PreferActiveFacts(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content)
+            || !content.Contains("[superseded]", StringComparison.OrdinalIgnoreCase))
+            return content;
+
+        var lines = content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var kept = new List<string>(lines.Length);
+        foreach (var line in lines)
+        {
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("- [superseded]", StringComparison.OrdinalIgnoreCase)
+                || trimmed.StartsWith("* [superseded]", StringComparison.OrdinalIgnoreCase))
+                continue;
+            kept.Add(line);
+        }
+
+        return string.Join('\n', kept).TrimEnd();
     }
 
     private static double ScorePage(

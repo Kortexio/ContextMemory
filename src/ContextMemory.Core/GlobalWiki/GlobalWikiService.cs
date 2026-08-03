@@ -58,7 +58,10 @@ public sealed class GlobalWikiService
                     Summary = doc.Summary,
                     SourceId = doc.SourceId,
                     Metadata = doc.Metadata,
-                    Slug = doc.Slug
+                    Slug = doc.Slug,
+                    Overwrite = doc.Overwrite,
+                    ValidFrom = doc.ValidFrom,
+                    ValidTo = doc.ValidTo
                 },
                 cancellationToken).ConfigureAwait(false);
             results.Add(result);
@@ -77,7 +80,7 @@ public sealed class GlobalWikiService
     {
         request ??= new GlobalWikiDigestRebuildRequest();
         var docs = await _store
-            .GetAllForQueryAsync(appId, request.SourceId, cancellationToken)
+            .GetAllForQueryAsync(appId, request.SourceId, asOf: null, cancellationToken)
             .ConfigureAwait(false);
 
         var candidates = docs
@@ -119,6 +122,7 @@ public sealed class GlobalWikiService
                 continue;
             }
 
+            // Same content hash → meta-only update on active revision (no supersede).
             await _store.UpsertAsync(
                 appId,
                 doc.DocumentId,
@@ -174,28 +178,23 @@ public sealed class GlobalWikiService
         string? sourceId,
         int offset,
         int limit,
+        bool includeSuperseded = false,
         CancellationToken cancellationToken = default)
     {
         offset = Math.Max(0, offset);
         limit = Math.Clamp(limit <= 0 ? 50 : limit, 1, 200);
 
-        var total = await _store.CountAsync(appId, sourceId, cancellationToken).ConfigureAwait(false);
-        var docs = await _store.ListAsync(appId, sourceId, offset, limit, cancellationToken).ConfigureAwait(false);
+        var total = await _store.CountAsync(appId, sourceId, includeSuperseded, cancellationToken)
+            .ConfigureAwait(false);
+        var docs = await _store.ListAsync(appId, sourceId, offset, limit, includeSuperseded, cancellationToken)
+            .ConfigureAwait(false);
 
         return new GlobalWikiListResult
         {
             Offset = offset,
             Limit = limit,
             Total = total,
-            Documents = docs.Select(d => new GlobalWikiDocumentSummary
-            {
-                DocumentId = d.DocumentId,
-                Slug = d.Slug,
-                Title = d.Title,
-                Summary = d.Summary,
-                SourceId = d.SourceId,
-                UpdatedAt = d.UpdatedAt
-            }).ToList()
+            Documents = docs.Select(ToSummary).ToList()
         };
     }
 
@@ -205,42 +204,65 @@ public sealed class GlobalWikiService
         int? defaultBudgetChars = null,
         CancellationToken cancellationToken = default)
     {
-        var docs = await _store
-            .GetAllForQueryAsync(appId, request.SourceId, cancellationToken)
-            .ConfigureAwait(false);
-
+        var asOf = request.AsOf ?? DateTimeOffset.UtcNow;
         var topK = request.TopK > 0 ? Math.Min(request.TopK, 50) : DefaultTopK;
         var budget = request.BudgetChars > 0
             ? request.BudgetChars
             : defaultBudgetChars is > 0 ? defaultBudgetChars.Value : DefaultBudgetChars;
 
-        var scored = ScoreMatches(docs, request.Query).Take(topK).ToList();
-        var matches = scored
-            .Select(m => new GlobalWikiMatch
+        var matchedDocs = (await _store
+                .SearchAsync(appId, request.Query, asOf, request.SourceId, topK, cancellationToken)
+                .ConfigureAwait(false))
+            .ToList();
+
+        var totalDocs = await _store
+            .CountAsync(appId, request.SourceId, includeSuperseded: false, cancellationToken)
+            .ConfigureAwait(false);
+
+        var matches = matchedDocs
+            .Select((d, i) => new GlobalWikiMatch
             {
-                DocumentId = m.Document.DocumentId,
-                Slug = m.Document.Slug,
-                Title = m.Document.Title,
-                Score = m.Score,
-                SourceId = m.Document.SourceId
+                DocumentId = d.DocumentId,
+                Slug = d.Slug,
+                Title = d.Title,
+                Score = matchedDocs.Count - i,
+                SourceId = d.SourceId,
+                RevisionId = d.RevisionId
             })
             .ToList();
 
-        if (scored.Count == 0)
+        // Prefer scored ordering from GlobalWikiScoring when we have the pool.
+        if (matchedDocs.Count > 0)
+        {
+            var rescored = GlobalWikiScoring.ScoreMatches(matchedDocs, request.Query).ToList();
+            matchedDocs = rescored.Select(x => x.Document).ToList();
+            matches = rescored
+                .Select(m => new GlobalWikiMatch
+                {
+                    DocumentId = m.Document.DocumentId,
+                    Slug = m.Document.Slug,
+                    Title = m.Document.Title,
+                    Score = m.Score,
+                    SourceId = m.Document.SourceId,
+                    RevisionId = m.Document.RevisionId
+                })
+                .ToList();
+        }
+
+        if (matchedDocs.Count == 0)
         {
             return new GlobalWikiQueryResult
             {
                 CompiledMarkdown = string.Empty,
                 CharCount = 0,
                 IncludedDocuments = 0,
-                TotalDocuments = docs.Count,
+                TotalDocuments = totalDocs,
                 Truncated = false,
+                AsOf = asOf,
                 Matches = matches
             };
         }
 
-        // Pack ONLY top-K matches — never the full corpus (index/filler pages would exhaust budget).
-        var matchedDocs = scored.Select(s => s.Document).ToList();
         var catalogIsPrimary = matchedDocs.Count > 0
             && GlobalWikiCatalog.IsCatalogDocument(matchedDocs[0].DocumentId);
         var pages = matchedDocs.ToDictionary(
@@ -270,7 +292,6 @@ public sealed class GlobalWikiService
         var truncated = compiled.Truncated;
         var charCount = compiled.CharCount;
 
-        // Optional index of matches only, and only after bodies if budget remains.
         if (request.IncludeIndex)
         {
             var remaining = budget - charCount;
@@ -299,17 +320,53 @@ public sealed class GlobalWikiService
             CompiledMarkdown = markdown,
             CharCount = charCount,
             IncludedDocuments = compiled.IncludedPages,
-            TotalDocuments = docs.Count,
+            TotalDocuments = totalDocs,
             Truncated = truncated,
+            AsOf = asOf,
             Matches = matches
         };
     }
+
+    public async Task<GlobalWikiRevisionListResult> ListRevisionsAsync(
+        string appId,
+        string documentId,
+        CancellationToken cancellationToken = default)
+    {
+        var revs = await _store.ListRevisionsAsync(appId, documentId, cancellationToken).ConfigureAwait(false);
+        return new GlobalWikiRevisionListResult
+        {
+            DocumentId = documentId,
+            Revisions = revs.Select(ToSummary).ToList()
+        };
+    }
+
+    public async Task<GlobalWikiAuditExportResult> ExportAuditAsync(
+        string appId,
+        DateTimeOffset? from = null,
+        DateTimeOffset? to = null,
+        CancellationToken cancellationToken = default)
+    {
+        var revs = await _store.ListAuditAsync(appId, from, to, cancellationToken).ConfigureAwait(false);
+        return new GlobalWikiAuditExportResult
+        {
+            AppId = appId,
+            From = from,
+            To = to,
+            Revisions = revs.Select(ToSummary).ToList()
+        };
+    }
+
+    public Task<GlobalWikiDocument?> GetAsync(
+        string appId,
+        string documentId,
+        CancellationToken cancellationToken = default) =>
+        _store.GetAsync(appId, documentId, cancellationToken);
 
     private async Task RefreshCatalogAsync(string appId, CancellationToken cancellationToken)
     {
         try
         {
-            var docs = await _store.GetAllForQueryAsync(appId, sourceId: null, cancellationToken)
+            var docs = await _store.GetAllForQueryAsync(appId, sourceId: null, asOf: null, cancellationToken)
                 .ConfigureAwait(false);
             var entries = docs
                 .Where(d => !GlobalWikiCatalog.IsCatalogDocument(d.DocumentId))
@@ -348,7 +405,8 @@ public sealed class GlobalWikiService
                     Content = sb.ToString().TrimEnd() + "\n",
                     Summary = $"Catalog of {entries.Count} documents with keyword digests.",
                     SourceId = "wiki:catalog",
-                    Slug = "wiki-catalog"
+                    Slug = "wiki-catalog",
+                    Overwrite = true
                 },
                 cancellationToken).ConfigureAwait(false);
         }
@@ -358,12 +416,26 @@ public sealed class GlobalWikiService
         }
     }
 
+    private static GlobalWikiDocumentSummary ToSummary(GlobalWikiDocument d) =>
+        new()
+        {
+            DocumentId = d.DocumentId,
+            Slug = d.Slug,
+            Title = d.Title,
+            Summary = d.Summary,
+            SourceId = d.SourceId,
+            RevisionId = d.RevisionId,
+            Status = d.Status,
+            ValidFrom = d.ValidFrom,
+            ValidTo = d.ValidTo,
+            UpdatedAt = d.UpdatedAt
+        };
+
     private static string ResolvePackContent(GlobalWikiDocument doc, bool catalogIsPrimary)
     {
         if (!GlobalWikiCatalog.IsCatalogDocument(doc.DocumentId))
             return doc.Content;
 
-        // Avoid drowning ticket hits with the full multi-doc catalog body.
         if (catalogIsPrimary)
             return doc.Content;
 
@@ -393,54 +465,5 @@ public sealed class GlobalWikiService
     {
         var line = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n')[0].Trim();
         return line.Length <= 160 ? line : line[..160].TrimEnd() + "…";
-    }
-
-    private static IEnumerable<(GlobalWikiDocument Document, double Score)> ScoreMatches(
-        IReadOnlyList<GlobalWikiDocument> docs,
-        string query)
-    {
-        var tokens = Tokenize(query);
-        return docs
-            .Select(d => (Document: d, Score: ScoreDocument(d, tokens)))
-            .Where(x => tokens.Count == 0 || x.Score > 0)
-            .OrderByDescending(x => x.Score)
-            .ThenBy(x => x.Document.Content.Length);
-    }
-
-    private static double ScoreDocument(GlobalWikiDocument doc, HashSet<string> tokens)
-    {
-        var score = 0.0;
-        if (tokens.Count > 0)
-        {
-            var identity = $"{doc.DocumentId} {doc.Slug} {doc.Title}".ToLowerInvariant();
-            var body = $"{doc.Summary} {doc.Content} {doc.SourceId}".ToLowerInvariant();
-            foreach (var token in tokens)
-            {
-                // Identity hits must outrank generic keyword noise across hundreds of tickets.
-                if (identity.Contains(token, StringComparison.Ordinal))
-                    score += 100;
-                else if (body.Contains(token, StringComparison.Ordinal))
-                    score += 10;
-            }
-
-            // Mild boost so broad questions can surface the catalog overview.
-            if (GlobalWikiCatalog.IsCatalogDocument(doc.DocumentId))
-                score += 15;
-        }
-
-        var ageHours = (DateTimeOffset.UtcNow - doc.UpdatedAt).TotalHours;
-        score += Math.Max(0, 48 - ageHours) / 4;
-        return score;
-    }
-
-    private static HashSet<string> Tokenize(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return [];
-
-        return text.Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
-            .Select(t => t.Trim().ToLowerInvariant())
-            .Where(t => t.Length >= 2)
-            .ToHashSet(StringComparer.Ordinal);
     }
 }

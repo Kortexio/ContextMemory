@@ -70,6 +70,7 @@ app.MapAppsConfigEndpoints();
 app.MapAppsRegisterEndpoint();
 app.MapMcpEndpoints();
 app.MapGlobalWikiEndpoints();
+app.MapSessionRecallEndpoints();
 app.MapDefaultEndpoints();
 
 app.Run();

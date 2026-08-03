@@ -1,0 +1,24 @@
+{
+  "name": "contextmemory-mcp",
+  "version": "1.1.0",
+  "description": "Permanent memory for Cursor and Claude Desktop via ContextMemory",
+  "type": "module",
+  "main": "server.mjs",
+  "bin": {
+    "contextmemory-mcp": "./server.mjs",
+    "contextmemory-mcp-config": "./print-mcp-config.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "config": "node print-mcp-config.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.1"
+  },
+  "keywords": ["mcp", "cursor", "claude", "memory", "contextmemory"],
+  "license": "AGPL-3.0-or-later"
+}

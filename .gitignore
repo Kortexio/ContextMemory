@@ -66,3 +66,7 @@ coverage/
 
 ## Aspire / Docker (local overrides)
 docker-compose.override.yml
+
+## Node
+node_modules/
+

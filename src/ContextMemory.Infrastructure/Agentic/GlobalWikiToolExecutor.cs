@@ -35,6 +35,7 @@ public sealed class GlobalWikiToolExecutor : IToolExecutor
 
         string query;
         string? sourceId = null;
+        DateTimeOffset? asOf = null;
         var topK = GlobalWikiService.DefaultTopK;
         try
         {
@@ -46,6 +47,9 @@ public sealed class GlobalWikiToolExecutor : IToolExecutor
                 sourceId = s.GetString();
             if (root.TryGetProperty("topK", out var t) && t.TryGetInt32(out var topKVal) && topKVal > 0)
                 topK = topKVal;
+            if (root.TryGetProperty("asOf", out var a) && a.ValueKind == JsonValueKind.String
+                && DateTimeOffset.TryParse(a.GetString(), out var asOfVal))
+                asOf = asOfVal;
         }
         catch
         {
@@ -77,7 +81,8 @@ public sealed class GlobalWikiToolExecutor : IToolExecutor
                 SourceId = sourceId,
                 TopK = topK,
                 BudgetChars = budget,
-                IncludeIndex = false
+                IncludeIndex = false,
+                AsOf = asOf
             },
             budget,
             cancellationToken).ConfigureAwait(false);
@@ -91,7 +96,7 @@ public sealed class GlobalWikiToolExecutor : IToolExecutor
             };
         }
 
-        var header = $"Found {result.Matches.Count} match(es) of {result.TotalDocuments} document(s).\n\n";
+        var header = $"Found {result.Matches.Count} match(es) of {result.TotalDocuments} document(s) (asOf={result.AsOf:O}).\n\n";
         return new ToolExecutionResult
         {
             Output = header + result.CompiledMarkdown,
