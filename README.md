@@ -13,7 +13,7 @@ Legacy Ollama-native routes `POST /api/chat` and `POST /api/generate` remain ava
 
 Behind the scenes, the gateway enriches each turn with session memory (a per-session markdown wiki), optional **Global Wiki** retrieval via the `wiki_search` tool, optional web search, and — when enabled — an **agentic loop** with tools isolated per tenant.
 
-**Contents:** [Why](#why-it-exists) · [Cloud vs self-host](#two-ways-to-run-it) · [Cloud quick start](#quick-start--kortexio-cloud) · [Self-host / Docker](#quick-start--self-host) · [Architecture](#architecture-in-30-seconds) · [Features](#features) · [API](#api--stable-contract) · [Troubleshooting](#troubleshooting) · [License](#licensing)
+**Contents:** [Why](#why-it-exists) · [Cloud vs self-host](#two-ways-to-run-it) · [Cloud quick start](#quick-start--kortexio-cloud) · [Self-host / Docker](#quick-start--self-host) · [Admin UI guide](#admin-ui-guide) · [Architecture](#architecture-in-30-seconds) · [Features](#features) · [API](#api--stable-contract) · [Docs backlog](#documentation-backlog) · [Troubleshooting](#troubleshooting) · [License](#licensing)
 
 ---
 
@@ -127,7 +127,7 @@ That's the entire integration. Session memory works on the next turn automatical
 
 ## Quick start — self-host
 
-Run the open-source gateway yourself — the path for **on-prem or fully local** deployments. Unlike Cloud (where the dashboard wires up your LLM for you), here **you point the gateway at your own LLM backend** — endpoint and model — in config. Same chat body, same Ollama response as Cloud; you supply the `X-App-Id` and use a `cm_live_` key.
+Run the open-source gateway yourself — the path for **on-prem or fully local** deployments. Unlike Cloud (where the dashboard wires up your LLM for you), here **you point the gateway at your own LLM backend** — endpoint and model — in config. Same OpenAI-compatible chat body and `choices[]` response as Cloud; you supply the `X-App-Id` and use a `cm_live_` key.
 
 ### Fastest: one-liner from GHCR (API)
 
@@ -173,7 +173,7 @@ Or the helper scripts:
 
 ### Build from source: Docker Compose
 
-Builds and starts the **API** (`:5100`) and **Admin** (`:5200`) locally. Requires [Docker](https://docs.docker.com/get-docker/) and an LLM reachable from the containers (Ollama on the host by default).
+Builds and starts the **API** (`:5100`), **Admin** (`:5200`), **mcp-runtime** (stdio MCP host), and **sandbox-runtime** (shell/python/node) locally. Requires [Docker](https://docs.docker.com/get-docker/) and an LLM reachable from the containers (Ollama on the host by default).
 
 ```bash
 git clone https://github.com/Kortexio/ContextMemory.git
@@ -193,8 +193,12 @@ Then open **[http://localhost:5200](http://localhost:5200)** — Settings are pr
 | API | http://localhost:5100 |
 | Admin | http://localhost:5200 |
 | Health | http://localhost:5100/health |
+| mcp-runtime | internal `http://mcp-runtime:8080` (`ContextMemory__McpRuntimeUrl`) |
+| sandbox-runtime | internal self-hosted sandbox for `shell_execute` / `python_execute` / `node_execute` |
 | Demo app | `X-App-Id: demo-dev` / Bearer `cm_live_dev_key_change_me` |
 | Master key | `cm_master_dev_key_change_me` |
+
+For a Postgres-backed network overlay (shared Docker network, extra tenants), see `docker-compose.network.yml`.
 
 **Ollama on the host**
 
@@ -216,10 +220,10 @@ ollama pull qwen3.5:9b
 
 Stop with `Ctrl+C`, or `docker compose down`. Data for File mode lives in the `cm_data` Docker volume.
 
-**Chat smoke test against the containerized API:**
+**Chat smoke test against the containerized API** (preferred OpenAI route):
 
 ```bash
-curl -X POST http://localhost:5100/api/chat \
+curl -X POST http://localhost:5100/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-App-Id: demo-dev" \
   -H "X-User-Id: user-123" \
@@ -298,7 +302,7 @@ API defaults to `http://localhost:5100` (Swagger in Development at `/swagger`).
 ### 3. First chat request
 
 ```bash
-curl -X POST http://localhost:5100/api/chat \
+curl -X POST http://localhost:5100/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-App-Id: demo-dev" \
   -H "X-User-Id: user-123" \
@@ -310,23 +314,22 @@ curl -X POST http://localhost:5100/api/chat \
   }'
 ```
 
-**Response (Ollama schema — identical to Cloud):**
+**Response (OpenAI schema — identical to Cloud):**
 
 ```json
 {
+  "id": "chatcmpl-...",
+  "object": "chat.completion",
   "model": "qwen3.5:9b",
-  "message": { "role": "assistant", "content": "..." },
-  "done": true,
-  "context_memory": {
-    "message_id": "...",
-    "agentic": {
-      "phase": "Completed",
-      "awaiting_confirmation": false,
-      "steps": [{ "tool_name": "shell_execute", "success": true }]
-    }
-  }
+  "choices": [{
+    "index": 0,
+    "message": { "role": "assistant", "content": "..." },
+    "finish_reason": "stop"
+  }]
 }
 ```
+
+Legacy `POST /api/chat` still returns the Ollama `message` / `done` shape (deprecated).
 
 **Required headers:** `X-App-Id`, `X-User-Id`, `Authorization: Bearer {API_KEY}`  
 **Optional:** `X-Session-Id` (generated by the API if omitted).
@@ -340,22 +343,203 @@ cd src/ContextMemory.Admin.Web
 dotnet run
 ```
 
-Open **[http://localhost:5200](http://localhost:5200)** → **Settings** → set API URL `http://localhost:5100` and your Master Key (`ContextMemory:MasterKey`) → **Test connection**. The Admin UI is fully in English with short help text under each field.
+Open **[http://localhost:5200](http://localhost:5200)** → **Settings** → set API URL `http://localhost:5100` and your Master Key (`ContextMemory:MasterKey`) → **Test connection**.
 
-- **Applications** — register apps, stats, rotate API keys  
-- **Apps → Config** — LLM, wiki, web search, rate limits, **Agentic Gateway**  
-- **Chat Lab** — streaming, agentic timeline, human confirmation  
+Full walkthrough of every screen: **[Admin UI guide](#admin-ui-guide)**.
 
 The API also serves a short HTML pointer at [http://localhost:5100/admin](http://localhost:5100/admin). Admin HTTP APIs still require the Master Key bearer token.
+
+---
+
+## Admin UI guide
+
+The Admin console (`ContextMemory.Admin.Web`, default **http://localhost:5200**) is a Blazor Server app that talks to the ContextMemory API over HTTP. UI copy is English; field help sits under each control.
+
+| | |
+|---|---|
+| **Who uses it** | Operators configuring tenants (LLM, memory, agentic, MCP, keys) |
+| **Auth** | **Master Key** (`ContextMemory:MasterKey`) for admin APIs — not the app `cm_live_…` key |
+| **Where settings live** | Browser local storage (overrides host defaults from `Admin__*` / Compose env) |
+| **Image** | `ghcr.io/kortexio/contextmemory-admin` |
+
+### Navigation map
+
+| Menu | Route | Purpose |
+|---|---|---|
+| Applications | `/` | List tenants, open details / config |
+| New application | `/apps/new` | Register a tenant and mint an API key |
+| Chat Lab | `/chat` | Interactive chat against an app (memory + agentic) |
+| Skills | `/skills` | Shared skills catalog (+ view guardrail packs) |
+| Settings | `/settings` | API base URL, Master Key, health |
+
+Per-app pages (from Applications):
+
+| Page | Route | Purpose |
+|---|---|---|
+| Details | `/apps/{appId}` | Telemetry, wiki/web-search stats, view/rotate API key |
+| Config | `/apps/{appId}/config` | LLM, wiki, Global Wiki, web search, rate limits, **Agentic Gateway** |
+
+### First-time setup (Settings)
+
+1. Open **Settings**.
+2. Set **API base URL**:
+   - Local `dotnet run`: `http://localhost:5100`
+   - Docker Compose / GHCR Admin container: `http://api:8080` (server-side calls stay on the Docker network; the browser still opens Admin on `localhost:5200`)
+3. Paste the **Master Key** (demo: `cm_master_dev_key_change_me`).
+4. Click **Save**, then **Test connection**.
+5. Confirm Health: Ollama, Persistence, Apps loaded, optional Database.
+
+**Save** stores values in this browser. **Reset to defaults** clears browser overrides and restores host defaults (`Admin__DefaultApiBaseUrl`, `Admin__DefaultMasterKey`). A link to public Prometheus metrics (`GET /metrics`) appears when connected.
+
+### Applications dashboard
+
+- Cards per app: request count, active users, last-turn wiki pages included/total, source badge (`seed` vs registered).
+- Actions: **Details**, **Config**, **Chat Lab**.
+- **New application** / **Refresh**. Seed app `demo-dev` appears when the API starts with default config.
+
+### Register an application
+
+**New application** creates an isolated tenant (own API key, session wiki, optional Global Wiki).
+
+| Field | Notes |
+|---|---|
+| Application name | Operator label only (not an HTTP header) |
+| Domain | Prefix for generated `X-App-Id` (e.g. `helpdesk` → `helpdesk-…`) |
+| Default language | BCP-47 for prompts (`en-US`, `pt-PT`, …) |
+| LLM backend / model / endpoint / API key | Same semantics as Config (below) |
+| Persona | Optional base system prompt |
+
+After create, **copy the API key immediately** — it is shown once on this screen. Then open Config, Details, or Chat Lab.
+
+### App details (stats + API key)
+
+`/apps/{appId}` shows:
+
+- Requests, errors, active users, average latency
+- Prompt/completion tokens, wiki truncated total
+- Last-turn wiki memory (chars, pages included/on disk, compaction ok/err)
+- Web search totals when used
+- **API key** — show/copy; **Generate new API key** rotates it
+
+For **seed** apps (`appsettings`), rotation lasts until API restart unless you also update `ContextMemory:Apps:{appId}:ApiKey`.
+
+Use the app key in Chat Lab and client apps — never the Master Key.
+
+### App Config (runtime)
+
+`/apps/{appId}/config` patches runtime config (`PATCH /admin/apps/{id}/config`). Changes apply to **new requests** after **Save changes**.
+
+#### LLM
+
+| Control | Meaning |
+|---|---|
+| Default language | Locale in prompts |
+| LLM model | Model id on the backend |
+| Backend | `ollama` (default `/v1`), `vllm`, `lmstudio`, `openai`, `openai-compatible`, `custom`, `ollama-native` |
+| Endpoint / API key | Optional per-app overrides; empty = host defaults |
+| Max history messages | Recent turns kept in the prompt (wiki is separate) |
+| Streaming enabled | Allow streaming on legacy `/api/chat` |
+
+Prefer clients calling **`POST /v1/chat/completions`**.
+
+#### Session wiki
+
+Max wiki context chars, compaction threshold (bytes), compaction min pages.
+
+#### Global Wiki
+
+- Enable Global Wiki → exposes `wiki_search` for documents under `/apps/{id}/wiki/…`
+- Max Global Wiki tool chars — budget per `wiki_search` call (`0` = service default)
+
+Ingest/digests are API-side; the Admin UI toggles availability and budget.
+
+#### Web search
+
+Enable, mode (`heuristic` / `llm` / `always` / `off`), provider (`tavily` / `brave`), max results, max ephemeral context chars, persist-to-wiki, telemetry logging. Provider API keys live on the **API host** (`ContextMemory:WebSearch`), not per app.
+
+#### Rate limits
+
+App RPM, per-user RPM, TPM, agentic request weight, agentic tokens per iteration.
+
+#### Agentic Gateway (on the Config page)
+
+| Area | What you configure |
+|---|---|
+| Enable agentic loop | Multi-step tools on the same chat request |
+| Prompt profile | `auto` / `ollama` / `openai` / `claude` |
+| Loop guardrails | Validation mode, network egress, max iterations, loop timeout, min answer length, confirmation keywords, allowed hosts, expected regexes, require exit 0, human review on max iterations |
+| **Skills & guardrail packs** | Per-app checkboxes from the shared catalog (see Skills page). Omit selection → catalog defaults |
+| Execution tools | `self-hosted-sandbox` → sandbox endpoint (Compose: `http://sandbox-runtime:8080`) or `aca-session` → ACA pool URL; runtimes shell/python/node/(custom); `allowEgress` |
+| MCP integrations | `http` or `stdio`; name, URL/command+args, auth mode, credential ref, OAuth fields, allow/deny tool lists, timeout, enabled, allowEgress; max MCP tools per turn |
+
+Example stdio MCP is shown in a collapsible on the Config page. After editing MCP servers, rebuild the tool catalog via API if needed: `POST /apps/{appId}/mcp/catalog/rebuild` (Master Key or app auth as configured).
+
+#### Persona and rules
+
+Markdown fields: base persona, business rules, format rules, wiki schema.
+
+### Skills catalog
+
+**Skills** (`/skills`) manages the **shared** catalog (all apps). Enabling packs for a tenant is done on that app’s **Config → Agentic → Skills & guardrail packs**.
+
+| Action | Notes |
+|---|---|
+| New skill / Edit | Id (slug, create-only), name, category, description, prompt markdown, sort order, default-enabled |
+| System skills | Prompt editable; cannot delete |
+| Download | Export `.skill.json` |
+| Import | `.json` / `.md` / `.skill.json`; optional replace-if-exists |
+| Guardrail packs table | Read-only list (`id`, `kind`, default); toggle per app in Config |
+
+### Chat Lab
+
+Interactive tester for a tenant. Uses the **app API key** + `X-App-Id` (Master Key only for “Load app” metadata via admin APIs).
+
+**Connection panel**
+
+| Field | Role |
+|---|---|
+| App ID / User ID / Session ID | Headers; empty session → API generates |
+| App API key | Bearer for chat |
+| Model | Body `model` (match app config) |
+| Chat / Generate | Legacy `POST /api/chat` or `/api/generate` |
+| Streaming | NDJSON token stream |
+| Show raw JSON | Debug panel |
+| Save locally / Load app / New session | Persist lab settings, pull app summary, reset session id |
+
+**Ollama options** — optional per-request system prompt, temperature, top_p, top_k, num_ctx, repeat_penalty, num_predict, keep_alive, format.
+
+**Main pane** — conversation; agentic timeline (tool steps); HITL banner with `confirm` / `[CONFIRM:id]` and copy token; Stop / Regenerate / Clear UI.
+
+Typical smoke path: Settings connected → open Chat Lab → `demo-dev` + demo key → send a message → same Session ID on the next turn to verify memory.
+
+### Keys cheat sheet
+
+| Secret | Used for | Where |
+|---|---|---|
+| Master Key (`cm_master_…`) | List apps, patch config, rotate keys, skills catalog | Settings |
+| App API key (`cm_live_…`) | Chat, wiki ingest, app-scoped MCP ops | Details / Chat Lab / clients |
+| LLM API key | Downstream OpenAI-compatible backends | App Config (optional) |
+| MCP / OAuth secrets | Integration tools | Config credential ref / OAuth fields (prefer credential store over inline tokens) |
+
+### Admin troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Not connected / cannot list apps | Settings → correct API URL + Master Key → Test connection |
+| 401 on admin calls | Master Key ≠ `ContextMemory:MasterKey` |
+| Chat Lab 401 | Using Master Key as app key — use `cm_live_…` + `X-App-Id` |
+| Compose Admin cannot reach API | From Admin container use `http://api:8080`, not `localhost:5100` |
+| Sidebar dead after upgrade | Hard refresh (Blazor `admin-shell.js`, not legacy AdminLTE jQuery) |
+| Seed key rotation “lost” on restart | Persist new key in `appsettings` / env for seed apps |
 
 ---
 
 ## Architecture in 30 seconds
 
 ```
-Your app (Ollama-compatible client)
+Your app (OpenAI-compatible client)
         │
-        ▼ POST /api/chat
+        ▼ POST /v1/chat/completions
 ┌───────────────────────────────────────────┐
 │  ContextMemory Gateway (.NET 9)           │
 │  1. Auth + tenant (API key, X-App-Id)     │
@@ -363,13 +547,13 @@ Your app (Ollama-compatible client)
 │  3. Global Wiki tool (wiki_search)        │
 │  4. Web search (optional)                 │
 │  5. Agentic loop (if enabled)             │
-│     LLM ↔ tools ↔ validation ↔ HITL       │
-│  6. Ollama-schema response                │
-└───────────┬───────────────┬───────────────┘
-            ▼               ▼
-     ACA / self-hosted   MCP Servers
-     sandbox (shell/     (Zuora, Jira, …)
-     python/node/custom) JSON-RPC + OAuth
+│     skills + guardrails + validation/HITL │
+│  6. OpenAI-schema response (choices[])    │
+└───────┬───────────────┬───────────────────┘
+        ▼               ▼
+ sandbox-runtime     mcp-runtime / MCP
+ (shell/python/node) (HTTP + stdio, OAuth)
+ or ACA Dynamic Sessions
 ```
 
 ---
@@ -389,9 +573,10 @@ Shared Markdown documents for an entire `appId` (all users/sessions). Unlike ses
 
 | Capability | What it does |
 |---|---|
-| **Ingest** | `PUT /apps/{appId}/wiki/documents/{documentId}` — idempotent upsert by content hash; batch via `POST .../documents/batch` |
+| **Ingest** | `PUT /apps/{appId}/wiki/documents/{documentId}` — idempotent upsert by content hash; batch via `POST .../documents/batch` (storage-only; no LLM on the write path) |
+| **Digests** | `POST /apps/{appId}/wiki/digests/rebuild` — LLM digests (`Keywords:` + short bullets) into `summary`; refreshes the `wiki:catalog` document. Use after bulk ingest or with `force: true` to regenerate |
 | **List / delete** | `GET` / `DELETE` under `/apps/{appId}/wiki/documents...` |
-| **Query** | `POST /apps/{appId}/wiki/query` — keyword search returning a compact Markdown snippet + scored matches |
+| **Query** | `POST /apps/{appId}/wiki/query` — keyword search returning a compact Markdown pack of top matches (not the full corpus index) |
 | **Chat** | Tool `wiki_search` in the agentic loop when `GlobalWikiEnabled` is true (default) |
 | **Config** | Toggle / budget via app runtime config (`GlobalWikiEnabled`, max chars) |
 
@@ -410,6 +595,13 @@ curl -X PUT http://localhost:5100/apps/demo-dev/wiki/documents/jira:PROJ-123 \
     "summary": "Billing renewal invoice bug"
   }'
 
+# After a bulk ingest, rebuild LLM digests + wiki:catalog
+curl -X POST http://localhost:5100/apps/demo-dev/wiki/digests/rebuild \
+  -H "Content-Type: application/json" \
+  -H "X-App-Id: demo-dev" \
+  -H "Authorization: Bearer cm_live_dev_key_change_me" \
+  -d '{"force": false}'
+
 # Search without chat
 curl -X POST http://localhost:5100/apps/demo-dev/wiki/query \
   -H "Content-Type: application/json" \
@@ -420,17 +612,23 @@ curl -X POST http://localhost:5100/apps/demo-dev/wiki/query \
 
 ### Agentic Gateway
 
-- **Same endpoint** — `POST /api/chat`; enabled via `agentic.enabled` in tenant config.
+- **Same endpoint** — preferred `POST /v1/chat/completions` (legacy `POST /api/chat`); enabled via `agentic.enabled` in tenant config.
 - **Orchestrator** — loop with iteration cap, configurable timeout, and validation before returning the final answer.
+- **Skills & guardrail packs (configurable per app)** — shared catalog (File or Postgres), seeded on startup; each tenant picks which packs are active via `agentic.policyPacks`.
+  - **Skills** — Markdown policy text injected into the agent system prompt (anti-hallucination, wiki-first, MCP preference, Zuora discover-first, …). Create/edit/import/export in Admin **Skills** or `/admin/agentic/skills`.
+  - **Guardrail packs** — deterministic validators by `kind` (`url-fetch`, `sandbox-claim`, `tool-failure-disclosure`, `blocked-patterns`) that can reject a final answer and force another loop iteration.
+  - **Per-app selection** — `enabledSkillIds` / `enabledGuardrailIds`. Omit both → defaults (`IsDefaultEnabled` in the catalog). Explicit empty arrays → none. Skill `sandbox-facts-selfhosted` only applies when a self-hosted sandbox tool is configured.
+  - Distinct from loop **`guardrails`** below (`maxIterations`, HITL keywords, egress, validation mode) — those remain numeric/policy knobs on the orchestrator.
 - **Execution tools**
   - ACA Dynamic Sessions: `shell_execute`, `python_execute`, `node_execute`, `container_execute` (custom image)
-  - Self-hosted sandbox (`self-hosted-sandbox`): same tool names against your own gVisor/sandbox endpoint
+  - Self-hosted sandbox (`self-hosted-sandbox`): same tool names against **sandbox-runtime** (Compose) or your own gVisor/sandbox endpoint
 - **Integration tools (MCP)**
-  - Dynamic catalog per configured MCP server
-  - Qualified naming `server__tool`
+  - Per-app MCP catalog with **HTTP** and **stdio** transports (`mcp-runtime` hosts stdio packages under `/opt/mcps`)
+  - Qualified naming `server__tool`; rebuild with `POST /apps/{appId}/mcp/catalog/rebuild`
+  - Credentials via `POST /apps/{appId}/mcp/credentials/{name}`; test with `POST .../mcp/test/{name}`
   - `mcp_servers` pass-through for backends that support it natively
   - Authentication: bearer, api-key, or **per-tenant OAuth client-credentials**
-- **Per-tenant guardrails**
+- **Per-tenant loop guardrails** (`agentic.guardrails`)
   - `maxIterations`, `loopTimeoutSeconds`
   - `requireConfirmationFor` — keywords that trigger HITL **before** execution
   - `networkEgress: restricted` — blocks external endpoints except allowlist/`allowEgress`
@@ -463,7 +661,7 @@ curl -X POST http://localhost:5100/apps/demo-dev/wiki/query \
 - **Isolated apps** — API key, config, tools, and guardrails per `appId`
 - **Rate limiting** — RPM/TPM per app and per user; extra weight for agentic turns
 - **Telemetry** — requests, tokens, latency, wiki, web search, active users
-- **Admin** — Blazor console at `ContextMemory.Admin.Web` (`:5200`), HTTP admin API, HTML pointer at `/admin`
+- **Admin** — Blazor console at `ContextMemory.Admin.Web` (`:5200`); see [Admin UI guide](#admin-ui-guide)
 - **Persistence**
   - `File` — development and single-node
   - `Postgres` — apps, profiles, **sessions/wiki**, and HITL state in JSONB (multi-instance HA)
@@ -476,9 +674,6 @@ curl -X POST http://localhost:5100/apps/demo-dev/wiki/query \
 | `vllm` / `openai-compatible` / `openai` / `custom` | OpenAI `/v1/chat/completions` | `ContextMemory:OpenAiEndpoint` or per-app `llmEndpoint` |
 | `lmstudio` | OpenAI `/v1` | `ContextMemory:LmStudioEndpoint` |
 | `ollama-native` | Ollama `/api/chat` (fallback) | `ContextMemory:OllamaEndpoint` |
-| `lmstudio` | OpenAI-compatible `/v1` | `ContextMemory:LmStudioEndpoint` |
-| `openai` | OpenAI-compatible `/v1` | `ContextMemory:OpenAiEndpoint` + `OpenAiApiKey` |
-| `openai-compatible` / `custom` | Same as `openai` | same (override per app) |
 
 **Per-app overrides** (Admin → app → Config, or `PATCH /admin/apps/{id}/config`):
 
@@ -509,6 +704,20 @@ Example — point one tenant at a remote vLLM / LiteLLM server:
   "agentic": {
     "enabled": true,
     "promptProfile": "auto",
+    "policyPacks": {
+      "enabledSkillIds": [
+        "anti-hallucination-web",
+        "prefer-mcp-over-adhoc",
+        "wiki-first-for-docs",
+        "zuora-graphql-discover-first"
+      ],
+      "enabledGuardrailIds": [
+        "url-fetch-required",
+        "sandbox-claim-reject",
+        "require-error-disclosure",
+        "block-credential-leak"
+      ]
+    },
     "tools": {
       "execution": [
         { "type": "aca-session", "runtime": "shell", "poolEndpoint": "https://pool.eastus.dynamicsessions.io/..." },
@@ -546,8 +755,31 @@ Example — point one tenant at a remote vLLM / LiteLLM server:
 }
 ```
 
-Configure via the Admin UI (`/apps/{appId}/config` on `:5200`) or `PATCH /admin/apps/{appId}/config` with the Master Key.
+Configure via the Admin UI (`/apps/{appId}/config` on `:5200` — checkboxes under **Skills & guardrail packs**) or `PATCH /admin/apps/{appId}/config` with the Master Key.
 
+### Seed catalog (defaults)
+
+| Type | Id | Default on | Role |
+|---|---|---|---|
+| Skill | `anti-hallucination-web` | ✅ | Fetch URLs before describing sites/APIs |
+| Skill | `sandbox-facts-selfhosted` | ✅* | Correct self-hosted sandbox capabilities (*only if that tool is configured) |
+| Skill | `prefer-mcp-over-adhoc` | ✅ | Prefer MCP tools over hand-rolled HTTP/OAuth |
+| Skill | `tool-calling-discipline` | ✅ | When/how to emit `tool_calls` |
+| Skill | `ground-answers-in-evidence` | ✅ | No invented numbers/IDs |
+| Skill | `wiki-first-for-docs` | ✅ | Prefer `wiki_search` for ingested docs |
+| Skill | `clarify-when-ambiguous` | ✅ | Ask when the goal is underspecified |
+| Skill | `privacy-and-secrets` | ✅ | Redact credentials |
+| Skill | `transparent-failures` | ✅ | Report tool errors honestly |
+| Skill | `concise-professional` | ✅ | Direct answers, less filler |
+| Skill | `strict-no-speculation` | ❌ | Opt-in: refuse claims without evidence |
+| Skill | `step-by-step-reasoning-brief` | ❌ | Opt-in: short plan before tools |
+| Skill | `zuora-graphql-discover-first` | ❌ | Opt-in: discover Zuora GraphQL schema before queries |
+| Guardrail | `url-fetch-required` | ✅ | Reject URL descriptions without fetch evidence |
+| Guardrail | `sandbox-claim-reject` | ✅ | Reject false ACA/no-network claims |
+| Guardrail | `require-error-disclosure` | ✅ | Reject answers that ignore failed tool steps |
+| Guardrail | `block-credential-leak` | ✅ | Reject secret-like substrings in the answer |
+
+Custom skills (non-system) can be created, imported, and exported; system seeds are updated in place on catalog seed but remain selectable per app.
 ---
 
 ## Human-in-the-loop — how it works
@@ -570,14 +802,20 @@ Everything is recorded in the session `log.md` for audit.
 | `GET /v1/models` | OpenAI-compatible model list for the tenant |
 | `POST /api/chat` | Deprecated Ollama-compatible chat |
 | `POST /api/generate` | Deprecated Ollama-compatible generate |
-| `POST /api/generate` | Ollama-compatible completion |
-| `PUT /apps/{id}/wiki/documents/{documentId}` | Upsert Global Wiki document |
+| `PUT /apps/{id}/wiki/documents/{documentId}` | Upsert Global Wiki document (storage-only) |
 | `POST /apps/{id}/wiki/documents/batch` | Batch upsert Global Wiki documents |
+| `POST /apps/{id}/wiki/digests/rebuild` | Rebuild LLM digests + `wiki:catalog` |
 | `GET /apps/{id}/wiki/documents` | List Global Wiki documents |
 | `DELETE /apps/{id}/wiki/documents/{documentId}` | Delete Global Wiki document |
 | `POST /apps/{id}/wiki/query` | Keyword search over Global Wiki |
+| `GET /apps/{id}/mcp/servers` | List MCP servers / catalog status for the app |
+| `POST /apps/{id}/mcp/catalog/rebuild` | Refresh MCP tool catalog (HTTP + stdio) |
+| `POST /apps/{id}/mcp/test/{name}` | Probe an MCP server |
+| `POST /apps/{id}/mcp/credentials/{name}` | Upsert MCP credentials |
 | `GET /apps/{id}/config` | Runtime config (auth with app API key) |
 | `PATCH /admin/apps/{id}/config` | Update config (Master Key), including `GlobalWikiEnabled` |
+| `GET /admin/agentic/catalog` | Skills + guardrail packs |
+| `POST/PUT/DELETE /admin/agentic/skills...` | Manage skills (import/export supported) |
 | `GET /health` | API, Ollama, Postgres health |
 | `GET /admin` | HTML pointer to the Admin UI host |
 
@@ -592,11 +830,13 @@ The preferred chat response is the **OpenAI schema** — `choices[0].message.con
 | App registry + API keys | ✅ | ✅ |
 | Runtime config (LLM, agentic, wiki) | ✅ | ✅ |
 | Sessions, messages, session wiki | ✅ | ✅ |
-| Global Wiki documents | ✅ | ✅ |
+| Global Wiki documents (+ digests / catalog) | ✅ | ✅ |
+| MCP catalog + credentials | ✅ | ✅ |
+| Agentic skills / guardrail packs | ✅ | ✅ |
 | Pending HITL state | ✅ | ✅ |
 | Telemetry / rate limits | in-memory | in-memory |
 
-EF Core migrations live in `ContextMemory.Infrastructure` (includes `global_wiki_documents`).
+EF Core migrations live in `ContextMemory.Infrastructure` (includes `global_wiki_documents`, MCP catalog, and agentic policy catalog).
 
 ```bash
 dotnet ef database update \
@@ -662,7 +902,7 @@ Still stuck? Open a [GitHub issue](https://github.com/Kortexio/ContextMemory/iss
 dotnet test tests/ContextMemory.Api.Tests/ContextMemory.Api.Tests.csproj
 ```
 
-Coverage includes: API contract, session wiki, Global Wiki, web search, agentic E2E (shell/MCP), HITL, streaming, guardrails, validation, prompt profiles.
+Coverage includes: API contract (OpenAI `/v1` + legacy), session wiki, Global Wiki (query packing, digests), web search, agentic E2E (shell/MCP), skills/guardrails, HITL, streaming, validation, prompt profiles.
 
 ---
 
@@ -676,6 +916,8 @@ src/
   ContextMemory.Adapters/         # Ollama, OpenAI, LM Studio, web search
   ContextMemory.Admin.UI/         # Blazor component library (Chat Lab / config editors)
   ContextMemory.Admin.Web/        # Runnable Admin console host (http://localhost:5200)
+mcp-runtime/                      # Node host for stdio MCP packages (/opt/mcps)
+sandbox-runtime/                  # Node host for self-hosted shell/python/node tools
 tests/
   ContextMemory.Api.Tests/        # Integration and E2E tests
 ```
@@ -683,6 +925,23 @@ tests/
 **Dependency graph:** `Api → Infrastructure → Core` · `Adapters → Core`
 
 Public contracts live in `src/ContextMemory.Core/Contracts/` with XML documentation. Enable Swagger in Development at `/swagger` for the HTTP surface.
+
+---
+
+## Documentation backlog
+
+Items still thin or missing from this README (code exists; docs TBD or expand later):
+
+| Area | What's missing |
+|---|---|
+| **MCP catalog** | End-to-end stdio packaging guide (`mcp-runtime` + `/opt/mcps`) and credential modes matrix beyond Config field help |
+| **sandbox-runtime** | Security model, env knobs (`SANDBOX_*`), and ACA vs self-hosted comparison beyond the feature bullets |
+| **Global Wiki digests** | Operational guidance for large corpora (batch ingest → `digests/rebuild`, when to `force`, catalog size) |
+| **Network Compose** | `docker-compose.network.yml` (Postgres, shared network, multi-tenant seeds such as `laravox` / `kyc`) as a first-class quick-start path |
+| **OpenAI metadata** | Where agentic progress / HITL confirmation appear on `/v1` responses vs legacy `/api/chat` `context_memory` |
+| **Cloud vs OSS deltas** | Explicit matrix of Cloud-only dashboard features vs this repo |
+
+PRs that close any row above are welcome — keep examples in English and prefer `/v1/chat/completions` in new snippets.
 
 ---
 
