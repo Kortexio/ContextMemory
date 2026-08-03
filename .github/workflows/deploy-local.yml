@@ -1,0 +1,67 @@
+name: Deploy local
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-local-contextmemory
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Windows, network-local]
+    timeout-minutes: 45
+    steps:
+      - name: Pull and rebuild on this PC
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $env:Path = "C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\Git\cmd;" + $env:Path
+          $dir = "C:\Network\_work\ContextMemory"
+          if (-not (Test-Path $dir)) { throw "Pasta em falta: $dir" }
+          Set-Location $dir
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+          if (-not (Test-Path .env) -and (Test-Path .env.example)) {
+            Copy-Item .env.example .env
+            Write-Host "Created .env from .env.example"
+          }
+          docker network inspect network-local 2>$null | Out-Null
+          if ($LASTEXITCODE -ne 0) { docker network create network-local }
+          docker compose -f docker-compose.yml -f docker-compose.network.yml up -d --build
+          docker compose -f docker-compose.yml -f docker-compose.network.yml ps
+
+          $apiPort = "5100"
+          $adminPort = "5200"
+          if (Test-Path .env) {
+            $m = Select-String -Path .env -Pattern '^API_PORT=(.+)$' | Select-Object -First 1
+            if ($m) { $apiPort = $m.Matches.Groups[1].Value.Trim() }
+            $m = Select-String -Path .env -Pattern '^ADMIN_PORT=(.+)$' | Select-Object -First 1
+            if ($m) { $adminPort = $m.Matches.Groups[1].Value.Trim() }
+          }
+
+          function Wait-HttpOk([string]$Url, [int]$Attempts = 40) {
+            for ($i = 1; $i -le $Attempts; $i++) {
+              Start-Sleep -Seconds 3
+              try {
+                $health = Invoke-WebRequest $Url -UseBasicParsing -TimeoutSec 10
+                if ($health.StatusCode -eq 200) {
+                  Write-Host "$Url -> $($health.StatusCode) $($health.Content)"
+                  return $true
+                }
+              } catch {
+                Write-Host "Health $Url attempt $i/$Attempts : $($_.Exception.Message)"
+              }
+            }
+            return $false
+          }
+
+          if (-not (Wait-HttpOk "http://localhost:$apiPort/health")) {
+            throw "API health check falhou (porta $apiPort)"
+          }
+          if (-not (Wait-HttpOk "http://localhost:$adminPort/")) {
+            throw "Admin health check falhou (porta $adminPort)"
+          }
