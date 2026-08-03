@@ -1,0 +1,216 @@
+@page "/apps/{AppId}"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@layout AppLayout
+
+<PageTitle>@AppId · Dashboard</PageTitle>
+
+@if (_loading)
+{
+    <div class="kx-loading-banner"><i class="fas fa-spinner fa-spin"></i> Loading dashboard…</div>
+}
+else if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+else if (_stats is not null)
+{
+    <div class="kx-page-header">
+        <div>
+            <h1 class="kx-page-title">Dashboard</h1>
+            <p class="kx-page-lead">Live metrics for <code>@AppId</code>.</p>
+        </div>
+        <div class="d-flex flex-wrap" style="gap:0.5rem">
+            <span class="kx-badge">@(_source ?? "app")</span>
+            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ReloadAsync" disabled="@_loading">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+            <a class="btn btn-primary btn-sm" href="/apps/@AppId/config/llm">Configure LLM</a>
+        </div>
+    </div>
+
+    <div class="kx-metrics">
+        <div class="kx-metric">
+            <div class="kx-metric-label">Requests</div>
+            <div class="kx-metric-value">@(_stats.Telemetry?.RequestsTotal ?? 0)</div>
+        </div>
+        <div class="kx-metric">
+            <div class="kx-metric-label">Errors</div>
+            <div class="kx-metric-value">@(_stats.Telemetry?.RequestsError ?? 0)</div>
+        </div>
+        <div class="kx-metric">
+            <div class="kx-metric-label">Active users</div>
+            <div class="kx-metric-value">@_stats.ActiveUsers</div>
+        </div>
+        <div class="kx-metric">
+            <div class="kx-metric-label">Avg latency</div>
+            <div class="kx-metric-value">@((_stats.Telemetry?.AvgLatencyMs ?? 0).ToString("0"))<span style="font-size:0.85rem;font-weight:500"> ms</span></div>
+        </div>
+        <div class="kx-metric">
+            <div class="kx-metric-label">Tokens in</div>
+            <div class="kx-metric-value">@(_stats.Telemetry?.TokensPrompt ?? 0)</div>
+        </div>
+        <div class="kx-metric">
+            <div class="kx-metric-label">Tokens out</div>
+            <div class="kx-metric-value">@(_stats.Telemetry?.TokensCompletion ?? 0)</div>
+        </div>
+    </div>
+
+    <div class="kx-activity-grid" style="margin-bottom:1rem">
+        <section class="kx-panel">
+            <div class="kx-panel-head">
+                <div>
+                    <h2>Wiki memory</h2>
+                    <p>Last observed turn for this tenant.</p>
+                </div>
+                <div class="kx-panel-stat">@(_stats.Telemetry?.WikiPagesTotal ?? 0)</div>
+            </div>
+            @if (_stats.Telemetry is { } t)
+            {
+                <div class="kx-panel-body">
+                    <div class="kx-metrics" style="margin-bottom:0">
+                        <div class="kx-metric">
+                            <div class="kx-metric-label">Chars in prompt</div>
+                            <div class="kx-metric-value" style="font-size:1.2rem">@t.WikiContextChars</div>
+                        </div>
+                        <div class="kx-metric">
+                            <div class="kx-metric-label">Pages included</div>
+                            <div class="kx-metric-value" style="font-size:1.2rem">@t.WikiPagesIncluded</div>
+                        </div>
+                        <div class="kx-metric">
+                            <div class="kx-metric-label">Compactions</div>
+                            <div class="kx-metric-value" style="font-size:1.2rem">@t.WikiCompactionSuccess / @t.WikiCompactionErrors</div>
+                        </div>
+                        <div class="kx-metric">
+                            <div class="kx-metric-label">Truncated</div>
+                            <div class="kx-metric-value" style="font-size:1.2rem">@t.WikiTruncatedTotal</div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="kx-panel-empty"><p>No wiki telemetry yet.</p></div>
+            }
+            <div class="kx-panel-foot">
+                <a href="/apps/@AppId/config/memory">Memory settings</a>
+            </div>
+        </section>
+
+        <section class="kx-panel">
+            <div class="kx-panel-head">
+                <div>
+                    <h2>Web search</h2>
+                    <p>Lookup activity for this app.</p>
+                </div>
+                <div class="kx-panel-stat">@(_stats.Telemetry?.WebSearchTotal ?? 0)</div>
+            </div>
+            @if (_stats.Telemetry is { } ws)
+            {
+                <div class="kx-panel-body">
+                    <div class="kx-metrics" style="margin-bottom:0">
+                        <div class="kx-metric">
+                            <div class="kx-metric-label">Searches</div>
+                            <div class="kx-metric-value" style="font-size:1.2rem">@ws.WebSearchTotal</div>
+                        </div>
+                        <div class="kx-metric">
+                            <div class="kx-metric-label">Hits</div>
+                            <div class="kx-metric-value" style="font-size:1.2rem">@ws.WebSearchHits</div>
+                        </div>
+                        <div class="kx-metric">
+                            <div class="kx-metric-label">Skipped</div>
+                            <div class="kx-metric-value" style="font-size:1.2rem">@ws.WebSearchSkippedTotal</div>
+                        </div>
+                        <div class="kx-metric">
+                            <div class="kx-metric-label">Last latency</div>
+                            <div class="kx-metric-value" style="font-size:1.2rem">@ws.WebSearchLastLatencyMs.ToString("0") ms</div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="kx-panel-empty"><p>No web search telemetry yet.</p></div>
+            }
+            <div class="kx-panel-foot">
+                <a href="/apps/@AppId/config/web-search">Web search settings</a>
+            </div>
+        </section>
+    </div>
+
+    <div class="kx-explore">
+        <div class="kx-section-head">
+            <h2>Configure this app</h2>
+            <p>Jump to a settings section.</p>
+        </div>
+        <div class="kx-explore-grid">
+            <a class="kx-explore-card" href="/apps/@AppId/config/llm">
+                <h3>LLM</h3>
+                <p>Model, backend, endpoint, and streaming.</p>
+            </a>
+            <a class="kx-explore-card" href="/apps/@AppId/policies">
+                <span class="kx-explore-tag">Suggested</span>
+                <h3>Skills &amp; guardrails</h3>
+                <p>Inherit platform defaults or pin a custom pack.</p>
+            </a>
+            <a class="kx-explore-card" href="/apps/@AppId/config/agentic">
+                <h3>Agentic</h3>
+                <p>Tool loop, MCP integrations, and execution sandboxes.</p>
+            </a>
+            <a class="kx-explore-card" href="/apps/@AppId/credentials">
+                <h3>API key</h3>
+                <p>View or rotate the tenant Bearer token.</p>
+            </a>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string AppId { get; set; } = string.Empty;
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+    [Inject] private AdminSession Session { get; set; } = default!;
+
+    private AppStatsResponse? _stats;
+    private string? _source;
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _error = null;
+
+        if (!Session.IsConfigured)
+            await Session.InitializeAsync();
+
+        if (!Session.IsConfigured)
+        {
+            _error = "Configure Settings first.";
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            _stats = await Api.GetAppStatsAsync(AppId);
+            try
+            {
+                var creds = await Api.GetAppCredentialsAsync(AppId);
+                _source = creds?.Source;
+            }
+            catch
+            {
+                _source = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

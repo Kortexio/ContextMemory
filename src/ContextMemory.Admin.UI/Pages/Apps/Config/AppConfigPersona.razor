@@ -1,0 +1,83 @@
+@page "/apps/{AppId}/config/persona"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@layout AppLayout
+@inherits AppConfigSectionBase
+
+<PageTitle>Persona · @AppId</PageTitle>
+
+<div class="kx-page-header">
+    <div>
+        <h1 class="kx-page-title">Persona &amp; rules</h1>
+        <p class="kx-page-lead">Prompt identity and hard constraints for this tenant.</p>
+    </div>
+    <button type="button" class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@(Saving || Loading)">Reload</button>
+</div>
+
+@if (Loading)
+{
+    <div class="kx-loading-banner"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+}
+else if (LoadError is not null)
+{
+    <div class="alert alert-warning">@LoadError</div>
+}
+else
+{
+    <div class="kx-panel">
+        <div class="kx-panel-body">
+            <EditForm Model="_form" OnValidSubmit="SaveAsync">
+                <div class="form-group">
+                    <label>Base persona</label>
+                    <InputTextArea class="form-control" rows="4" @bind-Value="_form.BasePersona" />
+                </div>
+                <div class="form-group">
+                    <label>Business rules</label>
+                    <InputTextArea class="form-control" rows="3" @bind-Value="_form.BusinessRules" />
+                </div>
+                <div class="form-group">
+                    <label>Format rules</label>
+                    <InputTextArea class="form-control" rows="3" @bind-Value="_form.FormatRules" />
+                </div>
+                <div class="form-group">
+                    <label>Wiki schema</label>
+                    <InputTextArea class="form-control" rows="4" @bind-Value="_form.WikiSchema" />
+                </div>
+
+                @if (Message is not null) { <div class="alert alert-success">@Message</div> }
+                @if (Error is not null) { <div class="alert alert-danger">@Error</div> }
+
+                <div class="kx-section-save">
+                    <button class="btn btn-primary" type="submit" disabled="@Saving">@(Saving ? "Saving…" : "Save persona")</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly PersonaForm _form = new();
+
+    protected override void OnConfigLoaded(AppRuntimeConfigDto config)
+    {
+        _form.BasePersona = config.BasePersona;
+        _form.BusinessRules = config.BusinessRules;
+        _form.FormatRules = config.FormatRules;
+        _form.WikiSchema = config.WikiSchema;
+    }
+
+    protected override AppConfigPatchRequest BuildPatch() => new()
+    {
+        BasePersona = _form.BasePersona,
+        BusinessRules = _form.BusinessRules,
+        FormatRules = _form.FormatRules,
+        WikiSchema = _form.WikiSchema
+    };
+
+    private sealed class PersonaForm
+    {
+        public string BasePersona { get; set; } = string.Empty;
+        public string BusinessRules { get; set; } = string.Empty;
+        public string FormatRules { get; set; } = string.Empty;
+        public string WikiSchema { get; set; } = string.Empty;
+    }
+}

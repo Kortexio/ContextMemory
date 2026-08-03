@@ -164,7 +164,7 @@
         var appId = e.Value?.ToString();
         if (string.IsNullOrWhiteSpace(appId))
             return;
-        Nav.NavigateTo($"/apps/{Uri.EscapeDataString(appId)}/config");
+        Nav.NavigateTo($"/apps/{Uri.EscapeDataString(appId)}");
     }
 
     private async Task ToggleSidebarAsync()

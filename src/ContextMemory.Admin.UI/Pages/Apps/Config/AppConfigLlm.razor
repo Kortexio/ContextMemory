@@ -1,0 +1,115 @@
+@page "/apps/{AppId}/config"
+@page "/apps/{AppId}/config/llm"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@layout AppLayout
+@inherits AppConfigSectionBase
+
+<PageTitle>LLM · @AppId</PageTitle>
+
+<div class="kx-page-header">
+    <div>
+        <h1 class="kx-page-title">LLM</h1>
+        <p class="kx-page-lead">Model, backend, and chat history for this tenant.</p>
+    </div>
+    <button type="button" class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@(Saving || Loading)">Reload</button>
+</div>
+
+@if (Loading)
+{
+    <div class="kx-loading-banner"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+}
+else if (LoadError is not null)
+{
+    <div class="alert alert-warning">@LoadError</div>
+}
+else
+{
+    <div class="kx-panel">
+        <div class="kx-panel-body">
+            <EditForm Model="_form" OnValidSubmit="SaveAsync">
+                <div class="form-group">
+                    <label>Default language</label>
+                    <InputText class="form-control" @bind-Value="_form.DefaultLanguage" />
+                    <FieldHelp>BCP-47 locale injected into prompts (e.g. en-US).</FieldHelp>
+                </div>
+                <div class="form-group">
+                    <label>LLM model</label>
+                    <InputText class="form-control" @bind-Value="_form.LlmModel" />
+                    <FieldHelp>Model id for this tenant. Must exist on the configured backend.</FieldHelp>
+                </div>
+                <div class="form-group">
+                    <label>Backend</label>
+                    <InputSelect class="form-control" @bind-Value="_form.LlmBackend">
+                        <option value="ollama">ollama (OpenAI /v1 on OllamaEndpoint)</option>
+                        <option value="vllm">vllm</option>
+                        <option value="lmstudio">lmstudio</option>
+                        <option value="openai">openai</option>
+                        <option value="openai-compatible">openai-compatible</option>
+                        <option value="custom">custom (alias of openai-compatible)</option>
+                        <option value="ollama-native">ollama-native (/api/chat fallback)</option>
+                    </InputSelect>
+                </div>
+                <div class="form-group">
+                    <label>LLM endpoint URL (optional)</label>
+                    <InputText class="form-control" @bind-Value="_form.LlmEndpoint" placeholder="Leave empty for host default" />
+                </div>
+                <div class="form-group">
+                    <label>LLM API key (optional)</label>
+                    <InputText class="form-control" type="password" @bind-Value="_form.LlmApiKey" />
+                </div>
+                <div class="form-group">
+                    <label>Max history messages</label>
+                    <InputNumber class="form-control" @bind-Value="_form.MaxHistoryMessages" />
+                </div>
+                <div class="form-check mb-3">
+                    <InputCheckbox class="form-check-input" id="streamingEnabled" @bind-Value="_form.StreamingEnabled" />
+                    <label class="form-check-label" for="streamingEnabled">Streaming enabled</label>
+                </div>
+
+                @if (Message is not null) { <div class="alert alert-success">@Message</div> }
+                @if (Error is not null) { <div class="alert alert-danger">@Error</div> }
+
+                <div class="kx-section-save">
+                    <button class="btn btn-primary" type="submit" disabled="@Saving">@(Saving ? "Saving…" : "Save LLM")</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly LlmForm _form = new();
+
+    protected override void OnConfigLoaded(AppRuntimeConfigDto config)
+    {
+        _form.DefaultLanguage = config.DefaultLanguage;
+        _form.LlmModel = config.LlmModel;
+        _form.LlmBackend = config.LlmBackend;
+        _form.LlmEndpoint = config.LlmEndpoint ?? string.Empty;
+        _form.LlmApiKey = config.LlmApiKey ?? string.Empty;
+        _form.MaxHistoryMessages = config.MaxHistoryMessages;
+        _form.StreamingEnabled = config.StreamingEnabled;
+    }
+
+    protected override AppConfigPatchRequest BuildPatch() => new()
+    {
+        DefaultLanguage = _form.DefaultLanguage,
+        LlmModel = _form.LlmModel,
+        LlmBackend = _form.LlmBackend,
+        LlmEndpoint = _form.LlmEndpoint ?? string.Empty,
+        LlmApiKey = _form.LlmApiKey ?? string.Empty,
+        MaxHistoryMessages = _form.MaxHistoryMessages,
+        StreamingEnabled = _form.StreamingEnabled
+    };
+
+    private sealed class LlmForm
+    {
+        public string DefaultLanguage { get; set; } = "en-US";
+        public string LlmModel { get; set; } = "qwen3.5:9b";
+        public string LlmBackend { get; set; } = "ollama";
+        public string LlmEndpoint { get; set; } = string.Empty;
+        public string LlmApiKey { get; set; } = string.Empty;
+        public int MaxHistoryMessages { get; set; } = 20;
+        public bool StreamingEnabled { get; set; } = true;
+    }
+}

@@ -1,0 +1,94 @@
+@page "/apps/{AppId}/config/memory"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@layout AppLayout
+@inherits AppConfigSectionBase
+
+<PageTitle>Memory · @AppId</PageTitle>
+
+<div class="kx-page-header">
+    <div>
+        <h1 class="kx-page-title">Memory &amp; wiki</h1>
+        <p class="kx-page-lead">Session wiki budgets and Global Wiki tool access.</p>
+    </div>
+    <button type="button" class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@(Saving || Loading)">Reload</button>
+</div>
+
+@if (Loading)
+{
+    <div class="kx-loading-banner"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+}
+else if (LoadError is not null)
+{
+    <div class="alert alert-warning">@LoadError</div>
+}
+else
+{
+    <div class="kx-panel">
+        <div class="kx-panel-body">
+            <EditForm Model="_form" OnValidSubmit="SaveAsync">
+                <div class="kx-section-title">Session wiki</div>
+                <div class="form-group">
+                    <label>Max wiki context chars</label>
+                    <InputNumber class="form-control" @bind-Value="_form.MaxWikiContextChars" />
+                    <FieldHelp>Budget for compiled per-session wiki text. <code>0</code> = API default.</FieldHelp>
+                </div>
+                <div class="form-group">
+                    <label>Compaction threshold (bytes)</label>
+                    <InputNumber class="form-control" @bind-Value="_form.WikiCompactionThresholdBytes" />
+                </div>
+                <div class="form-group">
+                    <label>Compaction min pages</label>
+                    <InputNumber class="form-control" @bind-Value="_form.WikiCompactionMinPages" />
+                </div>
+
+                <div class="kx-section-title">Global Wiki</div>
+                <div class="form-check mb-2">
+                    <InputCheckbox class="form-check-input" id="globalWikiEnabled" @bind-Value="_form.GlobalWikiEnabled" />
+                    <label class="form-check-label" for="globalWikiEnabled">Enable Global Wiki (<code>wiki_search</code>)</label>
+                </div>
+                <div class="form-group">
+                    <label>Max Global Wiki tool chars</label>
+                    <InputNumber class="form-control" @bind-Value="_form.MaxGlobalWikiToolChars" />
+                </div>
+
+                @if (Message is not null) { <div class="alert alert-success">@Message</div> }
+                @if (Error is not null) { <div class="alert alert-danger">@Error</div> }
+
+                <div class="kx-section-save">
+                    <button class="btn btn-primary" type="submit" disabled="@Saving">@(Saving ? "Saving…" : "Save memory")</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly MemoryForm _form = new();
+
+    protected override void OnConfigLoaded(AppRuntimeConfigDto config)
+    {
+        _form.MaxWikiContextChars = config.MaxWikiContextChars;
+        _form.WikiCompactionThresholdBytes = config.WikiCompactionThresholdBytes;
+        _form.WikiCompactionMinPages = config.WikiCompactionMinPages;
+        _form.GlobalWikiEnabled = config.GlobalWikiEnabled;
+        _form.MaxGlobalWikiToolChars = config.MaxGlobalWikiToolChars;
+    }
+
+    protected override AppConfigPatchRequest BuildPatch() => new()
+    {
+        MaxWikiContextChars = _form.MaxWikiContextChars > 0 ? _form.MaxWikiContextChars : null,
+        WikiCompactionThresholdBytes = _form.WikiCompactionThresholdBytes > 0 ? _form.WikiCompactionThresholdBytes : null,
+        WikiCompactionMinPages = _form.WikiCompactionMinPages > 0 ? _form.WikiCompactionMinPages : null,
+        GlobalWikiEnabled = _form.GlobalWikiEnabled,
+        MaxGlobalWikiToolChars = _form.MaxGlobalWikiToolChars > 0 ? _form.MaxGlobalWikiToolChars : null
+    };
+
+    private sealed class MemoryForm
+    {
+        public int MaxWikiContextChars { get; set; }
+        public long WikiCompactionThresholdBytes { get; set; }
+        public int WikiCompactionMinPages { get; set; }
+        public bool GlobalWikiEnabled { get; set; } = true;
+        public int MaxGlobalWikiToolChars { get; set; }
+    }
+}

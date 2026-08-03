@@ -1,0 +1,63 @@
+@inherits LayoutComponentBase
+@layout MainLayout
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="kx-app-shell">
+    <aside class="kx-app-nav" aria-label="App sections">
+        <div class="kx-app-nav-brand">
+            <NavLink class="kx-app-nav-back" href="/">← Apps</NavLink>
+            <div class="kx-app-nav-id" title="@AppId">@AppId</div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(AppId))
+        {
+            <nav class="kx-app-nav-list">
+                <div class="kx-app-nav-label">Overview</div>
+                <NavLink class="kx-app-nav-link" href="@($"/apps/{AppId}")" Match="NavLinkMatch.All">Dashboard</NavLink>
+                <NavLink class="kx-app-nav-link" href="@($"/apps/{AppId}/credentials")">API key</NavLink>
+                <NavLink class="kx-app-nav-link" href="/chat">Playground</NavLink>
+
+                <div class="kx-app-nav-label">Configuration</div>
+                <NavLink class="kx-app-nav-link" href="@($"/apps/{AppId}/config/llm")">LLM</NavLink>
+                <NavLink class="kx-app-nav-link" href="@($"/apps/{AppId}/config/memory")">Memory &amp; wiki</NavLink>
+                <NavLink class="kx-app-nav-link" href="@($"/apps/{AppId}/config/web-search")">Web search</NavLink>
+                <NavLink class="kx-app-nav-link" href="@($"/apps/{AppId}/config/rate-limits")">Rate limits</NavLink>
+                <NavLink class="kx-app-nav-link" href="@($"/apps/{AppId}/config/persona")">Persona &amp; rules</NavLink>
+                <NavLink class="kx-app-nav-link" href="@($"/apps/{AppId}/config/agentic")">Agentic</NavLink>
+                <NavLink class="kx-app-nav-link" href="@($"/apps/{AppId}/policies")">Skills &amp; guardrails</NavLink>
+            </nav>
+        }
+    </aside>
+
+    <div class="kx-app-main">
+        @Body
+    </div>
+</div>
+
+@code {
+    private string AppId { get; set; } = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        RefreshAppId();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        RefreshAppId();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void RefreshAppId()
+    {
+        var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0];
+        var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        AppId = parts.Length >= 2 && parts[0].Equals("apps", StringComparison.OrdinalIgnoreCase)
+            ? Uri.UnescapeDataString(parts[1])
+            : string.Empty;
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

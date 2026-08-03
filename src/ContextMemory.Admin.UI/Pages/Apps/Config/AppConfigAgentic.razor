@@ -1,0 +1,52 @@
+@page "/apps/{AppId}/config/agentic"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@layout AppLayout
+@inherits AppConfigSectionBase
+@using static ContextMemory.Admin.UI.Components.AgenticConfigEditor
+
+<PageTitle>Agentic · @AppId</PageTitle>
+
+<div class="kx-page-header">
+    <div>
+        <h1 class="kx-page-title">Agentic</h1>
+        <p class="kx-page-lead">
+            Tool loop, sandboxes, and MCP integrations.
+            Skills &amp; guardrails are on <a href="/apps/@AppId/policies">Policies</a>.
+        </p>
+    </div>
+    <button type="button" class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@(Saving || Loading)">Reload</button>
+</div>
+
+@if (Loading)
+{
+    <div class="kx-loading-banner"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+}
+else if (LoadError is not null)
+{
+    <div class="alert alert-warning">@LoadError</div>
+}
+else
+{
+    <EditForm Model="_agentic" OnValidSubmit="SaveAsync">
+        <AgenticConfigEditor Model="_agentic" />
+
+        @if (Message is not null) { <div class="alert alert-success">@Message</div> }
+        @if (Error is not null) { <div class="alert alert-danger">@Error</div> }
+
+        <div class="kx-section-save">
+            <button class="btn btn-primary" type="submit" disabled="@Saving">@(Saving ? "Saving…" : "Save agentic")</button>
+        </div>
+    </EditForm>
+}
+
+@code {
+    private AgenticConfigForm _agentic = new();
+
+    protected override void OnConfigLoaded(AppRuntimeConfigDto config) =>
+        _agentic = AgenticFrom(config);
+
+    protected override AppConfigPatchRequest BuildPatch() => new()
+    {
+        Agentic = _agentic.ToConfig()
+    };
+}

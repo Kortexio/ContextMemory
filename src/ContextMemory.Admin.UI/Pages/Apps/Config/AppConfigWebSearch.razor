@@ -1,0 +1,116 @@
+@page "/apps/{AppId}/config/web-search"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@layout AppLayout
+@inherits AppConfigSectionBase
+
+<PageTitle>Web search · @AppId</PageTitle>
+
+<div class="kx-page-header">
+    <div>
+        <h1 class="kx-page-title">Web search</h1>
+        <p class="kx-page-lead">When and how this app may look up public information.</p>
+    </div>
+    <button type="button" class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@(Saving || Loading)">Reload</button>
+</div>
+
+@if (Loading)
+{
+    <div class="kx-loading-banner"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+}
+else if (LoadError is not null)
+{
+    <div class="alert alert-warning">@LoadError</div>
+}
+else
+{
+    <div class="kx-panel">
+        <div class="kx-panel-body">
+            <EditForm Model="_form" OnValidSubmit="SaveAsync">
+                <div class="form-check mb-2">
+                    <InputCheckbox class="form-check-input" id="webSearchEnabled" @bind-Value="_form.Enabled" />
+                    <label class="form-check-label" for="webSearchEnabled">Enable web search</label>
+                </div>
+                <div class="form-group">
+                    <label>Mode</label>
+                    <InputSelect class="form-control" @bind-Value="_form.Mode">
+                        <option value="heuristic">heuristic</option>
+                        <option value="llm">llm</option>
+                        <option value="always">always</option>
+                        <option value="off">off</option>
+                    </InputSelect>
+                </div>
+                <div class="form-group">
+                    <label>Provider</label>
+                    <InputSelect class="form-control" @bind-Value="_form.Provider">
+                        <option value="tavily">tavily</option>
+                        <option value="brave">brave</option>
+                    </InputSelect>
+                    <FieldHelp>API keys are on the host (<code>ContextMemory:WebSearch</code>), not per app.</FieldHelp>
+                </div>
+                <div class="form-group">
+                    <label>Max results</label>
+                    <InputNumber class="form-control" @bind-Value="_form.MaxResults" />
+                </div>
+                <div class="form-group">
+                    <label>Max context chars</label>
+                    <InputNumber class="form-control" @bind-Value="_form.MaxContextChars" />
+                </div>
+                <div class="form-check mb-2">
+                    <InputCheckbox class="form-check-input" id="persistWeb" @bind-Value="_form.PersistToWiki" />
+                    <label class="form-check-label" for="persistWeb">Persist web facts to session wiki</label>
+                </div>
+                <div class="form-check mb-2">
+                    <InputCheckbox class="form-check-input" id="logWeb" @bind-Value="_form.LogWebSearch" />
+                    <label class="form-check-label" for="logWeb">Log web searches in telemetry</label>
+                </div>
+
+                @if (Message is not null) { <div class="alert alert-success">@Message</div> }
+                @if (Error is not null) { <div class="alert alert-danger">@Error</div> }
+
+                <div class="kx-section-save">
+                    <button class="btn btn-primary" type="submit" disabled="@Saving">@(Saving ? "Saving…" : "Save web search")</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly WebForm _form = new();
+
+    protected override void OnConfigLoaded(AppRuntimeConfigDto config)
+    {
+        _form.Enabled = config.WebSearch?.Enabled ?? false;
+        _form.Mode = config.WebSearch?.Mode ?? "heuristic";
+        _form.Provider = config.WebSearch?.Provider ?? "tavily";
+        _form.MaxResults = config.WebSearch?.MaxResults ?? 5;
+        _form.MaxContextChars = config.WebSearch?.MaxContextChars ?? 3000;
+        _form.PersistToWiki = config.WebSearch?.PersistToWiki ?? false;
+        _form.LogWebSearch = config.WebSearch?.LogWebSearch ?? true;
+    }
+
+    protected override AppConfigPatchRequest BuildPatch() => new()
+    {
+        WebSearch = new WebSearchConfigPatch
+        {
+            Enabled = _form.Enabled,
+            Mode = _form.Mode,
+            Provider = _form.Provider,
+            MaxResults = _form.MaxResults > 0 ? _form.MaxResults : null,
+            MaxContextChars = _form.MaxContextChars > 0 ? _form.MaxContextChars : null,
+            PersistToWiki = _form.PersistToWiki,
+            LogWebSearch = _form.LogWebSearch
+        }
+    };
+
+    private sealed class WebForm
+    {
+        public bool Enabled { get; set; }
+        public string Mode { get; set; } = "heuristic";
+        public string Provider { get; set; } = "tavily";
+        public int MaxResults { get; set; } = 5;
+        public int MaxContextChars { get; set; } = 3000;
+        public bool PersistToWiki { get; set; }
+        public bool LogWebSearch { get; set; } = true;
+    }
+}
