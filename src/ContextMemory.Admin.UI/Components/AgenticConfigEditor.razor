@@ -1,7 +1,6 @@
 @using ContextMemory.Core.Agentic
 @using ContextMemory.Admin.UI.Models
 @using ContextMemory.Admin.UI.Services
-@inject AdminApiClient Api
 
 <div class="card card-outline card-warning mb-3">
     <div class="card-header">
@@ -99,61 +98,12 @@
             <FieldHelp>Escalate instead of returning a partial answer when the iteration cap is hit.</FieldHelp>
         </div>
 
-        <h6 class="mt-3">Skills &amp; guardrail packs</h6>
+        <h6 class="mt-3">Per-app skills &amp; guardrails</h6>
         <p class="text-muted small mb-2">
-            Loaded into the model on every chat. Manage catalog text on
-            <a href="/skills">Skills</a>.
+            Choose platform defaults or a custom selection for this tenant.
+            Catalog text lives on <a href="/skills">Skills &amp; Guardrails</a>.
         </p>
-        @if (_catalogError is not null)
-        {
-            <div class="alert alert-warning py-2">@_catalogError</div>
-        }
-        else if (!_catalogLoaded)
-        {
-            <p class="text-muted small"><i class="fas fa-spinner fa-spin"></i> Loading catalog…</p>
-        }
-        else
-        {
-            <div class="row">
-                <div class="col-md-6">
-                    <strong class="d-block mb-2">Skills</strong>
-                    @foreach (var skill in _catalogSkills)
-                    {
-                        var sid = skill.Id;
-                        <div class="form-check mb-1">
-                            <input class="form-check-input" type="checkbox" id="@($"skill-{sid}")"
-                                   checked="@Model.EnabledSkillIds.Contains(sid)"
-                                   @onchange="e => ToggleSkill(sid, (bool)(e.Value ?? false))" />
-                            <label class="form-check-label" for="@($"skill-{sid}")">
-                                @skill.Name
-                                @if (skill.IsSystem)
-                                {
-                                    <span class="badge badge-secondary ml-1">system</span>
-                                }
-                            </label>
-                            <div class="text-muted small">@skill.Description</div>
-                        </div>
-                    }
-                </div>
-                <div class="col-md-6">
-                    <strong class="d-block mb-2">Guardrail packs</strong>
-                    @foreach (var g in _catalogGuardrails)
-                    {
-                        var gid = g.Id;
-                        <div class="form-check mb-1">
-                            <input class="form-check-input" type="checkbox" id="@($"gr-{gid}")"
-                                   checked="@Model.EnabledGuardrailIds.Contains(gid)"
-                                   @onchange="e => ToggleGuardrail(gid, (bool)(e.Value ?? false))" />
-                            <label class="form-check-label" for="@($"gr-{gid}")">
-                                @g.Name
-                                <span class="badge badge-light ml-1">@g.Kind</span>
-                            </label>
-                            <div class="text-muted small">@g.Description</div>
-                        </div>
-                    }
-                </div>
-            </div>
-        }
+        <PolicyPacksPicker Model="Model" />
 
         <h6 class="mt-4">Execution tools</h6>
         <FieldHelp>
@@ -401,62 +351,6 @@
 
     [Parameter] public AgenticConfigForm Model { get; set; } = new();
 
-    private bool _catalogLoaded;
-    private string? _catalogError;
-    private List<AgenticSkillAdminDto> _catalogSkills = [];
-    private List<AgenticGuardrailAdminDto> _catalogGuardrails = [];
-
-    protected override async Task OnInitializedAsync()
-    {
-        try
-        {
-            var catalog = await Api.GetAgenticCatalogAsync().ConfigureAwait(true);
-            _catalogSkills = catalog?.Skills?.ToList() ?? [];
-            _catalogGuardrails = catalog?.Guardrails?.ToList() ?? [];
-            if (Model.EnabledSkillIds.Count == 0 && Model.EnabledGuardrailIds.Count == 0 && !Model.PolicyPacksExplicit)
-            {
-                Model.EnabledSkillIds = _catalogSkills.Where(s => s.IsDefaultEnabled).Select(s => s.Id).ToList();
-                Model.EnabledGuardrailIds = _catalogGuardrails.Where(g => g.IsDefaultEnabled).Select(g => g.Id).ToList();
-            }
-        }
-        catch (Exception ex)
-        {
-            _catalogError = ex.Message;
-        }
-        finally
-        {
-            _catalogLoaded = true;
-        }
-    }
-
-    private void ToggleSkill(string id, bool enabled)
-    {
-        Model.PolicyPacksExplicit = true;
-        if (enabled)
-        {
-            if (!Model.EnabledSkillIds.Contains(id))
-                Model.EnabledSkillIds.Add(id);
-        }
-        else
-        {
-            Model.EnabledSkillIds.RemoveAll(x => string.Equals(x, id, StringComparison.OrdinalIgnoreCase));
-        }
-    }
-
-    private void ToggleGuardrail(string id, bool enabled)
-    {
-        Model.PolicyPacksExplicit = true;
-        if (enabled)
-        {
-            if (!Model.EnabledGuardrailIds.Contains(id))
-                Model.EnabledGuardrailIds.Add(id);
-        }
-        else
-        {
-            Model.EnabledGuardrailIds.RemoveAll(x => string.Equals(x, id, StringComparison.OrdinalIgnoreCase));
-        }
-    }
-
     private string ConfirmationKeywordsText
     {
         get => string.Join(", ", Model.Guardrails.RequireConfirmationFor);
@@ -511,11 +405,17 @@
         {
             Enabled = Enabled,
             PromptProfile = PromptProfile,
-            PolicyPacks = new PolicyPacksConfig
-            {
-                EnabledSkillIds = EnabledSkillIds.ToList(),
-                EnabledGuardrailIds = EnabledGuardrailIds.ToList()
-            },
+            PolicyPacks = PolicyPacksExplicit
+                ? new PolicyPacksConfig
+                {
+                    EnabledSkillIds = EnabledSkillIds.ToList(),
+                    EnabledGuardrailIds = EnabledGuardrailIds.ToList()
+                }
+                : new PolicyPacksConfig
+                {
+                    EnabledSkillIds = null,
+                    EnabledGuardrailIds = null
+                },
             Tools = new AgenticToolsConfig
             {
                 MaxMcpToolsPerTurn = Tools.MaxMcpToolsPerTurn > 0 ? Tools.MaxMcpToolsPerTurn : 12,
