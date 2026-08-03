@@ -1,0 +1,188 @@
+@using ContextMemory.Admin.UI.Models
+@using ContextMemory.Admin.UI.Services
+@inject AdminApiClient Api
+
+<div class="kx-policy-packs">
+    <div class="kx-policy-mode">
+        <label class="kx-policy-mode-option">
+            <input type="radio" name="@_radioName" checked="@(!Model.PolicyPacksExplicit)"
+                   @onchange="() => SetInherit(true)" />
+            <span>
+                <strong>Platform defaults</strong>
+                <small>Follow catalog items marked default-enabled. New defaults apply automatically.</small>
+            </span>
+        </label>
+        <label class="kx-policy-mode-option">
+            <input type="radio" name="@_radioName" checked="@Model.PolicyPacksExplicit"
+                   @onchange="() => SetInherit(false)" />
+            <span>
+                <strong>Custom for this app</strong>
+                <small>Pin an explicit skill / guardrail selection for this tenant.</small>
+            </span>
+        </label>
+    </div>
+
+    @if (_catalogError is not null)
+    {
+        <div class="alert alert-warning py-2">@_catalogError</div>
+    }
+    else if (!_catalogLoaded)
+    {
+        <p class="text-muted small mb-0"><i class="fas fa-spinner fa-spin"></i> Loading catalog…</p>
+    }
+    else if (!Model.PolicyPacksExplicit)
+    {
+        <div class="kx-policy-inherit-summary">
+            <div>
+                <strong>Skills (default-on)</strong>
+                <p>@string.Join(", ", _catalogSkills.Where(s => s.IsDefaultEnabled).Select(s => s.Name).DefaultIfEmpty("none"))</p>
+            </div>
+            <div>
+                <strong>Guardrails (default-on)</strong>
+                <p>@string.Join(", ", _catalogGuardrails.Where(g => g.IsDefaultEnabled).Select(g => g.Name).DefaultIfEmpty("none"))</p>
+            </div>
+            <a class="btn btn-sm btn-outline-secondary" href="/skills">Manage platform defaults</a>
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <div class="col-md-6">
+                <strong class="d-block mb-2">Skills</strong>
+                @foreach (var skill in _catalogSkills)
+                {
+                    var sid = skill.Id;
+                    <div class="form-check mb-1">
+                        <input class="form-check-input" type="checkbox" id="@($"{_radioName}-skill-{sid}")"
+                               checked="@Model.EnabledSkillIds.Contains(sid)"
+                               @onchange="e => ToggleSkill(sid, (bool)(e.Value ?? false))" />
+                        <label class="form-check-label" for="@($"{_radioName}-skill-{sid}")">
+                            @skill.Name
+                            @if (skill.IsSystem)
+                            {
+                                <span class="badge badge-secondary ml-1">system</span>
+                            }
+                            @if (skill.IsDefaultEnabled)
+                            {
+                                <span class="kx-badge ml-1">default</span>
+                            }
+                        </label>
+                        <div class="text-muted small">@skill.Description</div>
+                    </div>
+                }
+            </div>
+            <div class="col-md-6">
+                <strong class="d-block mb-2">Guardrail packs</strong>
+                @foreach (var g in _catalogGuardrails)
+                {
+                    var gid = g.Id;
+                    <div class="form-check mb-1">
+                        <input class="form-check-input" type="checkbox" id="@($"{_radioName}-gr-{gid}")"
+                               checked="@Model.EnabledGuardrailIds.Contains(gid)"
+                               @onchange="e => ToggleGuardrail(gid, (bool)(e.Value ?? false))" />
+                        <label class="form-check-label" for="@($"{_radioName}-gr-{gid}")">
+                            @g.Name
+                            <span class="badge badge-light ml-1">@g.Kind</span>
+                            @if (g.IsDefaultEnabled)
+                            {
+                                <span class="kx-badge ml-1">default</span>
+                            }
+                        </label>
+                        <div class="text-muted small">@g.Description</div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public AgenticConfigEditor.AgenticConfigForm Model { get; set; } = new();
+    [Parameter] public EventCallback<AgenticConfigEditor.AgenticConfigForm> ModelChanged { get; set; }
+
+    private readonly string _radioName = $"policy-mode-{Guid.NewGuid():N}";
+    private bool _catalogLoaded;
+    private string? _catalogError;
+    private List<AgenticSkillAdminDto> _catalogSkills = [];
+    private List<AgenticGuardrailAdminDto> _catalogGuardrails = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var catalog = await Api.GetAgenticCatalogAsync().ConfigureAwait(true);
+            _catalogSkills = catalog?.Skills?.OrderBy(s => s.SortOrder).ThenBy(s => s.Name).ToList() ?? [];
+            _catalogGuardrails = catalog?.Guardrails?.OrderBy(g => g.SortOrder).ThenBy(g => g.Name).ToList() ?? [];
+
+            if (!Model.PolicyPacksExplicit &&
+                Model.EnabledSkillIds.Count == 0 &&
+                Model.EnabledGuardrailIds.Count == 0)
+            {
+                // Preview defaults in memory only — do not mark explicit.
+                Model.EnabledSkillIds = _catalogSkills.Where(s => s.IsDefaultEnabled).Select(s => s.Id).ToList();
+                Model.EnabledGuardrailIds = _catalogGuardrails.Where(g => g.IsDefaultEnabled).Select(g => g.Id).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            _catalogError = ex.Message;
+        }
+        finally
+        {
+            _catalogLoaded = true;
+        }
+    }
+
+    private async Task SetInherit(bool inherit)
+    {
+        if (inherit)
+        {
+            Model.PolicyPacksExplicit = false;
+            Model.EnabledSkillIds = _catalogSkills.Where(s => s.IsDefaultEnabled).Select(s => s.Id).ToList();
+            Model.EnabledGuardrailIds = _catalogGuardrails.Where(g => g.IsDefaultEnabled).Select(g => g.Id).ToList();
+        }
+        else
+        {
+            Model.PolicyPacksExplicit = true;
+            if (Model.EnabledSkillIds.Count == 0 && Model.EnabledGuardrailIds.Count == 0)
+            {
+                Model.EnabledSkillIds = _catalogSkills.Where(s => s.IsDefaultEnabled).Select(s => s.Id).ToList();
+                Model.EnabledGuardrailIds = _catalogGuardrails.Where(g => g.IsDefaultEnabled).Select(g => g.Id).ToList();
+            }
+        }
+
+        await ModelChanged.InvokeAsync(Model);
+    }
+
+    private async Task ToggleSkill(string id, bool enabled)
+    {
+        Model.PolicyPacksExplicit = true;
+        if (enabled)
+        {
+            if (!Model.EnabledSkillIds.Contains(id))
+                Model.EnabledSkillIds.Add(id);
+        }
+        else
+        {
+            Model.EnabledSkillIds.RemoveAll(x => string.Equals(x, id, StringComparison.OrdinalIgnoreCase));
+        }
+
+        await ModelChanged.InvokeAsync(Model);
+    }
+
+    private async Task ToggleGuardrail(string id, bool enabled)
+    {
+        Model.PolicyPacksExplicit = true;
+        if (enabled)
+        {
+            if (!Model.EnabledGuardrailIds.Contains(id))
+                Model.EnabledGuardrailIds.Add(id);
+        }
+        else
+        {
+            Model.EnabledGuardrailIds.RemoveAll(x => string.Equals(x, id, StringComparison.OrdinalIgnoreCase));
+        }
+
+        await ModelChanged.InvokeAsync(Model);
+    }
+}

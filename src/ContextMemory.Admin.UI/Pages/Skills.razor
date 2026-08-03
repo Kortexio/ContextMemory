@@ -6,12 +6,15 @@
 @using ContextMemory.Admin.UI.Services
 @layout MainLayout
 
-<PageTitle>Skills - Kortexio Admin</PageTitle>
+<PageTitle>Skills &amp; Guardrails - Kortexio Admin</PageTitle>
 
 <div class="kx-page-header">
     <div>
-        <h1 class="kx-page-title">Skills catalog</h1>
-        <p class="kx-page-lead">System and custom skills injected into the agentic system prompt.</p>
+        <h1 class="kx-page-title">Skills &amp; Guardrails</h1>
+        <p class="kx-page-lead">
+            Platform defaults shared by all apps. Per-app overrides live on each tenant’s
+            <strong>Policies</strong> page (or Config → Agentic).
+        </p>
     </div>
     <div class="d-flex flex-wrap" style="gap:0.5rem">
         <button class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@_busy">
@@ -27,12 +30,31 @@
 {
     <div class="kx-empty">
         <h2>Not connected</h2>
-        <p>Configure the API URL and Master Key to manage skills.</p>
+        <p>Configure the API URL and Master Key to manage the platform catalog.</p>
         <NavLink class="btn btn-primary" href="/settings">Connect</NavLink>
     </div>
 }
 else
 {
+    <div class="kx-metrics" style="margin-bottom:1rem">
+        <div class="kx-metric">
+            <div class="kx-metric-label">Skills</div>
+            <div class="kx-metric-value">@_skills.Count</div>
+        </div>
+        <div class="kx-metric">
+            <div class="kx-metric-label">Default-on skills</div>
+            <div class="kx-metric-value">@_skills.Count(s => s.IsDefaultEnabled)</div>
+        </div>
+        <div class="kx-metric">
+            <div class="kx-metric-label">Guardrails</div>
+            <div class="kx-metric-value">@_guardrails.Count</div>
+        </div>
+        <div class="kx-metric">
+            <div class="kx-metric-label">Default-on guardrails</div>
+            <div class="kx-metric-value">@_guardrails.Count(g => g.IsDefaultEnabled)</div>
+        </div>
+    </div>
+
     @if (!string.IsNullOrWhiteSpace(_error))
     {
         <div class="alert alert-danger">@_error</div>
@@ -94,7 +116,7 @@ else
                     <div class="col-md-4 form-group d-flex align-items-end">
                         <div class="form-check mb-2">
                             <InputCheckbox class="form-check-input" @bind-Value="_editing.IsDefaultEnabled" />
-                            <label class="form-check-label">Default enabled for new apps</label>
+                            <label class="form-check-label">Default enabled for apps that inherit</label>
                         </div>
                     </div>
                 </div>
@@ -103,6 +125,11 @@ else
             </div>
         </div>
     }
+
+    <div class="kx-section-head">
+        <h2>Platform skill defaults</h2>
+        <p>Content injected into the agentic system prompt. Mark default-on for apps that inherit.</p>
+    </div>
 
     <div class="kx-panel">
         <div class="kx-panel-head"><h2>Skills</h2></div>
@@ -161,13 +188,23 @@ else
         }
     </div>
 
-    @if (_guardrails.Count > 0)
-    {
-        <div class="kx-panel">
-            <div class="kx-panel-head">
-                <h2>Guardrail packs</h2>
-                <span class="text-muted small">Toggle per app in Agentic config</span>
+    <div class="kx-section-head">
+        <h2>Platform guardrail defaults</h2>
+        <p>Runtime checks applied when an app inherits or enables the pack. Toggle per app under Policies.</p>
+    </div>
+
+    <div class="kx-panel">
+        <div class="kx-panel-head">
+            <h2>Guardrail packs</h2>
+        </div>
+        @if (_guardrails.Count == 0 && !_busy)
+        {
+            <div class="kx-panel-body">
+                <p class="text-muted mb-0">No guardrails in catalog. Restart API to re-seed if the database was empty.</p>
             </div>
+        }
+        else
+        {
             <div class="kx-table-wrap">
                 <table class="kx-table">
                     <thead>
@@ -186,8 +223,12 @@ else
                     </tbody>
                 </table>
             </div>
+        }
+        <div class="kx-panel-foot">
+            <span class="text-muted">Per-app selection:</span>
+            open an app → <strong>Policies</strong>
         </div>
-    }
+    </div>
 }
 
 @code {
