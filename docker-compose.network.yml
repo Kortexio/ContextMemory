@@ -31,18 +31,6 @@ services:
       ContextMemory__MasterKey: ${MASTER_KEY:-cm_master_local_dev_change_me}
       ContextMemory__McpRuntimeUrl: http://mcp-runtime:8080
       ContextMemory__AdminCorsOrigins__0: ${ADMIN_CORS_ORIGIN:-http://localhost:5200}
-      ContextMemory__Apps__demo-dev__ApiKey: ${DEMO_APP_API_KEY:-cm_live_dev_key}
-      ContextMemory__Apps__demo-dev__SystemPrompt: És um assistente útil, claro e preciso.
-      ContextMemory__Apps__demo-dev__DefaultLanguage: pt-PT
-      ContextMemory__Apps__demo-dev__LlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
-      ContextMemory__Apps__laravox__ApiKey: ${LARAVOX_APP_API_KEY:-cm_laravox_local_key}
-      ContextMemory__Apps__laravox__SystemPrompt: És o motor de IA do Laravox para classificação de perfis e geração de mensagens.
-      ContextMemory__Apps__laravox__DefaultLanguage: pt-PT
-      ContextMemory__Apps__laravox__LlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
-      ContextMemory__Apps__kyc__ApiKey: ${KYC_APP_API_KEY:-cm_kyc_local_key}
-      ContextMemory__Apps__kyc__SystemPrompt: És o motor de IA do KYC para scoring de risco, OCR e relatórios de conformidade.
-      ContextMemory__Apps__kyc__DefaultLanguage: pt-PT
-      ContextMemory__Apps__kyc__LlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
     volumes:
       - gateway_data:/app/data
       - gateway_wikis:/app/wikis
