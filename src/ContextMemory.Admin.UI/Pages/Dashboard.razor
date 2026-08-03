@@ -4,11 +4,11 @@
 @layout MainLayout
 @implements IDisposable
 
-<PageTitle>Applications - Kortexio Admin</PageTitle>
+<PageTitle>Dashboard - Kortexio Admin</PageTitle>
 
 @if (!Session.IsConfigured)
 {
-    <div class="kx-empty">
+    <div class="kx-empty kx-empty-lg">
         <h2>Connect your API</h2>
         <p>
             This console talks to ContextMemory over HTTP.
@@ -21,10 +21,10 @@ else
 {
     <div class="kx-page-header">
         <div>
-            <h1 class="kx-page-title">Applications</h1>
-            <p class="kx-page-lead">Memory you can open as a wiki — apps, sessions, and Chat Lab on one URL.</p>
+            <h1 class="kx-page-title">Dashboard</h1>
+            <p class="kx-page-lead">Overview of apps, requests, and wiki memory across your workspace.</p>
         </div>
-        <div class="d-flex flex-wrap" style="gap:0.5rem">
+        <div class="kx-page-actions">
             <NavLink class="btn btn-primary" href="/apps/new">
                 <i class="fas fa-plus"></i> New app
             </NavLink>
@@ -36,7 +36,9 @@ else
 
     @if (_loading)
     {
-        <div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Loading applications…</div>
+        <div class="kx-loading-banner">
+            <i class="fas fa-spinner fa-spin"></i> Loading dashboard…
+        </div>
     }
     else if (_error is not null)
     {
@@ -48,27 +50,15 @@ else
             </div>
         </div>
     }
-    else if (_apps.Count == 0)
-    {
-        <div class="kx-empty">
-            <h2>No apps yet</h2>
-            <p>
-                Create an application to start capturing session memory,
-                or wait for the seeded <code>demo-dev</code> app after the API starts.
-            </p>
-            <NavLink class="btn btn-primary" href="/apps/new">Create app</NavLink>
-            <NavLink class="btn btn-outline-secondary ml-2" href="/chat">Open Chat Lab</NavLink>
-        </div>
-    }
     else
     {
         <div class="kx-metrics">
             <div class="kx-metric">
-                <div class="kx-metric-label">Apps</div>
+                <div class="kx-metric-label">Applications</div>
                 <div class="kx-metric-value">@_apps.Count</div>
             </div>
             <div class="kx-metric">
-                <div class="kx-metric-label">Requests</div>
+                <div class="kx-metric-label">Total requests</div>
                 <div class="kx-metric-value">@_totalRequests</div>
             </div>
             <div class="kx-metric">
@@ -81,35 +71,147 @@ else
             </div>
         </div>
 
-        <div class="kx-app-grid">
-            @foreach (var app in _apps)
-            {
-                <article class="kx-app-card">
-                    <div class="kx-app-card-head">
-                        <h3>@app.AppId</h3>
-                        <span class="kx-badge">@app.Source</span>
+        <div class="kx-activity-grid">
+            <section class="kx-panel">
+                <div class="kx-panel-head">
+                    <div>
+                        <h2>Requests</h2>
+                        <p>API traffic across registered applications.</p>
                     </div>
-                    <div class="kx-app-card-body">
-                        <div class="kx-app-stat">
-                            <small>Requests</small>
-                            <strong>@(app.Stats?.RequestsTotal ?? 0)</strong>
-                        </div>
-                        <div class="kx-app-stat">
-                            <small>Users</small>
-                            <strong>@(app.Stats?.ActiveUsers ?? 0)</strong>
-                        </div>
-                        <div class="kx-app-stat">
-                            <small>Wiki</small>
-                            <strong>@(app.Stats?.WikiPagesIncluded ?? 0)/@(app.Stats?.WikiPagesTotal ?? 0)</strong>
-                        </div>
+                    <div class="kx-panel-stat">@_totalRequests</div>
+                </div>
+                @if (_apps.Count == 0 || _totalRequests == 0)
+                {
+                    <div class="kx-panel-empty">
+                        <p>No request activity yet.</p>
+                        <NavLink class="btn btn-sm btn-outline-secondary" href="/chat">Try Playground</NavLink>
                     </div>
-                    <div class="kx-app-card-foot">
-                        <a class="btn btn-sm btn-primary" href="/apps/@app.AppId">Details</a>
-                        <a class="btn btn-sm btn-outline-secondary" href="/apps/@app.AppId/config">Config</a>
-                        <a class="btn btn-sm btn-outline-info" href="/chat">Chat Lab</a>
+                }
+                else
+                {
+                    <ul class="kx-panel-list">
+                        @foreach (var app in _apps.OrderByDescending(a => a.Stats?.RequestsTotal ?? 0).Take(5))
+                        {
+                            <li>
+                                <a href="/apps/@app.AppId">@app.AppId</a>
+                                <strong>@(app.Stats?.RequestsTotal ?? 0)</strong>
+                            </li>
+                        }
+                    </ul>
+                }
+                <div class="kx-panel-foot">
+                    <NavLink href="/apps/new">Register app</NavLink>
+                </div>
+            </section>
+
+            <section class="kx-panel">
+                <div class="kx-panel-head">
+                    <div>
+                        <h2>Wiki memory</h2>
+                        <p>Pages indexed into the shared knowledge layer.</p>
                     </div>
-                </article>
-            }
+                    <div class="kx-panel-stat">@_totalWiki</div>
+                </div>
+                @if (_apps.Count == 0 || _totalWiki == 0)
+                {
+                    <div class="kx-panel-empty">
+                        <p>No wiki pages indexed for this range.</p>
+                        <NavLink class="btn btn-sm btn-outline-secondary" href="/apps/new">Create app</NavLink>
+                    </div>
+                }
+                else
+                {
+                    <ul class="kx-panel-list">
+                        @foreach (var app in _apps.OrderByDescending(a => a.Stats?.WikiPagesTotal ?? 0).Take(5))
+                        {
+                            <li>
+                                <a href="/apps/@app.AppId/config">@app.AppId</a>
+                                <strong>@(app.Stats?.WikiPagesIncluded ?? 0)/@(app.Stats?.WikiPagesTotal ?? 0)</strong>
+                            </li>
+                        }
+                    </ul>
+                }
+                <div class="kx-panel-foot">
+                    <NavLink href="/chat">Open Playground</NavLink>
+                </div>
+            </section>
+        </div>
+
+        @if (_apps.Count == 0)
+        {
+            <div class="kx-empty">
+                <h2>No apps yet</h2>
+                <p>
+                    Create an application to start capturing session memory,
+                    or wait for the seeded <code>demo-dev</code> app after the API starts.
+                </p>
+                <NavLink class="btn btn-primary" href="/apps/new">Create app</NavLink>
+                <NavLink class="btn btn-outline-secondary ml-2" href="/chat">Open Playground</NavLink>
+            </div>
+        }
+        else
+        {
+            <div class="kx-section-head">
+                <h2>Applications</h2>
+                <p>Jump into config, stats, or Chat Lab for each tenant.</p>
+            </div>
+
+            <div class="kx-app-grid">
+                @foreach (var app in _apps)
+                {
+                    <article class="kx-app-card">
+                        <div class="kx-app-card-head">
+                            <h3>@app.AppId</h3>
+                            <span class="kx-badge">@app.Source</span>
+                        </div>
+                        <div class="kx-app-card-body">
+                            <div class="kx-app-stat">
+                                <small>Requests</small>
+                                <strong>@(app.Stats?.RequestsTotal ?? 0)</strong>
+                            </div>
+                            <div class="kx-app-stat">
+                                <small>Users</small>
+                                <strong>@(app.Stats?.ActiveUsers ?? 0)</strong>
+                            </div>
+                            <div class="kx-app-stat">
+                                <small>Wiki</small>
+                                <strong>@(app.Stats?.WikiPagesIncluded ?? 0)/@(app.Stats?.WikiPagesTotal ?? 0)</strong>
+                            </div>
+                        </div>
+                        <div class="kx-app-card-foot">
+                            <a class="btn btn-sm btn-primary" href="/apps/@app.AppId">Details</a>
+                            <a class="btn btn-sm btn-outline-secondary" href="/apps/@app.AppId/config">Config</a>
+                            <a class="btn btn-sm btn-outline-info" href="/chat">Playground</a>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+
+        <div class="kx-explore">
+            <div class="kx-section-head">
+                <h2>Explore the platform</h2>
+                <p>Shortcuts to configure memory, test retrieval, and wire clients.</p>
+            </div>
+            <div class="kx-explore-grid">
+                <a class="kx-explore-card" href="/apps/new">
+                    <span class="kx-explore-tag">Suggested</span>
+                    <h3>Register an app</h3>
+                    <p>Create a tenant with its own API key and wiki scope.</p>
+                </a>
+                <a class="kx-explore-card" href="/chat">
+                    <h3>Try the Playground</h3>
+                    <p>Add and retrieve memory live against your ContextMemory API.</p>
+                </a>
+                <a class="kx-explore-card" href="/skills">
+                    <h3>Skills</h3>
+                    <p>Browse agent skills available to your memory-aware agents.</p>
+                </a>
+                <a class="kx-explore-card" href="/settings">
+                    <h3>API connection</h3>
+                    <p>Point the console at your ContextMemory base URL and master key.</p>
+                </a>
+            </div>
         </div>
     }
 }

@@ -7,27 +7,27 @@
     <aside class="kx-sidebar" aria-label="Primary">
         <a class="kx-brand" href="/" @onclick="CloseOverlayAsync">
             <span class="kx-brand-mark">Kortex<span>io</span></span>
-            <span class="kx-brand-sub">ContextMemory Admin</span>
+            <span class="kx-brand-sub">ContextMemory</span>
         </a>
 
         <nav class="kx-nav">
             <div class="kx-nav-section">
                 <div class="kx-nav-label">Setup</div>
                 <NavLink class="kx-nav-link" href="/settings" @onclick="CloseOverlayAsync">
-                    <i class="fas fa-plug"></i> Connection
+                    <i class="fas fa-key"></i> API connection
                 </NavLink>
                 <NavLink class="kx-nav-link" href="/apps/new" @onclick="CloseOverlayAsync">
-                    <i class="fas fa-plus"></i> New app
+                    <i class="fas fa-plus-circle"></i> New app
                 </NavLink>
                 <NavLink class="kx-nav-link" href="/chat" @onclick="CloseOverlayAsync">
-                    <i class="fas fa-comments"></i> Chat Lab
+                    <i class="fas fa-flask"></i> Playground
                 </NavLink>
             </div>
 
             <div class="kx-nav-section">
                 <div class="kx-nav-label">Activity</div>
                 <NavLink class="kx-nav-link" href="/" Match="NavLinkMatch.All" @onclick="CloseOverlayAsync">
-                    <i class="fas fa-th-large"></i> Applications
+                    <i class="fas fa-chart-pie"></i> Dashboard
                 </NavLink>
                 <NavLink class="kx-nav-link" href="/skills" @onclick="CloseOverlayAsync">
                     <i class="fas fa-magic"></i> Skills
@@ -40,10 +40,36 @@
                     <i class="fas fa-cog"></i> Settings
                 </NavLink>
             </div>
+
+            <div class="kx-nav-section">
+                <div class="kx-nav-label">Learn</div>
+                <a class="kx-nav-link" href="https://github.com/Kortexio/ContextMemory" target="_blank" rel="noopener">
+                    <i class="fas fa-book"></i> Docs
+                </a>
+            </div>
         </nav>
 
-        <div class="kx-sidebar-foot">
-            Memory you can open as a wiki.
+        <div class="kx-sidebar-usage">
+            <div class="kx-sidebar-usage-title">Workspace</div>
+            @if (Session.IsConfigured)
+            {
+                <div class="kx-sidebar-usage-row">
+                    <span>Apps</span>
+                    <strong>@_apps.Count</strong>
+                </div>
+                <div class="kx-sidebar-usage-row">
+                    <span>API</span>
+                    <strong class="kx-ok">Connected</strong>
+                </div>
+            }
+            else
+            {
+                <div class="kx-sidebar-usage-row">
+                    <span>API</span>
+                    <strong class="kx-warn">Not set</strong>
+                </div>
+                <NavLink class="kx-sidebar-usage-cta" href="/settings" @onclick="CloseOverlayAsync">Connect now</NavLink>
+            }
         </div>
     </aside>
 
@@ -59,7 +85,7 @@
             {
                 <div class="kx-app-switch">
                     <select @onchange="OnAppSelected" title="Open app">
-                        <option value="">Jump to app…</option>
+                        <option value="">Select project…</option>
                         @foreach (var app in _apps)
                         {
                             <option value="@app.AppId">@app.AppId</option>
@@ -70,15 +96,18 @@
 
             <div class="kx-topbar-spacer"></div>
 
-            <NavLink class="btn btn-sm btn-outline-secondary" href="/settings">
-                <i class="fas fa-cog"></i> Settings
+            <NavLink class="kx-topbar-btn" href="/chat">
+                <i class="fas fa-flask"></i> Playground
+            </NavLink>
+            <NavLink class="kx-topbar-btn kx-topbar-btn-primary" href="/apps/new">
+                <i class="fas fa-plus"></i> New app
             </NavLink>
         </header>
 
         <main class="kx-content">
             @if (!_sessionLoaded)
             {
-                <div class="alert alert-light">
+                <div class="kx-loading-banner">
                     <i class="fas fa-spinner fa-spin"></i> Loading connection settings…
                 </div>
             }
