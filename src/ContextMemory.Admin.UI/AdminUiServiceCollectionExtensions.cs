@@ -21,6 +21,8 @@ public static class AdminUiServiceCollectionExtensions
         services.AddScoped<IAdminSettingsStorage, BrowserAdminSettingsStorage>();
         services.AddScoped<IChatTestSettingsStorage, BrowserChatTestSettingsStorage>();
         services.AddScoped<AdminSession>();
+        services.AddSingleton<AdminDocsMarkdownRenderer>();
+        services.AddSingleton<IAdminDocsService, AdminDocsService>();
         services.AddHttpClient<AdminApiClient>();
         services.AddHttpClient<ChatClient>();
         return services;

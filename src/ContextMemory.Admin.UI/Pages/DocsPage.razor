@@ -1,0 +1,77 @@
+@page "/docs/{Slug}"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@layout MainLayout
+@inject IAdminDocsService Docs
+@inject NavigationManager Nav
+
+<PageTitle>@(_title ?? Slug) - Docs</PageTitle>
+
+<div class="kx-page-header">
+    <div>
+        <NavLink class="kx-docs-back" href="/docs">← All docs</NavLink>
+        <h1 class="kx-page-title">@(_title ?? Slug)</h1>
+    </div>
+</div>
+
+@if (_notFound)
+{
+    <div class="kx-empty">
+        <h2>Page not found</h2>
+        <p>No markdown file for <code>@Slug</code>.</p>
+        <NavLink class="btn btn-outline-primary" href="/docs">Back to docs</NavLink>
+    </div>
+}
+else if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+else if (_html is not null)
+{
+    <article class="kx-docs-article kx-panel">
+        <div class="kx-panel-body kx-docs-body">
+            @((MarkupString)_html)
+        </div>
+    </article>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; } = string.Empty;
+
+    private string? _html;
+    private string? _title;
+    private string? _error;
+    private bool _notFound;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _error = null;
+        _notFound = false;
+        _html = null;
+        _title = null;
+
+        if (string.IsNullOrWhiteSpace(Slug)
+            || Slug.Equals("index", StringComparison.OrdinalIgnoreCase)
+            || Slug.Equals("readme", StringComparison.OrdinalIgnoreCase))
+        {
+            Nav.NavigateTo("/docs", replace: true);
+            return;
+        }
+
+        try
+        {
+            var content = await Docs.GetDocumentAsync(Slug);
+            if (content is null)
+            {
+                _notFound = true;
+                return;
+            }
+
+            _title = content.Entry.Title;
+            _html = content.Html;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}
