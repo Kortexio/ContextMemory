@@ -1,0 +1,97 @@
+@page "/apps/{AppId}/config/rate-limits"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@layout AppLayout
+@inherits AppConfigSectionBase
+
+<PageTitle>Rate limits · @AppId</PageTitle>
+
+<div class="kx-page-header">
+    <div>
+        <h1 class="kx-page-title">Rate limits</h1>
+        <p class="kx-page-lead">Throughput budgets for this tenant.</p>
+    </div>
+    <button type="button" class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@(Saving || Loading)">Reload</button>
+</div>
+
+@if (Loading)
+{
+    <div class="kx-loading-banner"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+}
+else if (LoadError is not null)
+{
+    <div class="alert alert-warning">@LoadError</div>
+}
+else
+{
+    <div class="kx-panel">
+        <div class="kx-panel-body">
+            <EditForm Model="_form" OnValidSubmit="SaveAsync">
+                <div class="form-row">
+                    <div class="col-md-4 form-group">
+                        <label>Requests / min (app)</label>
+                        <InputNumber class="form-control" @bind-Value="_form.Rpm" />
+                    </div>
+                    <div class="col-md-4 form-group">
+                        <label>Requests / min (user)</label>
+                        <InputNumber class="form-control" @bind-Value="_form.UserRpm" />
+                    </div>
+                    <div class="col-md-4 form-group">
+                        <label>Tokens / min</label>
+                        <InputNumber class="form-control" @bind-Value="_form.Tpm" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="col-md-6 form-group">
+                        <label>Agentic request weight</label>
+                        <InputNumber class="form-control" @bind-Value="_form.AgenticWeight" />
+                    </div>
+                    <div class="col-md-6 form-group">
+                        <label>Agentic tokens / iteration</label>
+                        <InputNumber class="form-control" @bind-Value="_form.AgenticTokens" />
+                    </div>
+                </div>
+
+                @if (Message is not null) { <div class="alert alert-success">@Message</div> }
+                @if (Error is not null) { <div class="alert alert-danger">@Error</div> }
+
+                <div class="kx-section-save">
+                    <button class="btn btn-primary" type="submit" disabled="@Saving">@(Saving ? "Saving…" : "Save rate limits")</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly LimitsForm _form = new();
+
+    protected override void OnConfigLoaded(AppRuntimeConfigDto config)
+    {
+        _form.Rpm = config.RateLimits?.RequestsPerMinute ?? 60;
+        _form.UserRpm = config.RateLimits?.UserRequestsPerMinute ?? 30;
+        _form.Tpm = config.RateLimits?.TokensPerMinute ?? 100_000;
+        _form.AgenticWeight = config.RateLimits?.AgenticRequestWeight ?? 3;
+        _form.AgenticTokens = config.RateLimits?.AgenticTokensPerIteration ?? 500;
+    }
+
+    protected override AppConfigPatchRequest BuildPatch() => new()
+    {
+        RateLimits = new RateLimitConfig
+        {
+            RequestsPerMinute = _form.Rpm,
+            UserRequestsPerMinute = _form.UserRpm,
+            TokensPerMinute = _form.Tpm,
+            AgenticRequestWeight = _form.AgenticWeight,
+            AgenticTokensPerIteration = _form.AgenticTokens
+        }
+    };
+
+    private sealed class LimitsForm
+    {
+        public int Rpm { get; set; } = 60;
+        public int UserRpm { get; set; } = 30;
+        public int Tpm { get; set; } = 100_000;
+        public int AgenticWeight { get; set; } = 3;
+        public int AgenticTokens { get; set; } = 500;
+    }
+}
