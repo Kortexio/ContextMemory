@@ -12,6 +12,7 @@ RUN dotnet restore src/ContextMemory.Admin.Web/ContextMemory.Admin.Web.csproj
 COPY src/ContextMemory.Admin.Web/ src/ContextMemory.Admin.Web/
 COPY src/ContextMemory.Admin.UI/ src/ContextMemory.Admin.UI/
 COPY src/ContextMemory.Core/ src/ContextMemory.Core/
+COPY docs/ docs/
 RUN dotnet publish src/ContextMemory.Admin.Web/ContextMemory.Admin.Web.csproj -c Release -o /app/publish /p:UseAppHost=false --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0-alpine AS runtime
@@ -22,8 +23,10 @@ RUN apk add --no-cache icu-libs curl && adduser -D -u 10001 appuser
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
     DOTNET_EnableDiagnostics=0 \
     ASPNETCORE_URLS=http://+:8080 \
-    ASPNETCORE_ENVIRONMENT=Production
+    ASPNETCORE_ENVIRONMENT=Production \
+    Admin__DocsPath=/app/docs
 COPY --from=build /app/publish .
+COPY --from=build /src/docs /app/docs
 RUN chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8080

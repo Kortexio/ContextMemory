@@ -1267,89 +1267,84 @@ pre {
 .kx-panel-body {
   padding: 0 1.25rem 1.25rem;
 }
-.kx-app-shell {
+
+.kx-docs-toc {
   display: flex;
-  gap: 0;
-  min-height: calc(100vh - 4rem);
-  margin: -0.25rem -0.5rem 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.kx-app-nav {
-  width: 220px;
-  flex-shrink: 0;
-  border-right: 1px solid var(--kx-border, #e2e8f0);
-  background: #fff;
-  padding: 0.85rem 0.65rem 1.25rem;
-  position: sticky;
-  top: 3.75rem;
-  align-self: flex-start;
-  max-height: calc(100vh - 3.75rem);
-  overflow-y: auto;
-}
-
-.kx-app-nav-brand {
-  padding: 0.25rem 0.55rem 0.85rem;
-  border-bottom: 1px solid var(--kx-border, #e2e8f0);
-  margin-bottom: 0.65rem;
-}
-
-.kx-app-nav-back {
+.kx-docs-toc-link {
   display: inline-block;
-  font-size: 0.78rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid var(--kx-border, #e2e8f0);
+  color: var(--kx-text, #0f172a);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 550;
+}
+
+.kx-docs-toc-link:hover,
+.kx-docs-toc-link.active {
+  border-color: var(--kx-accent, #14b8a6);
+  color: var(--kx-accent-hover, #0f766e);
+  text-decoration: none;
+}
+
+.kx-docs-back {
+  display: inline-block;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--kx-muted, #64748b);
   text-decoration: none;
   margin-bottom: 0.35rem;
 }
 
-.kx-app-nav-back:hover {
+.kx-docs-back:hover {
   color: var(--kx-accent-hover, #0f766e);
 }
 
-.kx-app-nav-id {
-  font-weight: 700;
-  font-size: 0.95rem;
-  color: var(--kx-text, #0f172a);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.kx-docs-article {
+  max-width: 52rem;
 }
 
-.kx-app-nav-label {
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--kx-muted, #64748b);
-  padding: 0.75rem 0.55rem 0.35rem;
+.kx-docs-body {
+  line-height: 1.65;
+  font-size: 0.98rem;
 }
 
-.kx-app-nav-link {
-  display: block;
-  padding: 0.45rem 0.55rem;
-  border-radius: 8px;
-  color: var(--kx-text, #0f172a);
-  text-decoration: none;
-  font-size: 0.88rem;
-  font-weight: 500;
+.kx-docs-body h1,
+.kx-docs-body h2,
+.kx-docs-body h3 {
+  margin-top: 1.4rem;
+  margin-bottom: 0.55rem;
 }
 
-.kx-app-nav-link:hover {
-  background: var(--kx-surface-2, #eef1f4);
-  color: inherit;
-  text-decoration: none;
+.kx-docs-body pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 0.9rem 1rem;
+  border-radius: 10px;
+  overflow-x: auto;
 }
 
-.kx-app-nav-link.active {
-  background: var(--kx-accent-soft, #ccfbf1);
-  color: var(--kx-accent-hover, #0f766e);
-  font-weight: 650;
+.kx-docs-body code {
+  font-size: 0.9em;
 }
 
-.kx-app-main {
-  flex: 1;
-  min-width: 0;
-  padding: 0.35rem 1rem 1.5rem 1.25rem;
+.kx-docs-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.kx-docs-body th,
+.kx-docs-body td {
+  border: 1px solid var(--kx-border, #e2e8f0);
+  padding: 0.45rem 0.65rem;
+  text-align: left;
 }
 
 .kx-section-save {
@@ -1363,29 +1358,4 @@ pre {
   bottom: 0;
   background: linear-gradient(180deg, rgba(247, 248, 250, 0), var(--kx-bg, #f7f8fa) 35%);
   padding-bottom: 0.5rem;
-}
-
-@media (max-width: 900px) {
-  .kx-app-shell {
-    flex-direction: column;
-    margin: 0;
-  }
-
-  .kx-app-nav {
-    width: 100%;
-    position: static;
-    max-height: none;
-    border-right: 0;
-    border-bottom: 1px solid var(--kx-border, #e2e8f0);
-  }
-
-  .kx-app-nav-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-  }
-
-  .kx-app-nav-label {
-    width: 100%;
-  }
 }

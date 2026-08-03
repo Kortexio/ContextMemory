@@ -5,53 +5,112 @@
 
 <div class="kx-shell">
     <aside class="kx-sidebar" aria-label="Primary">
-        <a class="kx-brand" href="/" @onclick="CloseOverlayAsync">
+        <a class="kx-brand" href="@(string.IsNullOrEmpty(_activeAppId) ? "/" : $"/apps/{Uri.EscapeDataString(_activeAppId)}")" @onclick="CloseOverlayAsync">
             <span class="kx-brand-mark">Kortex<span>io</span></span>
-            <span class="kx-brand-sub">ContextMemory</span>
+            <span class="kx-brand-sub">
+                @if (string.IsNullOrEmpty(_activeAppId))
+                {
+                    <text>ContextMemory</text>
+                }
+                else
+                {
+                    <text>App · @_activeAppId</text>
+                }
+            </span>
         </a>
 
         <nav class="kx-nav">
-            <div class="kx-nav-section">
-                <div class="kx-nav-label">Setup</div>
-                <NavLink class="kx-nav-link" href="/settings" @onclick="CloseOverlayAsync">
-                    <i class="fas fa-key"></i> API connection
-                </NavLink>
-                <NavLink class="kx-nav-link" href="/apps/new" @onclick="CloseOverlayAsync">
-                    <i class="fas fa-plus-circle"></i> New app
-                </NavLink>
-                <NavLink class="kx-nav-link" href="/chat" @onclick="CloseOverlayAsync">
-                    <i class="fas fa-flask"></i> Playground
-                </NavLink>
-            </div>
+            @if (string.IsNullOrEmpty(_activeAppId))
+            {
+                <div class="kx-nav-section">
+                    <div class="kx-nav-label">Setup</div>
+                    <NavLink class="kx-nav-link" href="/apps/new" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-plus-circle"></i> New app
+                    </NavLink>
+                </div>
 
-            <div class="kx-nav-section">
-                <div class="kx-nav-label">Activity</div>
-                <NavLink class="kx-nav-link" href="/" Match="NavLinkMatch.All" @onclick="CloseOverlayAsync">
-                    <i class="fas fa-chart-pie"></i> Dashboard
-                </NavLink>
-                <NavLink class="kx-nav-link" href="/skills" @onclick="CloseOverlayAsync">
-                    <i class="fas fa-magic"></i> Skills &amp; Guardrails
-                </NavLink>
-            </div>
+                <div class="kx-nav-section">
+                    <div class="kx-nav-label">Activity</div>
+                    <NavLink class="kx-nav-link" href="/" Match="NavLinkMatch.All" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-chart-pie"></i> Dashboard
+                    </NavLink>
+                    <NavLink class="kx-nav-link" href="/skills" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-magic"></i> Skills &amp; Guardrails
+                    </NavLink>
+                </div>
 
-            <div class="kx-nav-section">
-                <div class="kx-nav-label">Account</div>
-                <NavLink class="kx-nav-link" href="/settings" @onclick="CloseOverlayAsync">
-                    <i class="fas fa-cog"></i> Settings
-                </NavLink>
-            </div>
+                <div class="kx-nav-section">
+                    <div class="kx-nav-label">Account</div>
+                    <NavLink class="kx-nav-link" href="/settings" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-cog"></i> Settings
+                    </NavLink>
+                </div>
 
-            <div class="kx-nav-section">
-                <div class="kx-nav-label">Learn</div>
-                <a class="kx-nav-link" href="https://github.com/Kortexio/ContextMemory" target="_blank" rel="noopener">
-                    <i class="fas fa-book"></i> Docs
-                </a>
-            </div>
+                <div class="kx-nav-section">
+                    <div class="kx-nav-label">Learn</div>
+                    <NavLink class="kx-nav-link" href="/docs" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-book"></i> Docs
+                    </NavLink>
+                </div>
+            }
+            else
+            {
+                <div class="kx-nav-section">
+                    <NavLink class="kx-nav-link" href="/" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-arrow-left"></i> All apps
+                    </NavLink>
+                </div>
+
+                <div class="kx-nav-section">
+                    <div class="kx-nav-label">Overview</div>
+                    <NavLink class="kx-nav-link" href="@($"/apps/{_activeAppId}")" Match="NavLinkMatch.All" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-chart-pie"></i> Dashboard
+                    </NavLink>
+                    <NavLink class="kx-nav-link" href="@($"/apps/{_activeAppId}/credentials")" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-key"></i> API key
+                    </NavLink>
+                    <NavLink class="kx-nav-link" href="@($"/apps/{_activeAppId}/playground")" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-flask"></i> Playground
+                    </NavLink>
+                </div>
+
+                <div class="kx-nav-section">
+                    <div class="kx-nav-label">Configuration</div>
+                    <NavLink class="kx-nav-link" href="@($"/apps/{_activeAppId}/config/llm")" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-microchip"></i> LLM
+                    </NavLink>
+                    <NavLink class="kx-nav-link" href="@($"/apps/{_activeAppId}/config/memory")" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-book-open"></i> Memory &amp; wiki
+                    </NavLink>
+                    <NavLink class="kx-nav-link" href="@($"/apps/{_activeAppId}/config/web-search")" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-search"></i> Web search
+                    </NavLink>
+                    <NavLink class="kx-nav-link" href="@($"/apps/{_activeAppId}/config/rate-limits")" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-tachometer-alt"></i> Rate limits
+                    </NavLink>
+                    <NavLink class="kx-nav-link" href="@($"/apps/{_activeAppId}/config/persona")" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-user"></i> Persona &amp; rules
+                    </NavLink>
+                    <NavLink class="kx-nav-link" href="@($"/apps/{_activeAppId}/config/agentic")" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-robot"></i> Agentic
+                    </NavLink>
+                    <NavLink class="kx-nav-link" href="@($"/apps/{_activeAppId}/policies")" @onclick="CloseOverlayAsync">
+                        <i class="fas fa-magic"></i> Skills &amp; guardrails
+                    </NavLink>
+                </div>
+            }
         </nav>
 
         <div class="kx-sidebar-usage">
             <div class="kx-sidebar-usage-title">Workspace</div>
-            @if (Session.IsConfigured)
+            @if (!string.IsNullOrEmpty(_activeAppId))
+            {
+                <div class="kx-sidebar-usage-row">
+                    <span>Active app</span>
+                    <strong title="@_activeAppId">@_activeAppId</strong>
+                </div>
+            }
+            else if (Session.IsConfigured)
             {
                 <div class="kx-sidebar-usage-row">
                     <span>Apps</span>
@@ -70,6 +129,10 @@
                 </div>
                 <NavLink class="kx-sidebar-usage-cta" href="/settings" @onclick="CloseOverlayAsync">Connect now</NavLink>
             }
+            @if (string.IsNullOrEmpty(_activeAppId))
+            {
+                <NavLink class="kx-sidebar-usage-cta" href="/docs" @onclick="CloseOverlayAsync">Open docs</NavLink>
+            }
         </div>
     </aside>
 
@@ -84,8 +147,8 @@
             @if (_apps.Count > 0)
             {
                 <div class="kx-app-switch">
-                    <select @onchange="OnAppSelected" title="Open app">
-                        <option value="">Select project…</option>
+                    <select value="@_activeAppId" @onchange="OnAppSelected" title="Open app">
+                        <option value="">All apps…</option>
                         @foreach (var app in _apps)
                         {
                             <option value="@app.AppId">@app.AppId</option>
@@ -96,12 +159,18 @@
 
             <div class="kx-topbar-spacer"></div>
 
-            <NavLink class="kx-topbar-btn" href="/chat">
-                <i class="fas fa-flask"></i> Playground
-            </NavLink>
-            <NavLink class="kx-topbar-btn kx-topbar-btn-primary" href="/apps/new">
-                <i class="fas fa-plus"></i> New app
-            </NavLink>
+            @if (!string.IsNullOrEmpty(_activeAppId))
+            {
+                <NavLink class="kx-topbar-btn" href="@($"/apps/{_activeAppId}/playground")">
+                    <i class="fas fa-flask"></i> Playground
+                </NavLink>
+            }
+            else
+            {
+                <NavLink class="kx-topbar-btn kx-topbar-btn-primary" href="/apps/new">
+                    <i class="fas fa-plus"></i> New app
+                </NavLink>
+            }
         </header>
 
         <main class="kx-content">
@@ -121,7 +190,14 @@
     [Inject] private AdminApiClient Api { get; set; } = default!;
 
     private bool _sessionLoaded;
+    private string _activeAppId = string.Empty;
     private IReadOnlyList<AdminAppListItem> _apps = [];
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        RefreshActiveAppId();
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -133,6 +209,28 @@
         await Session.InitializeAsync();
         await RefreshAppsAsync();
         StateHasChanged();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        RefreshActiveAppId();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void RefreshActiveAppId()
+    {
+        var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0];
+        var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2
+            && parts[0].Equals("apps", StringComparison.OrdinalIgnoreCase)
+            && !parts[1].Equals("new", StringComparison.OrdinalIgnoreCase))
+        {
+            _activeAppId = Uri.UnescapeDataString(parts[1]);
+        }
+        else
+        {
+            _activeAppId = string.Empty;
+        }
     }
 
     private async void HandleSessionChanged() => await InvokeAsync(async () =>
@@ -163,7 +261,11 @@
     {
         var appId = e.Value?.ToString();
         if (string.IsNullOrWhiteSpace(appId))
+        {
+            Nav.NavigateTo("/");
             return;
+        }
+
         Nav.NavigateTo($"/apps/{Uri.EscapeDataString(appId)}");
     }
 
@@ -189,5 +291,9 @@
         }
     }
 
-    public void Dispose() => Session.Changed -= HandleSessionChanged;
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        Session.Changed -= HandleSessionChanged;
+    }
 }

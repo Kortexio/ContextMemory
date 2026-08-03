@@ -150,7 +150,7 @@
                 <div class="kx-panel-foot">
                     <NavLink class="btn btn-primary" href="@($"/apps/{_created.AppId}")">View statistics</NavLink>
                     <NavLink class="btn btn-outline-secondary ml-2" href="@($"/apps/{_created.AppId}/config")">Edit config</NavLink>
-                    <NavLink class="btn btn-outline-info ml-2" href="/chat">Open Chat Lab</NavLink>
+                    <NavLink class="btn btn-outline-info ml-2" href="@($"/apps/{_created.AppId}/playground")">Open Playground</NavLink>
                     <button type="button" class="btn btn-outline-primary ml-2" @onclick="CreateAnother">Create another</button>
                 </div>
             </div>

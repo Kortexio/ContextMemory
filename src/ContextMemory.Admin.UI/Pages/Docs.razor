@@ -1,0 +1,63 @@
+@page "/docs"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@layout MainLayout
+@inject IAdminDocsService DocsService
+
+<PageTitle>Docs - Kortexio Admin</PageTitle>
+
+<div class="kx-page-header">
+    <div>
+        <h1 class="kx-page-title">Documentation</h1>
+        <p class="kx-page-lead">Local wiki from the ContextMemory <code>docs/</code> folder.</p>
+    </div>
+</div>
+
+@if (_entries.Count > 0)
+{
+    <div class="kx-docs-toc mb-3">
+        @foreach (var entry in _entries.Where(e => !e.Slug.Equals("index", StringComparison.OrdinalIgnoreCase)))
+        {
+            <NavLink class="kx-docs-toc-link" href="@($"/docs/{entry.Slug}")">@entry.Title</NavLink>
+        }
+    </div>
+}
+
+@if (_error is not null)
+{
+    <div class="alert alert-warning">@_error</div>
+}
+else if (_html is null)
+{
+    <div class="kx-empty">
+        <h2>Docs not found</h2>
+        <p>Could not locate <code>docs/README.md</code>. Set <code>Admin:DocsPath</code> or copy <code>docs/</code> next to the Admin app.</p>
+    </div>
+}
+else
+{
+    <article class="kx-docs-article kx-panel">
+        <div class="kx-panel-body kx-docs-body">
+            @((MarkupString)_html)
+        </div>
+    </article>
+}
+
+@code {
+    private IReadOnlyList<AdminDocEntry> _entries = [];
+    private string? _html;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _entries = DocsService.ListDocuments();
+            var content = await DocsService.GetIndexAsync();
+            _html = content?.Html;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}

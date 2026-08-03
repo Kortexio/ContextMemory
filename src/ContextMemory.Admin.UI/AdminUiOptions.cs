@@ -12,4 +12,7 @@ public sealed class AdminUiOptions
 
     /// <summary>Optional pre-filled master key for local/dev (never use in production).</summary>
     public string DefaultMasterKey { get; set; } = string.Empty;
+
+    /// <summary>Folder with markdown docs (repo <c>docs/</c>). Env: Admin__DocsPath.</summary>
+    public string DocsPath { get; set; } = string.Empty;
 }

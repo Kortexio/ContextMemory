@@ -84,7 +84,7 @@ else
                 {
                     <div class="kx-panel-empty">
                         <p>No request activity yet.</p>
-                        <NavLink class="btn btn-sm btn-outline-secondary" href="/chat">Try Playground</NavLink>
+                        <NavLink class="btn btn-sm btn-outline-secondary" href="/apps/new">Create an app</NavLink>
                     </div>
                 }
                 else
@@ -132,7 +132,7 @@ else
                     </ul>
                 }
                 <div class="kx-panel-foot">
-                    <NavLink href="/chat">Open Playground</NavLink>
+                    <NavLink href="/docs">Open docs</NavLink>
                 </div>
             </section>
         </div>
@@ -146,7 +146,7 @@ else
                     or wait for the seeded <code>demo-dev</code> app after the API starts.
                 </p>
                 <NavLink class="btn btn-primary" href="/apps/new">Create app</NavLink>
-                <NavLink class="btn btn-outline-secondary ml-2" href="/chat">Open Playground</NavLink>
+                <NavLink class="btn btn-outline-secondary ml-2" href="/docs">Open docs</NavLink>
             </div>
         }
         else
@@ -182,7 +182,7 @@ else
                             <a class="btn btn-sm btn-primary" href="/apps/@app.AppId">Dashboard</a>
                             <a class="btn btn-sm btn-outline-secondary" href="/apps/@app.AppId/config/llm">LLM</a>
                             <a class="btn btn-sm btn-outline-primary" href="/apps/@app.AppId/policies">Policies</a>
-                            <a class="btn btn-sm btn-outline-info" href="/chat">Playground</a>
+                            <a class="btn btn-sm btn-outline-info" href="/apps/@app.AppId/playground">Playground</a>
                         </div>
                     </article>
                 }
@@ -200,9 +200,9 @@ else
                     <h3>Register an app</h3>
                     <p>Create a tenant with its own API key and wiki scope.</p>
                 </a>
-                <a class="kx-explore-card" href="/chat">
-                    <h3>Try the Playground</h3>
-                    <p>Add and retrieve memory live against your ContextMemory API.</p>
+                <a class="kx-explore-card" href="/docs">
+                    <h3>Read the docs</h3>
+                    <p>Local wiki covering API, admin UI, ops, and architecture.</p>
                 </a>
                 <a class="kx-explore-card" href="/skills">
                     <h3>Skills &amp; Guardrails</h3>
