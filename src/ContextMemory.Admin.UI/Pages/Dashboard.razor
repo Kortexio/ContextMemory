@@ -4,81 +4,114 @@
 @layout MainLayout
 @implements IDisposable
 
-<PageTitle>Applications - ContextMemory Admin</PageTitle>
+<PageTitle>Applications - Kortexio Admin</PageTitle>
 
 @if (!Session.IsConfigured)
 {
-    <div class="card card-outline card-warning">
-        <div class="card-body">
-            <h5 class="mb-2">Connect to the API</h5>
-            <p class="mb-3 text-muted">
-                This console talks to ContextMemory over HTTP. Open Settings, paste the Master Key, and test the connection.
-            </p>
-            <NavLink class="btn btn-primary" href="/settings">Open Settings</NavLink>
-        </div>
+    <div class="kx-empty">
+        <h2>Connect your API</h2>
+        <p>
+            This console talks to ContextMemory over HTTP.
+            Paste the Master Key and open your memory layer as a wiki.
+        </p>
+        <NavLink class="btn btn-primary" href="/settings">Connect</NavLink>
     </div>
 }
 else
 {
-<div class="mb-3 d-flex flex-wrap align-items-center">
-    <NavLink class="btn btn-primary mr-2 mb-1" href="/apps/new">
-        <i class="fas fa-plus"></i> New application
-    </NavLink>
-    <button type="button" class="btn btn-outline-secondary mb-1" @onclick="LoadAsync" disabled="@_loading">
-        <i class="fas fa-sync-alt"></i> Refresh
-    </button>
-</div>
+    <div class="kx-page-header">
+        <div>
+            <h1 class="kx-page-title">Applications</h1>
+            <p class="kx-page-lead">Memory you can open as a wiki — apps, sessions, and Chat Lab on one URL.</p>
+        </div>
+        <div class="d-flex flex-wrap" style="gap:0.5rem">
+            <NavLink class="btn btn-primary" href="/apps/new">
+                <i class="fas fa-plus"></i> New app
+            </NavLink>
+            <button type="button" class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@_loading">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+    </div>
 
-@if (_loading)
-{
-    <div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Loading applications...</div>
-}
-else if (_error is not null)
-{
-    <div class="alert alert-danger">
-        @_error
-        <div class="mt-2">
-            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="LoadAsync">Retry</button>
-            <NavLink class="btn btn-sm btn-outline-secondary ml-1" href="/settings">Check Settings</NavLink>
+    @if (_loading)
+    {
+        <div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Loading applications…</div>
+    }
+    else if (_error is not null)
+    {
+        <div class="alert alert-danger">
+            @_error
+            <div class="mt-2">
+                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="LoadAsync">Retry</button>
+                <NavLink class="btn btn-sm btn-outline-secondary ml-1" href="/settings">Check connection</NavLink>
+            </div>
         </div>
-    </div>
-}
-else if (_apps.Count == 0)
-{
-    <div class="alert alert-info">
-        No registered applications yet.
-        Seed app <code>demo-dev</code> appears after the API starts with default config —
-        or <NavLink href="/apps/new">create a new one</NavLink>.
-    </div>
-}
-else
-{
-    <div class="row">
-        @foreach (var app in _apps)
-        {
-            <div class="col-md-6 col-lg-4 mb-3">
-                <div class="card card-outline card-primary h-100">
-                    <div class="card-header">
-                        <h3 class="card-title">@app.AppId</h3>
-                        <span class="badge bg-secondary float-end">@app.Source</span>
+    }
+    else if (_apps.Count == 0)
+    {
+        <div class="kx-empty">
+            <h2>No apps yet</h2>
+            <p>
+                Create an application to start capturing session memory,
+                or wait for the seeded <code>demo-dev</code> app after the API starts.
+            </p>
+            <NavLink class="btn btn-primary" href="/apps/new">Create app</NavLink>
+            <NavLink class="btn btn-outline-secondary ml-2" href="/chat">Open Chat Lab</NavLink>
+        </div>
+    }
+    else
+    {
+        <div class="kx-metrics">
+            <div class="kx-metric">
+                <div class="kx-metric-label">Apps</div>
+                <div class="kx-metric-value">@_apps.Count</div>
+            </div>
+            <div class="kx-metric">
+                <div class="kx-metric-label">Requests</div>
+                <div class="kx-metric-value">@_totalRequests</div>
+            </div>
+            <div class="kx-metric">
+                <div class="kx-metric-label">Active users</div>
+                <div class="kx-metric-value">@_totalUsers</div>
+            </div>
+            <div class="kx-metric">
+                <div class="kx-metric-label">Wiki pages</div>
+                <div class="kx-metric-value">@_totalWiki</div>
+            </div>
+        </div>
+
+        <div class="kx-app-grid">
+            @foreach (var app in _apps)
+            {
+                <article class="kx-app-card">
+                    <div class="kx-app-card-head">
+                        <h3>@app.AppId</h3>
+                        <span class="kx-badge">@app.Source</span>
                     </div>
-                    <div class="card-body">
-                        <div class="row text-center">
-                            <div class="col-4"><small>Requests</small><div><strong>@(app.Stats?.RequestsTotal ?? 0)</strong></div></div>
-                            <div class="col-4"><small>Users</small><div><strong>@(app.Stats?.ActiveUsers ?? 0)</strong></div></div>
-                            <div class="col-4"><small>Wiki (last)</small><div><strong>@(app.Stats?.WikiPagesIncluded ?? 0)/@(app.Stats?.WikiPagesTotal ?? 0)</strong></div></div>
+                    <div class="kx-app-card-body">
+                        <div class="kx-app-stat">
+                            <small>Requests</small>
+                            <strong>@(app.Stats?.RequestsTotal ?? 0)</strong>
+                        </div>
+                        <div class="kx-app-stat">
+                            <small>Users</small>
+                            <strong>@(app.Stats?.ActiveUsers ?? 0)</strong>
+                        </div>
+                        <div class="kx-app-stat">
+                            <small>Wiki</small>
+                            <strong>@(app.Stats?.WikiPagesIncluded ?? 0)/@(app.Stats?.WikiPagesTotal ?? 0)</strong>
                         </div>
                     </div>
-                    <div class="card-footer">
+                    <div class="kx-app-card-foot">
                         <a class="btn btn-sm btn-primary" href="/apps/@app.AppId">Details</a>
                         <a class="btn btn-sm btn-outline-secondary" href="/apps/@app.AppId/config">Config</a>
                         <a class="btn btn-sm btn-outline-info" href="/chat">Chat Lab</a>
                     </div>
-                </div>
-            </div>
-        }
-    </div>
-}
+                </article>
+            }
+        </div>
+    }
 }
 
 @code {
@@ -88,6 +121,10 @@ else
     private IReadOnlyList<AdminAppListItem> _apps = [];
     private bool _loading = true;
     private string? _error;
+
+    private long _totalRequests;
+    private long _totalUsers;
+    private long _totalWiki;
 
     protected override async Task OnInitializedAsync()
     {
@@ -116,6 +153,7 @@ else
         if (!Session.IsConfigured)
         {
             _apps = [];
+            ResetTotals();
             _loading = false;
             return;
         }
@@ -123,16 +161,27 @@ else
         try
         {
             _apps = await Api.GetAppsAsync();
+            _totalRequests = _apps.Sum(a => a.Stats?.RequestsTotal ?? 0);
+            _totalUsers = _apps.Sum(a => a.Stats?.ActiveUsers ?? 0);
+            _totalWiki = _apps.Sum(a => a.Stats?.WikiPagesTotal ?? 0);
         }
         catch (Exception ex)
         {
             _error = ex.Message;
             _apps = [];
+            ResetTotals();
         }
         finally
         {
             _loading = false;
         }
+    }
+
+    private void ResetTotals()
+    {
+        _totalRequests = 0;
+        _totalUsers = 0;
+        _totalWiki = 0;
     }
 
     public void Dispose() => Session.Changed -= HandleSessionChanged;

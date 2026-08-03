@@ -1,17 +1,17 @@
-// Lightweight AdminLTE pushmenu substitute (no jQuery).
+// Kortexio Admin shell — sidebar toggle (no jQuery / AdminLTE).
 window.contextMemoryAdmin = window.contextMemoryAdmin || {
   toggleSidebar: function () {
     var body = document.body;
     if (!body) return;
     if (window.innerWidth <= 992) {
-      body.classList.toggle('sidebar-open');
-      body.classList.remove('sidebar-collapse');
+      body.classList.toggle("kx-sidebar-open");
+      body.classList.remove("kx-sidebar-collapsed");
     } else {
-      body.classList.toggle('sidebar-collapse');
-      body.classList.remove('sidebar-open');
+      body.classList.toggle("kx-sidebar-collapsed");
+      body.classList.remove("kx-sidebar-open");
     }
   },
   closeSidebarOverlay: function () {
-    document.body.classList.remove('sidebar-open');
+    document.body.classList.remove("kx-sidebar-open");
   }
 };
