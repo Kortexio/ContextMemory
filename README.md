@@ -11,9 +11,9 @@ ContextMemory is a context and agent proxy for applications that talk to LLMs. T
 
 Legacy Ollama-native routes `POST /api/chat` and `POST /api/generate` remain available (deprecated) for older clients.
 
-Behind the scenes, the gateway enriches each turn with session memory (a per-session markdown wiki), optional **Global Wiki** retrieval via the `wiki_search` tool, optional web search, and — when enabled — an **agentic loop** with tools isolated per tenant.
+Behind the scenes, the gateway enriches each turn with session memory (a per-session markdown wiki), optional web search, and — when Global Wiki and/or agentic tools are enabled — an **agentic loop** where **retrieval is a tool** (`wiki_search`) alongside sandbox/MCP, not a separate RAG inject.
 
-**Contents:** [Why](#why-it-exists) · [Cloud vs self-host](#two-ways-to-run-it) · [Cloud quick start](#quick-start--kortexio-cloud) · [Self-host / Docker](#quick-start--self-host) · [Admin UI guide](#admin-ui-guide) · [Architecture](#architecture-in-30-seconds) · [Features](#features) · [API](#api--stable-contract) · [Docs backlog](#documentation-backlog) · [Troubleshooting](#troubleshooting) · [License](#licensing)
+**Contents:** [Why](#why-it-exists) · [Cloud vs self-host](#two-ways-to-run-it) · [Cloud quick start](#quick-start--kortexio-cloud) · [Self-host / Docker](#quick-start--self-host) · [Admin UI guide](#admin-ui-guide) · [Architecture](#architecture-in-30-seconds) · [Features](#features) · [Retrieval + agentic](#retrieval--agentic-loop) · [API](#api--stable-contract) · [Docs backlog](#documentation-backlog) · [Troubleshooting](#troubleshooting) · [License](#licensing)
 
 ---
 
@@ -29,7 +29,7 @@ Behind the scenes, the gateway enriches each turn with session memory (a per-ses
 | Problem | ContextMemory solution |
 |---|---|
 | The LLM forgets context between messages | Per-session compiled wiki + recent history injected automatically |
-| Product/ops docs live outside the chat session | **Global Wiki** — app-scoped knowledge base searched on demand via `wiki_search` |
+| Product/ops docs live outside the chat session | **Global Wiki** — app-scoped KB retrieved on demand via `wiki_search` **inside the agentic loop** (not a separate RAG inject) |
 | You need actions (shell, APIs, MCP) without a new endpoint | Agentic loop on the same `/v1/chat/completions`, invisible to the client |
 | Each client/tenant needs different tools and rules | Per-app configuration: ACA, self-hosted sandbox, MCP, guardrails, prompts |
 | Destructive actions need human control | Blocking human-in-the-loop with wiki checkpoints |
@@ -451,7 +451,7 @@ Max wiki context chars, compaction threshold (bytes), compaction min pages.
 - Enable Global Wiki → exposes `wiki_search` for documents under `/apps/{id}/wiki/…`
 - Max Global Wiki tool chars — budget per `wiki_search` call (`0` = service default)
 
-Ingest/digests are API-side; the Admin UI toggles availability and budget.
+Ingest/digests are API-side; the Admin UI toggles availability and budget. Retrieval runs inside the agentic loop — see [Retrieval + agentic loop](#retrieval--agentic-loop).
 
 #### Web search
 
@@ -544,9 +544,9 @@ Your app (OpenAI-compatible client)
 │  ContextMemory Gateway (.NET 9)           │
 │  1. Auth + tenant (API key, X-App-Id)     │
 │  2. Memory: history + session wiki        │
-│  3. Global Wiki tool (wiki_search)        │
+│  3. Global Wiki via wiki_search (in loop) │
 │  4. Web search (optional)                 │
-│  5. Agentic loop (if enabled)             │
+│  5. Agentic loop (wiki ± sandbox ± MCP)   │
 │     skills + guardrails + validation/HITL │
 │  6. OpenAI-schema response (choices[])    │
 └───────┬───────────────┬───────────────────┘
@@ -610,10 +610,72 @@ curl -X POST http://localhost:5100/apps/demo-dev/wiki/query \
   -d '{"query":"subscription renewal invoice","topK":5}'
 ```
 
+How that connects to chat: see **[Retrieval + agentic loop](#retrieval--agentic-loop)** — `wiki_search` is a loop tool, not a parallel RAG path.
+
+### Retrieval + agentic loop
+
+Global Wiki retrieval and the agentic gateway are **one pipeline**, not two products bolted together.
+
+| Layer | What happens |
+|---|---|
+| **Session memory** | Always: recent history + compiled per-session wiki injected into the prompt (no tool call). |
+| **Global Wiki** | On demand: the model emits `tool_calls` → `wiki_search` → compact Markdown pack of top matches. |
+| **Other tools** | Optional: shell/python/node (sandbox/ACA), MCP (`server__tool`), web search (heuristic / always / …). |
+| **Skills / guardrails** | Shape the loop: e.g. `wiki-first-for-docs` steers toward `wiki_search`; validators can reject ungrounded finals. |
+
+**When the loop runs**
+
+```text
+AgenticEnabled =
+    (agentic.enabled && has execution/MCP tools)
+    || GlobalWikiEnabled          // default true
+```
+
+So a tenant with **only** Global Wiki still enters the agentic loop so the model can call `wiki_search`. Turning `agentic.enabled` on without tools does **not** by itself enable the loop unless Global Wiki (or tools) is also available.
+
+**End-to-end flow**
+
+```text
+1. Ingest     PUT/batch  /apps/{id}/wiki/documents…     (storage only)
+2. Digests    POST       /apps/{id}/wiki/digests/rebuild (LLM summary + wiki:catalog)
+3. Chat       POST       /v1/chat/completions
+              │
+              ├─ build prompt (persona + session wiki + history + skills)
+              ├─ expose tools: wiki_search [+ sandbox/MCP if configured]
+              ├─ loop: LLM ↔ tool_calls ↔ observations ↔ validation / HITL
+              └─ return OpenAI choices[] (client never sees internal tool chatter)
+```
+
+**Same request, grounded + action**
+
+A single user turn can:
+
+1. Call `wiki_search` for ticket/policy facts  
+2. Call an MCP tool (e.g. Zuora) or sandbox code with that evidence  
+3. Pass guardrails / HITL if configured  
+4. Answer from tool output only  
+
+Clients keep sending a normal chat body; they do not implement retrieval or orchestration.
+
+**Configure the combo (Admin)**
+
+1. **Config → Global Wiki** — enabled + tool char budget  
+2. **Config → Agentic** — enable if you also want sandbox/MCP; pick skills (`wiki-first-for-docs`, …) and guardrail packs  
+3. Ingest docs + `digests/rebuild` for large corpora  
+4. Smoke in **Chat Lab** (or `POST /v1/chat/completions`) with a question that should hit the wiki  
+
+**Not the same as**
+
+| | Session wiki | Global Wiki (`wiki_search`) | Classic RAG inject |
+|---|---|---|---|
+| Scope | One user session | Whole `appId` | N/A (we don't do this) |
+| In prompt every turn? | Yes (budgeted) | No — tool on demand | N/A (we don't do this) |
+| Needs agentic loop? | No | **Yes** | N/A (we don't do this) |
+
 ### Agentic Gateway
 
-- **Same endpoint** — preferred `POST /v1/chat/completions` (legacy `POST /api/chat`); enabled via `agentic.enabled` in tenant config.
-- **Orchestrator** — loop with iteration cap, configurable timeout, and validation before returning the final answer.
+- **Same endpoint** — preferred `POST /v1/chat/completions` (legacy `POST /api/chat`). Loop runs when `AgenticEnabled` is true: `(agentic.enabled && tools) || GlobalWikiEnabled` — see [Retrieval + agentic loop](#retrieval--agentic-loop).
+- **Orchestrator** — loop with iteration cap, configurable timeout, and validation before returning the final answer. Built-in `wiki_search` participates like any other tool when Global Wiki is on.
 - **Skills & guardrail packs (configurable per app)** — shared catalog (File or Postgres), seeded on startup; each tenant picks which packs are active via `agentic.policyPacks`.
   - **Skills** — Markdown policy text injected into the agent system prompt (anti-hallucination, wiki-first, MCP preference, Zuora discover-first, …). Create/edit/import/export in Admin **Skills** or `/admin/agentic/skills`.
   - **Guardrail packs** — deterministic validators by `kind` (`url-fetch`, `sandbox-claim`, `tool-failure-disclosure`, `blocked-patterns`) that can reject a final answer and force another loop iteration.
