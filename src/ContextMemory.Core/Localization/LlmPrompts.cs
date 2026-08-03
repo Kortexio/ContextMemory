@@ -86,6 +86,8 @@ public static class LlmPrompts
             - Never reference files in index_md without full content in pages[]
             - index_md only when the index changes; use normalized paths like pages/topic_name.md
             - Maximum 3 pages per turn
+            - Prefer pages/facts.md for durable facts using `- [active] key: value | valid_from: YYYY-MM-DD`
+            - When the user corrects a fact, supersede the old line (`[superseded]` + valid_to) and add a new `[active]` line — never delete history
             - If web results exist, merge verifiable facts into thematic pages with URL and retrieval date
             - Language: {language}
             """,
@@ -122,6 +124,8 @@ public static class LlmPrompts
             - Nunca referencies ficheiros em index_md sem incluir o content completo em pages[]
             - index_md só quando o índice mudar; use paths normalizados tipo pages/nome_tema.md
             - Máximo 3 páginas por turno
+            - Prefere pages/facts.md para factos estáveis com `- [active] chave: valor | valid_from: YYYY-MM-DD`
+            - Quando o utilizador corrigir um facto, marca a linha antiga `[superseded]` com valid_to e adiciona nova `[active]` — nunca apagues histórico
             - Se houver resultados web, faz merge de factos verificáveis nas páginas temáticas com URL e data de consulta
             - Língua: {language}
             """);
@@ -152,6 +156,7 @@ public static class LlmPrompts
             - Merge pages about the same topic
             - Create pages/summary-general.md with stable decisions and facts when useful
             - delete_pages lists files in pages/ that became obsolete after the merge
+            - Never delete superseded fact lines — move them to pages/facts_archive.md if needed
             - Keep the wiki concise and free of duplication
             - Language: {language}
             """,
@@ -178,6 +183,7 @@ public static class LlmPrompts
             - Funde páginas sobre o mesmo tópico
             - Cria pages/resumo-geral.md com decisões e factos estáveis quando útil
             - delete_pages lista ficheiros em pages/ que ficaram obsoletos após o merge
+            - Nunca apagues linhas de factos superseded — move-as para pages/facts_archive.md se preciso
             - Mantém a wiki concisa e sem duplicação
             - Língua: {language}
             """);

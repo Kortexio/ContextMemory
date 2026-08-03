@@ -11,6 +11,14 @@ public static class SessionDefaults
         - `index.md` — page catalog with links and one-line summaries
         - `log.md` — append-only turn chronology
         - `pages/*.md` — compiled knowledge (decisions, facts, procedures, context)
+        - Prefer a `pages/facts.md` page for durable user/business facts
+
+        ## Facts (temporal)
+        - Stable facts go under a `## Facts` section using one line per fact:
+          `- [active] <key>: <value> | valid_from: YYYY-MM-DD`
+          `- [superseded] <key>: <old value> | valid_from: YYYY-MM-DD | valid_to: YYYY-MM-DD`
+        - When the user corrects a fact, mark the old line `[superseded]` with `valid_to` = today and add a new `[active]` line — never delete history
+        - Injected context prefers `[active]` facts; superseded lines remain for audit
 
         ## Rules
         - Update the wiki after each user/assistant exchange

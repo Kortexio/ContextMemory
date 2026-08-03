@@ -26,7 +26,11 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var entity = await db.GlobalWikiDocuments
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.AppId == appId && x.DocumentId == documentId, cancellationToken)
+            .FirstOrDefaultAsync(
+                x => x.AppId == appId
+                     && x.DocumentId == documentId
+                     && x.Status == GlobalWikiRevisionStatus.Active,
+                cancellationToken)
             .ConfigureAwait(false);
         return entity is null ? null : ToDocument(entity);
     }
@@ -36,10 +40,13 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
         string? sourceId = null,
         int offset = 0,
         int limit = 50,
+        bool includeSuperseded = false,
         CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var query = db.GlobalWikiDocuments.AsNoTracking().Where(x => x.AppId == appId);
+        if (!includeSuperseded)
+            query = query.Where(x => x.Status == GlobalWikiRevisionStatus.Active);
         if (!string.IsNullOrWhiteSpace(sourceId))
             query = query.Where(x => x.SourceId == sourceId);
 
@@ -56,10 +63,13 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
     public async Task<int> CountAsync(
         string appId,
         string? sourceId = null,
+        bool includeSuperseded = false,
         CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var query = db.GlobalWikiDocuments.AsNoTracking().Where(x => x.AppId == appId);
+        if (!includeSuperseded)
+            query = query.Where(x => x.Status == GlobalWikiRevisionStatus.Active);
         if (!string.IsNullOrWhiteSpace(sourceId))
             query = query.Where(x => x.SourceId == sourceId);
         return await query.CountAsync(cancellationToken).ConfigureAwait(false);
@@ -74,7 +84,11 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var hash = GlobalWikiSlug.ComputeContentHash(request.Content);
         var existing = await db.GlobalWikiDocuments
-            .FirstOrDefaultAsync(x => x.AppId == appId && x.DocumentId == documentId, cancellationToken)
+            .FirstOrDefaultAsync(
+                x => x.AppId == appId
+                     && x.DocumentId == documentId
+                     && x.Status == GlobalWikiRevisionStatus.Active,
+                cancellationToken)
             .ConfigureAwait(false);
 
         var slug = GlobalWikiSlug.FromDocumentId(documentId, request.Slug);
@@ -103,6 +117,7 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
                     DocumentId = documentId,
                     Slug = existing.Slug,
                     ContentHash = existing.ContentHash,
+                    RevisionId = existing.RevisionId,
                     UpdatedAt = existing.UpdatedAt,
                     Created = false,
                     Unchanged = true
@@ -116,6 +131,8 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
             if (request.Metadata is not null)
                 existing.MetadataJson = metadataJson;
             existing.UpdatedAt = now;
+            if (request.ValidTo.HasValue)
+                existing.ValidTo = request.ValidTo;
 
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return new GlobalWikiUpsertResult
@@ -124,28 +141,29 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
                 DocumentId = documentId,
                 Slug = slug,
                 ContentHash = hash,
+                RevisionId = existing.RevisionId,
                 UpdatedAt = now,
                 Created = false,
                 Unchanged = false
             };
         }
 
-        if (existing is null)
+        if (existing is not null && request.Overwrite)
         {
-            db.GlobalWikiDocuments.Add(new GlobalWikiDocumentEntity
-            {
-                AppId = appId,
-                DocumentId = documentId,
-                Slug = slug,
-                Title = title,
-                Content = request.Content ?? string.Empty,
-                Summary = summary,
-                SourceId = sourceId,
-                MetadataJson = metadataJson,
-                ContentHash = hash,
-                CreatedAt = now,
-                UpdatedAt = now
-            });
+            existing.Slug = slug;
+            existing.Title = title;
+            existing.Content = request.Content ?? string.Empty;
+            existing.Summary = summary;
+            if (request.SourceId is not null)
+                existing.SourceId = request.SourceId.Trim();
+            if (request.Metadata is not null)
+                existing.MetadataJson = metadataJson;
+            existing.ContentHash = hash;
+            existing.UpdatedAt = now;
+            if (request.ValidFrom.HasValue)
+                existing.ValidFrom = request.ValidFrom.Value;
+            if (request.ValidTo.HasValue)
+                existing.ValidTo = request.ValidTo;
 
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             return new GlobalWikiUpsertResult
@@ -154,22 +172,45 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
                 DocumentId = documentId,
                 Slug = slug,
                 ContentHash = hash,
+                RevisionId = existing.RevisionId,
                 UpdatedAt = now,
-                Created = true,
+                Created = false,
                 Unchanged = false
             };
         }
 
-        existing.Slug = slug;
-        existing.Title = title;
-        existing.Content = request.Content ?? string.Empty;
-        existing.Summary = summary;
-        if (request.SourceId is not null)
-            existing.SourceId = request.SourceId.Trim();
-        if (request.Metadata is not null)
-            existing.MetadataJson = metadataJson;
-        existing.ContentHash = hash;
-        existing.UpdatedAt = now;
+        var validFrom = request.ValidFrom ?? now;
+        var newRevisionId = Guid.NewGuid().ToString("N");
+        var superseded = false;
+
+        if (existing is not null)
+        {
+            existing.Status = GlobalWikiRevisionStatus.Superseded;
+            existing.ValidTo = validFrom;
+            existing.UpdatedAt = now;
+            superseded = true;
+        }
+
+        var content = request.Content ?? string.Empty;
+        db.GlobalWikiDocuments.Add(new GlobalWikiDocumentEntity
+        {
+            AppId = appId,
+            DocumentId = documentId,
+            RevisionId = newRevisionId,
+            Slug = slug,
+            Title = title,
+            Content = content,
+            Summary = summary,
+            SourceId = sourceId,
+            MetadataJson = metadataJson,
+            ContentHash = hash,
+            Status = GlobalWikiRevisionStatus.Active,
+            ValidFrom = validFrom,
+            ValidTo = request.ValidTo,
+            SupersedesRevisionId = existing?.RevisionId,
+            CreatedAt = existing?.CreatedAt ?? now,
+            UpdatedAt = now
+        });
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return new GlobalWikiUpsertResult
@@ -178,9 +219,11 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
             DocumentId = documentId,
             Slug = slug,
             ContentHash = hash,
+            RevisionId = newRevisionId,
             UpdatedAt = now,
-            Created = false,
-            Unchanged = false
+            Created = existing is null,
+            Unchanged = false,
+            Superseded = superseded
         };
     }
 
@@ -191,12 +234,19 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var existing = await db.GlobalWikiDocuments
-            .FirstOrDefaultAsync(x => x.AppId == appId && x.DocumentId == documentId, cancellationToken)
+            .FirstOrDefaultAsync(
+                x => x.AppId == appId
+                     && x.DocumentId == documentId
+                     && x.Status == GlobalWikiRevisionStatus.Active,
+                cancellationToken)
             .ConfigureAwait(false);
         if (existing is null)
             return false;
 
-        db.GlobalWikiDocuments.Remove(existing);
+        var now = DateTimeOffset.UtcNow;
+        existing.Status = GlobalWikiRevisionStatus.Superseded;
+        existing.ValidTo = now;
+        existing.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return true;
     }
@@ -204,18 +254,126 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
     public async Task<IReadOnlyList<GlobalWikiDocument>> GetAllForQueryAsync(
         string appId,
         string? sourceId = null,
+        DateTimeOffset? asOf = null,
+        CancellationToken cancellationToken = default)
+    {
+        var point = asOf ?? DateTimeOffset.UtcNow;
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var query = db.GlobalWikiDocuments.AsNoTracking()
+            .Where(x => x.AppId == appId
+                        && x.ValidFrom <= point
+                        && (x.ValidTo == null || x.ValidTo > point));
+        if (!string.IsNullOrWhiteSpace(sourceId))
+            query = query.Where(x => x.SourceId == sourceId);
+
+        var entities = await query
+            .OrderByDescending(x => x.ValidFrom)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return entities
+            .GroupBy(x => x.DocumentId, StringComparer.OrdinalIgnoreCase)
+            .Select(g => ToDocument(g.First()))
+            .OrderByDescending(d => d.UpdatedAt)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<GlobalWikiDocument>> SearchAsync(
+        string appId,
+        string query,
+        DateTimeOffset? asOf = null,
+        string? sourceId = null,
+        int topK = 50,
+        CancellationToken cancellationToken = default)
+    {
+        topK = Math.Clamp(topK, 1, 200);
+        var point = asOf ?? DateTimeOffset.UtcNow;
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+
+        List<GlobalWikiDocumentEntity> entities;
+        try
+        {
+            var tokens = GlobalWikiScoring.Tokenize(query);
+            if (tokens.Count == 0)
+            {
+                return (await GetAllForQueryAsync(appId, sourceId, asOf, cancellationToken).ConfigureAwait(false))
+                    .Take(topK)
+                    .ToList();
+            }
+
+            // Use GIN-backed search_vector when present; plainto_tsquery is safer for user input.
+            var sql = """
+                SELECT * FROM global_wiki_documents
+                WHERE "AppId" = {0}
+                  AND "ValidFrom" <= {1}
+                  AND ("ValidTo" IS NULL OR "ValidTo" > {1})
+                  AND ({2}::text IS NULL OR "SourceId" = {2})
+                  AND search_vector @@ plainto_tsquery('simple', {3})
+                ORDER BY ts_rank(search_vector, plainto_tsquery('simple', {3})) DESC
+                LIMIT {4}
+                """;
+
+            entities = await db.GlobalWikiDocuments
+                .FromSqlRaw(sql, appId, point, (object?)sourceId ?? DBNull.Value, query, topK)
+                .AsNoTracking()
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            var docs = await GetAllForQueryAsync(appId, sourceId, asOf, cancellationToken).ConfigureAwait(false);
+            return GlobalWikiScoring.ScoreMatches(docs, query)
+                .Take(topK)
+                .Select(x => x.Document)
+                .ToList();
+        }
+
+        if (entities.Count == 0)
+        {
+            var docs = await GetAllForQueryAsync(appId, sourceId, asOf, cancellationToken).ConfigureAwait(false);
+            return GlobalWikiScoring.ScoreMatches(docs, query)
+                .Take(topK)
+                .Select(x => x.Document)
+                .ToList();
+        }
+
+        return GlobalWikiScoring.ScoreMatches(entities.Select(ToDocument).ToList(), query)
+            .Take(topK)
+            .Select(x => x.Document)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<GlobalWikiDocument>> ListRevisionsAsync(
+        string appId,
+        string documentId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var entities = await db.GlobalWikiDocuments.AsNoTracking()
+            .Where(x => x.AppId == appId && x.DocumentId == documentId)
+            .OrderByDescending(x => x.ValidFrom)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return entities.Select(ToDocument).ToList();
+    }
+
+    public async Task<IReadOnlyList<GlobalWikiDocument>> ListAuditAsync(
+        string appId,
+        DateTimeOffset? from = null,
+        DateTimeOffset? to = null,
         CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var query = db.GlobalWikiDocuments.AsNoTracking().Where(x => x.AppId == appId);
-        if (!string.IsNullOrWhiteSpace(sourceId))
-            query = query.Where(x => x.SourceId == sourceId);
+        if (from.HasValue)
+            query = query.Where(x => x.UpdatedAt >= from.Value);
+        if (to.HasValue)
+            query = query.Where(x => x.UpdatedAt <= to.Value);
 
         var entities = await query
             .OrderByDescending(x => x.UpdatedAt)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
-
         return entities.Select(ToDocument).ToList();
     }
 
@@ -243,6 +401,13 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
             SourceId = entity.SourceId,
             Metadata = metadata,
             ContentHash = entity.ContentHash,
+            RevisionId = entity.RevisionId,
+            ValidFrom = entity.ValidFrom == default ? entity.CreatedAt : entity.ValidFrom,
+            ValidTo = entity.ValidTo,
+            Status = string.IsNullOrWhiteSpace(entity.Status)
+                ? GlobalWikiRevisionStatus.Active
+                : entity.Status,
+            SupersedesRevisionId = entity.SupersedesRevisionId,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt
         };

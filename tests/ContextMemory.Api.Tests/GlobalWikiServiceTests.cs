@@ -1,6 +1,7 @@
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.GlobalWiki;
 using ContextMemory.Core.Models;
+using ContextMemory.Core.Session;
 using ContextMemory.Infrastructure.Wiki;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -217,8 +218,118 @@ public sealed class GlobalWikiServiceTests
         Assert.DoesNotContain("Extra 5 should drop", normalized);
     }
 
+    [Fact]
+    public async Task Upsert_SupersedesPreviousRevision_ByDefault()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cm-global-wiki-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = CreateStore(root);
+            var service = new GlobalWikiService(store, new StubDigestGenerator(), NullLogger<GlobalWikiService>.Instance);
+
+            var t0 = DateTimeOffset.Parse("2026-01-01T00:00:00Z");
+            await service.UpsertAsync("demo", "kyc:user-1", new GlobalWikiUpsertRequest
+            {
+                Title = "KYC",
+                Content = "# KYC\n\nStatus: pending",
+                ValidFrom = t0
+            });
+
+            var mid = DateTimeOffset.Parse("2026-06-01T00:00:00Z");
+            var second = await service.UpsertAsync("demo", "kyc:user-1", new GlobalWikiUpsertRequest
+            {
+                Title = "KYC",
+                Content = "# KYC\n\nStatus: approved",
+                ValidFrom = mid
+            });
+
+            Assert.True(second.Superseded);
+            Assert.False(second.Unchanged);
+
+            var active = await store.GetAsync("demo", "kyc:user-1");
+            Assert.NotNull(active);
+            Assert.Contains("approved", active!.Content);
+            Assert.Equal(GlobalWikiRevisionStatus.Active, active.Status);
+
+            var revs = await store.ListRevisionsAsync("demo", "kyc:user-1");
+            Assert.Equal(2, revs.Count);
+            Assert.Contains(revs, r => r.Status == GlobalWikiRevisionStatus.Superseded);
+
+            var past = await service.QueryAsync("demo", new GlobalWikiQueryRequest
+            {
+                Query = "KYC Status",
+                AsOf = DateTimeOffset.Parse("2026-03-01T00:00:00Z"),
+                TopK = 5
+            });
+            Assert.Contains("pending", past.CompiledMarkdown);
+            Assert.DoesNotContain("approved", past.CompiledMarkdown);
+
+            var now = await service.QueryAsync("demo", new GlobalWikiQueryRequest
+            {
+                Query = "KYC Status",
+                TopK = 5
+            });
+            Assert.Contains("approved", now.CompiledMarkdown);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Upsert_Overwrite_DoesNotCreateRevision()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cm-global-wiki-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = CreateStore(root);
+            var service = new GlobalWikiService(store, new StubDigestGenerator(), NullLogger<GlobalWikiService>.Instance);
+
+            var first = await service.UpsertAsync("demo", "doc-ow", new GlobalWikiUpsertRequest
+            {
+                Content = "# A\n\nversion one"
+            });
+            var second = await service.UpsertAsync("demo", "doc-ow", new GlobalWikiUpsertRequest
+            {
+                Content = "# A\n\nversion two",
+                Overwrite = true
+            });
+
+            Assert.False(second.Superseded);
+            Assert.Equal(first.RevisionId, second.RevisionId);
+            var revs = await store.ListRevisionsAsync("demo", "doc-ow");
+            Assert.Single(revs);
+            Assert.Contains("version two", revs[0].Content);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void PreferActiveFacts_DropsSupersededLines()
+    {
+        var md =
+            """
+            ## Facts
+            - [superseded] email: old@example.com | valid_from: 2025-01-01 | valid_to: 2026-01-01
+            - [active] email: new@example.com | valid_from: 2026-01-01
+            Other notes stay.
+            """;
+
+        var filtered = SessionWikiCompiler.PreferActiveFacts(md);
+        Assert.DoesNotContain("old@example.com", filtered);
+        Assert.Contains("new@example.com", filtered);
+        Assert.Contains("Other notes stay.", filtered);
+    }
+
     private static GlobalWikiService CreateService(string root, StubDigestGenerator? digest = null) =>
         new(CreateStore(root), digest ?? new StubDigestGenerator(), NullLogger<GlobalWikiService>.Instance);
+
 
     private static FileGlobalWikiStore CreateStore(string root) =>
         new(Options.Create(new ContextMemoryOptions

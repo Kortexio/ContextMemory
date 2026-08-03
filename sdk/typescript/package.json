@@ -1,0 +1,18 @@
+{
+  "name": "contextmemory",
+  "version": "0.1.0",
+  "description": "Thin headers helper for the ContextMemory OpenAI-compatible gateway",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "license": "AGPL-3.0-or-later"
+}

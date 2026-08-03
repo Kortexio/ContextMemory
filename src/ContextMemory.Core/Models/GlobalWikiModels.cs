@@ -2,6 +2,12 @@ using System.Text.Json.Serialization;
 
 namespace ContextMemory.Core.Models;
 
+public static class GlobalWikiRevisionStatus
+{
+    public const string Active = "active";
+    public const string Superseded = "superseded";
+}
+
 public sealed class GlobalWikiDocument
 {
     public required string AppId { get; init; }
@@ -13,8 +19,22 @@ public sealed class GlobalWikiDocument
     public string SourceId { get; init; } = string.Empty;
     public Dictionary<string, string> Metadata { get; init; } = new();
     public string ContentHash { get; init; } = string.Empty;
+    public string RevisionId { get; init; } = string.Empty;
+    public DateTimeOffset ValidFrom { get; init; }
+    public DateTimeOffset? ValidTo { get; init; }
+    public string Status { get; init; } = GlobalWikiRevisionStatus.Active;
+    public string? SupersedesRevisionId { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
+
+    public bool IsValidAt(DateTimeOffset asOf)
+    {
+        if (asOf < ValidFrom)
+            return false;
+        if (ValidTo is { } to && asOf >= to)
+            return false;
+        return true;
+    }
 }
 
 public sealed class GlobalWikiUpsertRequest
@@ -36,6 +56,16 @@ public sealed class GlobalWikiUpsertRequest
 
     [JsonPropertyName("slug")]
     public string? Slug { get; init; }
+
+    /// <summary>When true, content changes overwrite the active revision in place (legacy). Default false = supersede.</summary>
+    [JsonPropertyName("overwrite")]
+    public bool Overwrite { get; init; }
+
+    [JsonPropertyName("validFrom")]
+    public DateTimeOffset? ValidFrom { get; init; }
+
+    [JsonPropertyName("validTo")]
+    public DateTimeOffset? ValidTo { get; init; }
 }
 
 public sealed class GlobalWikiUpsertResult
@@ -52,6 +82,9 @@ public sealed class GlobalWikiUpsertResult
     [JsonPropertyName("contentHash")]
     public required string ContentHash { get; init; }
 
+    [JsonPropertyName("revisionId")]
+    public string RevisionId { get; init; } = string.Empty;
+
     [JsonPropertyName("updatedAt")]
     public DateTimeOffset UpdatedAt { get; init; }
 
@@ -60,6 +93,9 @@ public sealed class GlobalWikiUpsertResult
 
     [JsonPropertyName("unchanged")]
     public bool Unchanged { get; init; }
+
+    [JsonPropertyName("superseded")]
+    public bool Superseded { get; init; }
 }
 
 public sealed class GlobalWikiBatchUpsertRequest
@@ -118,6 +154,15 @@ public sealed class GlobalWikiBatchDocument
 
     [JsonPropertyName("slug")]
     public string? Slug { get; init; }
+
+    [JsonPropertyName("overwrite")]
+    public bool Overwrite { get; init; }
+
+    [JsonPropertyName("validFrom")]
+    public DateTimeOffset? ValidFrom { get; init; }
+
+    [JsonPropertyName("validTo")]
+    public DateTimeOffset? ValidTo { get; init; }
 }
 
 public sealed class GlobalWikiBatchUpsertResult
@@ -158,6 +203,18 @@ public sealed class GlobalWikiDocumentSummary
     [JsonPropertyName("sourceId")]
     public string SourceId { get; init; } = string.Empty;
 
+    [JsonPropertyName("revisionId")]
+    public string RevisionId { get; init; } = string.Empty;
+
+    [JsonPropertyName("status")]
+    public string Status { get; init; } = GlobalWikiRevisionStatus.Active;
+
+    [JsonPropertyName("validFrom")]
+    public DateTimeOffset ValidFrom { get; init; }
+
+    [JsonPropertyName("validTo")]
+    public DateTimeOffset? ValidTo { get; init; }
+
     [JsonPropertyName("updatedAt")]
     public DateTimeOffset UpdatedAt { get; init; }
 }
@@ -182,6 +239,10 @@ public sealed class GlobalWikiQueryRequest
     /// </summary>
     [JsonPropertyName("includeIndex")]
     public bool IncludeIndex { get; init; }
+
+    /// <summary>Point-in-time for temporal facts. Default = UtcNow (only currently valid revisions).</summary>
+    [JsonPropertyName("asOf")]
+    public DateTimeOffset? AsOf { get; init; }
 }
 
 public sealed class GlobalWikiQueryResult
@@ -200,6 +261,9 @@ public sealed class GlobalWikiQueryResult
 
     [JsonPropertyName("truncated")]
     public bool Truncated { get; init; }
+
+    [JsonPropertyName("asOf")]
+    public DateTimeOffset AsOf { get; init; }
 
     [JsonPropertyName("matches")]
     public List<GlobalWikiMatch> Matches { get; init; } = [];
@@ -221,4 +285,31 @@ public sealed class GlobalWikiMatch
 
     [JsonPropertyName("sourceId")]
     public string SourceId { get; init; } = string.Empty;
+
+    [JsonPropertyName("revisionId")]
+    public string RevisionId { get; init; } = string.Empty;
+}
+
+public sealed class GlobalWikiRevisionListResult
+{
+    [JsonPropertyName("documentId")]
+    public required string DocumentId { get; init; }
+
+    [JsonPropertyName("revisions")]
+    public List<GlobalWikiDocumentSummary> Revisions { get; init; } = [];
+}
+
+public sealed class GlobalWikiAuditExportResult
+{
+    [JsonPropertyName("appId")]
+    public required string AppId { get; init; }
+
+    [JsonPropertyName("from")]
+    public DateTimeOffset? From { get; init; }
+
+    [JsonPropertyName("to")]
+    public DateTimeOffset? To { get; init; }
+
+    [JsonPropertyName("revisions")]
+    public List<GlobalWikiDocumentSummary> Revisions { get; init; } = [];
 }

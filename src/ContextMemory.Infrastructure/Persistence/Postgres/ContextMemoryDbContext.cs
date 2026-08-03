@@ -60,9 +60,10 @@ public sealed class ContextMemoryDbContext : DbContext
         modelBuilder.Entity<GlobalWikiDocumentEntity>(e =>
         {
             e.ToTable("global_wiki_documents");
-            e.HasKey(x => new { x.AppId, x.DocumentId });
+            e.HasKey(x => new { x.AppId, x.DocumentId, x.RevisionId });
             e.Property(x => x.AppId).HasMaxLength(64);
             e.Property(x => x.DocumentId).HasMaxLength(256);
+            e.Property(x => x.RevisionId).HasMaxLength(64);
             e.Property(x => x.Slug).HasMaxLength(128);
             e.Property(x => x.Title).HasMaxLength(512);
             e.Property(x => x.Content).HasColumnType("text");
@@ -70,9 +71,13 @@ public sealed class ContextMemoryDbContext : DbContext
             e.Property(x => x.SourceId).HasMaxLength(128);
             e.Property(x => x.MetadataJson).HasColumnType("jsonb");
             e.Property(x => x.ContentHash).HasMaxLength(64);
+            e.Property(x => x.Status).HasMaxLength(32);
+            e.Property(x => x.SupersedesRevisionId).HasMaxLength(64);
             e.HasIndex(x => x.AppId);
             e.HasIndex(x => new { x.AppId, x.UpdatedAt });
             e.HasIndex(x => new { x.AppId, x.SourceId });
+            e.HasIndex(x => new { x.AppId, x.DocumentId, x.Status });
+            e.HasIndex(x => new { x.AppId, x.ValidFrom, x.ValidTo });
         });
 
         modelBuilder.Entity<McpCredentialEntity>(e =>
@@ -173,6 +178,7 @@ public sealed class GlobalWikiDocumentEntity
 {
     public string AppId { get; set; } = string.Empty;
     public string DocumentId { get; set; } = string.Empty;
+    public string RevisionId { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
@@ -180,6 +186,10 @@ public sealed class GlobalWikiDocumentEntity
     public string SourceId { get; set; } = string.Empty;
     public string MetadataJson { get; set; } = "{}";
     public string ContentHash { get; set; } = string.Empty;
+    public string Status { get; set; } = "active";
+    public DateTimeOffset ValidFrom { get; set; }
+    public DateTimeOffset? ValidTo { get; set; }
+    public string? SupersedesRevisionId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

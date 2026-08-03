@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ContextMemory — 20s aha (record this as GIF)</title>
+  <style>
+    :root {
+      --bg: #0c1117;
+      --panel: #151b24;
+      --line: #2a3444;
+      --text: #e8eef7;
+      --muted: #8b9bb0;
+      --accent: #3dd6c6;
+      --cursor: #7aa2ff;
+      --ok: #6dde8b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(1200px 600px at 20% 0%, #152033, var(--bg));
+      color: var(--text);
+      font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .stage {
+      width: min(920px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 24px 80px rgba(0,0,0,.45);
+    }
+    .top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #10161f;
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #445; }
+    .dot.r { background: #ff5f57; }
+    .dot.y { background: #febc2e; }
+    .dot.g { background: #28c840; }
+    .brand {
+      margin-left: 8px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      color: var(--accent);
+    }
+    .sub { color: var(--muted); font-size: 13px; margin-left: auto; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      min-height: 420px;
+    }
+    .chat, .mcp {
+      padding: 20px;
+    }
+    .chat { border-right: 1px solid var(--line); }
+    h2 {
+      margin: 0 0 14px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+    }
+    .bubble {
+      max-width: 92%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      line-height: 1.45;
+      font-size: 15px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: .35s ease;
+    }
+    .bubble.on { opacity: 1; transform: none; }
+    .user { background: #1c2740; border: 1px solid #2c3b5c; }
+    .assistant { background: #13251f; border: 1px solid #1f4a3d; }
+    .tool {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 12px;
+      color: var(--cursor);
+      background: #0e1520;
+      border: 1px dashed #334;
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      opacity: 0;
+      transition: .3s ease;
+    }
+    .tool.on { opacity: 1; }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #203040;
+      color: var(--accent);
+      font-size: 11px;
+      margin-right: 6px;
+    }
+    .mcp .row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+      opacity: .35;
+      transition: .3s;
+    }
+    .mcp .row.on { opacity: 1; color: var(--ok); }
+    .footer {
+      padding: 12px 18px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    button {
+      background: var(--accent);
+      color: #04221e;
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .timer { margin-left: auto; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <div class="top">
+      <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="brand">ContextMemory</span>
+      <span class="sub">Record this browser tab → 20s GIF</span>
+    </div>
+    <div class="grid">
+      <div class="chat">
+        <h2>Cursor chat</h2>
+        <div id="chat"></div>
+      </div>
+      <div class="mcp">
+        <h2>MCP tools</h2>
+        <div class="row" id="t1"><span>memory_save</span><span>idle</span></div>
+        <div class="row" id="t2"><span>memory_search</span><span>idle</span></div>
+        <div class="row" id="t3"><span>wiki (persisted)</span><span>empty</span></div>
+      </div>
+    </div>
+    <div class="footer">
+      <button type="button" id="replay">Replay 20s</button>
+      <span>Chat A remembers → Chat B recalls</span>
+      <span class="timer" id="timer">0.0s</span>
+    </div>
+  </div>
+  <script>
+    const chat = document.getElementById("chat");
+    const timer = document.getElementById("timer");
+    const t1 = document.getElementById("t1");
+    const t2 = document.getElementById("t2");
+    const t3 = document.getElementById("t3");
+
+    function el(tag, cls, html) {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (html != null) n.innerHTML = html;
+      return n;
+    }
+
+    function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+    async function play() {
+      chat.innerHTML = "";
+      [t1, t2, t3].forEach((r) => {
+        r.classList.remove("on");
+        r.lastElementChild.textContent = "idle";
+      });
+      t3.lastElementChild.textContent = "empty";
+      const start = performance.now();
+      const tick = setInterval(() => {
+        timer.textContent = ((performance.now() - start) / 1000).toFixed(1) + "s";
+      }, 100);
+
+      const u1 = el("div", "bubble user", "Remember: staging DB is <b>postgres-staging-01</b>.");
+      chat.appendChild(u1);
+      await sleep(400); u1.classList.add("on");
+      await sleep(900);
+
+      const tool1 = el("div", "tool", '<span class="pill">tool</span> memory_save({ title: "Staging DB", content: "…" })');
+      chat.appendChild(tool1);
+      tool1.classList.add("on");
+      t1.classList.add("on"); t1.lastElementChild.textContent = "called";
+      await sleep(700);
+      t3.classList.add("on"); t3.lastElementChild.textContent = "1 fact";
+
+      const a1 = el("div", "bubble assistant", "Saved. I’ll remember the staging DB across chats.");
+      chat.appendChild(a1); a1.classList.add("on");
+      await sleep(1800);
+
+      chat.appendChild(el("div", "bubble user on", "<i>—— new chat ——</i>"));
+      await sleep(900);
+
+      const u2 = el("div", "bubble user", "What is our staging DB?");
+      chat.appendChild(u2); await sleep(300); u2.classList.add("on");
+      await sleep(800);
+
+      const tool2 = el("div", "tool", '<span class="pill">tool</span> memory_search({ query: "staging DB" })');
+      chat.appendChild(tool2); tool2.classList.add("on");
+      t2.classList.add("on"); t2.lastElementChild.textContent = "hit";
+      await sleep(900);
+
+      const a2 = el("div", "bubble assistant", "Staging database host is <b>postgres-staging-01</b>.");
+      chat.appendChild(a2); a2.classList.add("on");
+      await sleep(2500);
+
+      clearInterval(tick);
+      timer.textContent = "20.0s · loop";
+      await sleep(800);
+      play();
+    }
+
+    document.getElementById("replay").onclick = () => location.reload();
+    play();
+  </script>
+</body>
+</html>

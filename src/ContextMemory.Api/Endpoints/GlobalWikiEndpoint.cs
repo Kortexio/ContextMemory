@@ -12,9 +12,29 @@ public static class GlobalWikiEndpoint
         app.MapPut("/apps/{appId}/wiki/documents/{documentId}", UpsertAsync);
         app.MapPost("/apps/{appId}/wiki/documents/batch", UpsertBatchAsync);
         app.MapDelete("/apps/{appId}/wiki/documents/{documentId}", DeleteAsync);
+        app.MapGet("/apps/{appId}/wiki/documents/{documentId}", GetAsync);
         app.MapGet("/apps/{appId}/wiki/documents", ListAsync);
+        app.MapGet("/apps/{appId}/wiki/documents/{documentId}/revisions", ListRevisionsAsync);
+        app.MapGet("/apps/{appId}/wiki/audit", ExportAuditAsync);
         app.MapPost("/apps/{appId}/wiki/query", QueryAsync);
         app.MapPost("/apps/{appId}/wiki/digests/rebuild", RebuildDigestsAsync);
+    }
+
+    private static async Task<IResult> GetAsync(
+        HttpContext httpContext,
+        string appId,
+        string documentId,
+        GlobalWikiService wikiService,
+        CancellationToken cancellationToken)
+    {
+        if (!ValidateAppAccess(httpContext, appId, out var error))
+            return error!;
+
+        documentId = Uri.UnescapeDataString(documentId);
+        var doc = await wikiService.GetAsync(appId, documentId, cancellationToken).ConfigureAwait(false);
+        return doc is null
+            ? Results.NotFound(new { error = "Document not found." })
+            : Results.Json(doc);
     }
 
     private static async Task<IResult> UpsertAsync(
@@ -83,13 +103,48 @@ public static class GlobalWikiEndpoint
         CancellationToken cancellationToken,
         string? sourceId = null,
         int offset = 0,
-        int limit = 50)
+        int limit = 50,
+        bool includeSuperseded = false)
     {
         if (!ValidateAppAccess(httpContext, appId, out var error))
             return error!;
 
         var result = await wikiService
-            .ListAsync(appId, sourceId, offset, limit, cancellationToken)
+            .ListAsync(appId, sourceId, offset, limit, includeSuperseded, cancellationToken)
+            .ConfigureAwait(false);
+        return Results.Json(result);
+    }
+
+    private static async Task<IResult> ListRevisionsAsync(
+        HttpContext httpContext,
+        string appId,
+        string documentId,
+        GlobalWikiService wikiService,
+        CancellationToken cancellationToken)
+    {
+        if (!ValidateAppAccess(httpContext, appId, out var error))
+            return error!;
+
+        documentId = Uri.UnescapeDataString(documentId);
+        var result = await wikiService
+            .ListRevisionsAsync(appId, documentId, cancellationToken)
+            .ConfigureAwait(false);
+        return Results.Json(result);
+    }
+
+    private static async Task<IResult> ExportAuditAsync(
+        HttpContext httpContext,
+        string appId,
+        GlobalWikiService wikiService,
+        CancellationToken cancellationToken,
+        DateTimeOffset? from = null,
+        DateTimeOffset? to = null)
+    {
+        if (!ValidateAppAccess(httpContext, appId, out var error))
+            return error!;
+
+        var result = await wikiService
+            .ExportAuditAsync(appId, from, to, cancellationToken)
             .ConfigureAwait(false);
         return Results.Json(result);
     }
