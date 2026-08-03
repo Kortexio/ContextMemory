@@ -2,97 +2,120 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @layout MainLayout
 
-<PageTitle>Settings - ContextMemory Admin</PageTitle>
+<PageTitle>Settings - Kortexio Admin</PageTitle>
 
-<div class="alert alert-info">
-    <strong>First-time setup.</strong>
-    Connect this console to a running ContextMemory API using the Master Key from
-    <code>ContextMemory:MasterKey</code>. In Docker Compose these fields are pre-filled for you.
-</div>
-
-<div class="card card-outline card-primary mb-3">
-    <div class="card-header"><h3 class="card-title">API connection</h3></div>
-    <div class="card-body">
-        <EditForm Model="_model" OnValidSubmit="SaveAsync">
-            <DataAnnotationsValidator />
-
-            <div class="form-group">
-                <label for="apiBaseUrl">API base URL</label>
-                <InputText id="apiBaseUrl" class="form-control" @bind-Value="_model.ApiBaseUrl" placeholder="http://localhost:5100" />
-                <FieldHelp>
-                    Base URL of the ContextMemory API as seen from this Admin host.
-                    Local: <code>http://localhost:5100</code>. Docker Compose: <code>http://api:8080</code>
-                    (server-side calls stay on the Docker network).
-                </FieldHelp>
-            </div>
-
-            <div class="form-group">
-                <label for="masterKey">Master key</label>
-                <div class="input-group">
-                    <InputText id="masterKey" class="form-control" type="@(_showMasterKey ? "text" : "password")" @bind-Value="_model.MasterKey" />
-                    <div class="input-group-append">
-                        <button type="button" class="btn btn-outline-secondary" @onclick="() => _showMasterKey = !_showMasterKey">
-                            <i class="fas @(_showMasterKey ? "fa-eye-slash" : "fa-eye")"></i>
-                        </button>
-                    </div>
-                </div>
-                <FieldHelp>
-                    Admin secret (<code>ContextMemory:MasterKey</code>). Required for listing apps, rotating keys, and saving config.
-                    Default demo value: <code>cm_master_dev_key_change_me</code>.
-                </FieldHelp>
-            </div>
-
-            @if (_message is not null)
-            {
-                <div class="alert alert-success">@_message</div>
-            }
-            @if (_error is not null)
-            {
-                <div class="alert alert-danger">@_error</div>
-            }
-
-            <button class="btn btn-primary" type="submit" disabled="@_saving">
-                @(_saving ? "Working…" : "Save")
-            </button>
-            <button class="btn btn-outline-secondary ml-2" type="button" @onclick="TestConnectionAsync" disabled="@_saving">
-                Test connection
-            </button>
-            <button class="btn btn-outline-danger ml-2" type="button" @onclick="ClearAsync" disabled="@_saving">
-                Reset to defaults
-            </button>
-        </EditForm>
+<div class="kx-page-header">
+    <div>
+        <h1 class="kx-page-title">Connection</h1>
+        <p class="kx-page-lead">Connect this console to a running ContextMemory API with the Master Key.</p>
     </div>
 </div>
 
-@if (_health is not null)
+@if (!Session.IsConfigured)
 {
-    <div class="card card-outline card-info">
-        <div class="card-header"><h3 class="card-title">Health check</h3></div>
-        <div class="card-body">
-            <p>Status: <strong class="@(_health.Status.Equals("Healthy", StringComparison.OrdinalIgnoreCase) ? "text-success" : "text-warning")">@_health.Status</strong></p>
-            @if (_health.Checks is not null)
-            {
-                <ul class="mb-0">
-                    <li>Ollama: @_health.Checks.Ollama</li>
-                    @if (_health.Checks.Database is not null)
-                    {
-                        <li>Database: @_health.Checks.Database</li>
-                    }
-                    <li>Persistence: @_health.Checks.Persistence</li>
-                    <li>Apps loaded: @_health.Checks.AppsLoaded</li>
-                    <li>Default model: @_health.Checks.DefaultModel</li>
-                </ul>
-            }
+    <div class="kx-empty mb-3">
+        <h2>Not connected yet</h2>
+        <p>Paste the API base URL and Master Key below, then test the connection.</p>
+    </div>
+}
+
+<div class="kx-form-narrow">
+    <div class="kx-panel">
+        <div class="kx-panel-head">
+            <h2>API connection</h2>
+        </div>
+        <div class="kx-panel-body">
+            <p class="text-muted small mb-3">
+                Use <code>ContextMemory:MasterKey</code>. In Docker Compose these fields are pre-filled for you.
+            </p>
+
+            <EditForm Model="_model" OnValidSubmit="SaveAsync">
+                <DataAnnotationsValidator />
+
+                <div class="form-group">
+                    <label for="apiBaseUrl">API base URL</label>
+                    <InputText id="apiBaseUrl" class="form-control" @bind-Value="_model.ApiBaseUrl" placeholder="http://localhost:5100" />
+                    <FieldHelp>
+                        Base URL of the ContextMemory API as seen from this Admin host.
+                        Local: <code>http://localhost:5100</code>. Docker Compose: <code>http://api:8080</code>
+                        (server-side calls stay on the Docker network).
+                    </FieldHelp>
+                </div>
+
+                <div class="form-group">
+                    <label for="masterKey">Master key</label>
+                    <div class="input-group">
+                        <InputText id="masterKey" class="form-control" type="@(_showMasterKey ? "text" : "password")" @bind-Value="_model.MasterKey" />
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-outline-secondary" @onclick="() => _showMasterKey = !_showMasterKey">
+                                <i class="fas @(_showMasterKey ? "fa-eye-slash" : "fa-eye")"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <FieldHelp>
+                        Admin secret (<code>ContextMemory:MasterKey</code>). Required for listing apps, rotating keys, and saving config.
+                        Default demo value: <code>cm_master_dev_key_change_me</code>.
+                    </FieldHelp>
+                </div>
+
+                @if (_message is not null)
+                {
+                    <div class="alert alert-success">@_message</div>
+                }
+                @if (_error is not null)
+                {
+                    <div class="alert alert-danger">@_error</div>
+                }
+
+                <div class="d-flex flex-wrap" style="gap:0.5rem">
+                    <button class="btn btn-primary" type="submit" disabled="@_saving">
+                        @(_saving ? "Working…" : "Save")
+                    </button>
+                    <button class="btn btn-outline-secondary" type="button" @onclick="TestConnectionAsync" disabled="@_saving">
+                        Test connection
+                    </button>
+                    <button class="btn btn-outline-danger" type="button" @onclick="ClearAsync" disabled="@_saving">
+                        Reset to defaults
+                    </button>
+                </div>
+            </EditForm>
         </div>
     </div>
-}
 
-@if (_metricsUrl is not null)
-{
-    <p class="mt-3 small text-muted">
-        Prometheus metrics (public): <a href="@_metricsUrl" target="_blank" rel="noopener">@_metricsUrl</a>
-    </p>
-}
+    @if (_health is not null)
+    {
+        <div class="kx-panel">
+            <div class="kx-panel-head">
+                <h2>Health check</h2>
+                <span class="@(_health.Status.Equals("Healthy", StringComparison.OrdinalIgnoreCase) ? "kx-status-ok" : "kx-status-warn")">
+                    <strong>@_health.Status</strong>
+                </span>
+            </div>
+            <div class="kx-panel-body">
+                @if (_health.Checks is not null)
+                {
+                    <div class="kx-health-grid">
+                        <div class="kx-health-item"><small>Ollama</small><strong>@_health.Checks.Ollama</strong></div>
+                        @if (_health.Checks.Database is not null)
+                        {
+                            <div class="kx-health-item"><small>Database</small><strong>@_health.Checks.Database</strong></div>
+                        }
+                        <div class="kx-health-item"><small>Persistence</small><strong>@_health.Checks.Persistence</strong></div>
+                        <div class="kx-health-item"><small>Apps loaded</small><strong>@_health.Checks.AppsLoaded</strong></div>
+                        <div class="kx-health-item"><small>Default model</small><strong>@_health.Checks.DefaultModel</strong></div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @if (_metricsUrl is not null)
+    {
+        <p class="small text-muted">
+            Prometheus metrics: <a href="@_metricsUrl" target="_blank" rel="noopener">@_metricsUrl</a>
+        </p>
+    }
+</div>
 
 @code {
     [Inject] private AdminSession Session { get; set; } = default!;

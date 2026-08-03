@@ -1,16 +1,32 @@
-@page "/chat"
+﻿@page "/chat"
 @page "/chat-test"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @layout MainLayout
 @implements IDisposable
 
-<PageTitle>Chat Lab - ContextMemory</PageTitle>
+<PageTitle>Chat Lab - Kortexio Admin</PageTitle>
 
-<div class="row chat-lab">
-    <div class="col-xl-3 mb-3">
-        <div class="card card-outline card-secondary">
-            <div class="card-header"><h3 class="card-title">Connection</h3></div>
-            <div class="card-body">
+<div class="kx-page-header">
+    <div>
+        <h1 class="kx-page-title">Chat Lab</h1>
+        <p class="kx-page-lead">Exercise session memory and the agentic loop against your apps.</p>
+    </div>
+</div>
+
+@if (!_adminSession.IsConfigured)
+{
+    <div class="kx-empty mb-3">
+        <h2>Not connected</h2>
+        <p>Set the API URL and Master Key before sending messages.</p>
+        <NavLink class="btn btn-primary" href="/settings">Connect</NavLink>
+    </div>
+}
+
+<div class="kx-chat-layout @(_settings.ShowRawJson ? "with-inspector" : "")">
+    <aside class="kx-chat-side">
+        <div class="kx-panel">
+            <div class="kx-panel-head"><h3>Session</h3></div>
+            <div class="kx-panel-body">
                 <div class="form-group">
                     <label>App ID</label>
                     <InputText class="form-control form-control-sm" @bind-Value="_settings.AppId" />
@@ -19,7 +35,7 @@
                 <div class="form-group">
                     <label>User ID</label>
                     <InputText class="form-control form-control-sm" @bind-Value="_settings.UserId" />
-                    <FieldHelp>Sent as <code>X-User-Id</code> — scopes session memory per user.</FieldHelp>
+                    <FieldHelp>Sent as <code>X-User-Id</code> â€” scopes session memory per user.</FieldHelp>
                 </div>
                 <div class="form-group">
                     <label>Session ID</label>
@@ -36,29 +52,34 @@
                     <InputText class="form-control form-control-sm" @bind-Value="_settings.Model" />
                     <FieldHelp>Body <code>model</code>. Should match the app config / pulled Ollama tag.</FieldHelp>
                 </div>
-                <div class="btn-group btn-group-sm w-100 mb-2">
-                    <button type="button" class="btn @ModeBtnClass(ChatEndpointMode.Chat)" @onclick="() => SetMode(ChatEndpointMode.Chat)">Chat</button>
-                    <button type="button" class="btn @ModeBtnClass(ChatEndpointMode.Generate)" @onclick="() => SetMode(ChatEndpointMode.Generate)">Generate</button>
+
+                <div class="kx-segment">
+                    <button type="button" class="@ModeBtnClass(ChatEndpointMode.Chat)" @onclick="() => SetMode(ChatEndpointMode.Chat)">Chat</button>
+                    <button type="button" class="@ModeBtnClass(ChatEndpointMode.Generate)" @onclick="() => SetMode(ChatEndpointMode.Generate)">Generate</button>
                 </div>
-                <div class="custom-control custom-switch mb-2">
-                    <InputCheckbox class="custom-control-input" id="streamSwitch" @bind-Value="_settings.Stream" disabled="@_busy" />
-                    <label class="custom-control-label" for="streamSwitch">Streaming (NDJSON)</label>
+
+                <label class="kx-switch">
+                    <InputCheckbox id="streamSwitch" @bind-Value="_settings.Stream" disabled="@_busy" />
+                    Streaming (NDJSON)
+                </label>
+                <label class="kx-switch">
+                    <InputCheckbox id="rawSwitch" @bind-Value="_settings.ShowRawJson" />
+                    Show raw JSON panel
+                </label>
+
+                <div class="d-flex flex-column" style="gap:0.35rem">
+                    <button class="btn btn-outline-primary btn-sm" type="button" @onclick="SaveSettingsAsync" disabled="@_busy">Save locally</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="LoadAppAsync" disabled="@_busy">Load app</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="NewSessionAsync" disabled="@_busy">New session</button>
                 </div>
-                <div class="custom-control custom-switch mb-2">
-                    <InputCheckbox class="custom-control-input" id="rawSwitch" @bind-Value="_settings.ShowRawJson" />
-                    <label class="custom-control-label" for="rawSwitch">Show raw JSON panel</label>
-                </div>
-                <button class="btn btn-outline-primary btn-sm btn-block" type="button" @onclick="SaveSettingsAsync" disabled="@_busy">Save locally</button>
-                <button class="btn btn-outline-secondary btn-sm btn-block mt-1" type="button" @onclick="LoadAppAsync" disabled="@_busy">Load app</button>
-                <button class="btn btn-outline-warning btn-sm btn-block mt-1" type="button" @onclick="NewSessionAsync" disabled="@_busy">New session</button>
             </div>
         </div>
 
         @if (_appDetail is not null)
         {
-            <div class="card card-outline card-info">
-                <div class="card-header"><h3 class="card-title">@_appDetail.AppId</h3></div>
-                <div class="card-body p-2 small">
+            <div class="kx-panel">
+                <div class="kx-panel-head"><h3>@_appDetail.AppId</h3></div>
+                <div class="kx-panel-body small">
                     <div><strong>Backend:</strong> @_appDetail.LlmBackend / @_appDetail.LlmModel</div>
                     <div><strong>Language:</strong> @_appDetail.DefaultLanguage</div>
                     <div><strong>History:</strong> @_appDetail.MaxHistoryMessages msgs</div>
@@ -68,11 +89,9 @@
             </div>
         }
 
-        <div class="card card-outline card-secondary">
-            <div class="card-header">
-                <h3 class="card-title">Ollama options</h3>
-            </div>
-            <div class="card-body">
+        <div class="kx-panel">
+            <div class="kx-panel-head"><h3>Ollama options</h3></div>
+            <div class="kx-panel-body">
                 <div class="form-group">
                     <label>System prompt (chat)</label>
                     <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_settings.SystemPrompt" />
@@ -82,79 +101,67 @@
                     <div class="col-6 form-group">
                         <label>temperature</label>
                         <InputNumber class="form-control form-control-sm" @bind-Value="_settings.Temperature" />
-                        <FieldHelp>Creativity (higher = more random).</FieldHelp>
                     </div>
                     <div class="col-6 form-group">
                         <label>top_p</label>
                         <InputNumber class="form-control form-control-sm" @bind-Value="_settings.TopP" />
-                        <FieldHelp>Nucleus sampling cutoff.</FieldHelp>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="col-6 form-group">
                         <label>top_k</label>
                         <InputNumber class="form-control form-control-sm" @bind-Value="_settings.TopK" />
-                        <FieldHelp>Limit next-token candidates (Ollama).</FieldHelp>
                     </div>
                     <div class="col-6 form-group">
                         <label>num_ctx</label>
                         <InputNumber class="form-control form-control-sm" @bind-Value="_settings.NumCtx" />
-                        <FieldHelp>Context window size in tokens.</FieldHelp>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="col-6 form-group">
                         <label>repeat_penalty</label>
                         <InputNumber class="form-control form-control-sm" @bind-Value="_settings.RepeatPenalty" />
-                        <FieldHelp>Discourage repeated phrases.</FieldHelp>
                     </div>
                     <div class="col-6 form-group">
                         <label>num_predict</label>
                         <InputNumber class="form-control form-control-sm" @bind-Value="_settings.NumPredict" />
-                        <FieldHelp>Max tokens to generate (−1 = backend default).</FieldHelp>
                     </div>
                 </div>
                 <div class="form-group">
                     <label>keep_alive</label>
                     <InputText class="form-control form-control-sm" @bind-Value="_settings.KeepAlive" />
-                    <FieldHelp>How long Ollama keeps the model loaded (e.g. <code>5m</code>).</FieldHelp>
                 </div>
                 <div class="form-group mb-0">
                     <label>format (e.g. json)</label>
                     <InputText class="form-control form-control-sm" @bind-Value="_settings.Format" />
-                    <FieldHelp>Optional response format hint for the backend.</FieldHelp>
                 </div>
             </div>
         </div>
+    </aside>
 
-        @if (!_adminSession.IsConfigured)
-        {
-            <div class="alert alert-warning">Set API URL in <NavLink href="/settings">Settings</NavLink>.</div>
-        }
-    </div>
-
-    <div class="@(_settings.ShowRawJson ? "col-xl-6" : "col-xl-9") mb-3">
-        <div class="card card-outline card-primary h-100">
-            <div class="card-header">
-                <h3 class="card-title">
-                    @(_settings.Mode == ChatEndpointMode.Chat ? "POST /api/chat" : "POST /api/generate")
-                </h3>
-                <div class="card-tools">
+    <section class="kx-chat-main">
+        <div class="kx-panel">
+            <div class="kx-panel-head">
+                <h3>@(_settings.Mode == ChatEndpointMode.Chat ? "POST /api/chat" : "POST /api/generate")</h3>
+                <div class="kx-actions">
                     @if (_busy)
                     {
-                        <button class="btn btn-sm btn-warning mr-1" type="button" @onclick="CancelRequest">Stop</button>
+                        <button class="btn btn-sm btn-warning" type="button" @onclick="CancelRequest">Stop</button>
                     }
-                    <button class="btn btn-sm btn-outline-secondary mr-1" type="button" @onclick="RegenerateAsync" disabled="@(_busy || !CanRegenerate)">Regenerate</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="RegenerateAsync" disabled="@(_busy || !CanRegenerate)">Regenerate</button>
                     <button class="btn btn-sm btn-outline-danger" type="button" @onclick="ClearUi" disabled="@(_busy && _messages.Count == 0)">Clear UI</button>
                 </div>
             </div>
 
             @if (_settings.Mode == ChatEndpointMode.Chat)
             {
-                <div class="card-body chat-messages" @ref="_messagesContainer">
+                <div class="chat-messages" @ref="_messagesContainer">
                     @if (_messages.Count == 0)
                     {
-                        <p class="text-muted">Per-session memory: recent history + compiled wiki. Send only the new message; middleware enriches the prompt.</p>
+                        <div class="kx-empty" style="border:0;box-shadow:none;max-width:none;padding:2rem 1rem">
+                            <h2>Start a conversation</h2>
+                            <p>Per-session memory: recent history + compiled wiki. Send only the new message; middleware enriches the prompt.</p>
+                        </div>
                     }
                     @foreach (var msg in _messages)
                     {
@@ -162,9 +169,9 @@
                             <div class="chat-meta">
                                 <span class="badge badge-@(msg.Role == "user" ? "primary" : msg.IsError ? "danger" : "secondary")">@msg.Role</span>
                                 @msg.Timestamp.LocalDateTime.ToString("HH:mm:ss")
-                                @if (msg.ElapsedMs is not null) { <span> · @msg.ElapsedMs ms</span> }
-                                @if (msg.IsStreaming) { <span> · streaming…</span> }
-                                @if (!string.IsNullOrEmpty(msg.MessageId)) { <span> · @msg.MessageId</span> }
+                                @if (msg.ElapsedMs is not null) { <span> Â· @msg.ElapsedMs ms</span> }
+                                @if (msg.IsStreaming) { <span> Â· streamingâ€¦</span> }
+                                @if (!string.IsNullOrEmpty(msg.MessageId)) { <span> Â· @msg.MessageId</span> }
                             </div>
                             <div class="chat-bubble @(msg.IsError ? "chat-bubble-error" : "")">
                                 @if (msg.HasAgenticProgress)
@@ -228,10 +235,10 @@
                         </div>
                     }
                 </div>
-                <div class="card-footer">
+                <div class="kx-panel-foot">
                     <EditForm Model="_chatInput" OnValidSubmit="SendChatAsync">
                         <div class="input-group">
-                            <InputTextArea class="form-control" rows="2" @bind-Value="_chatInput.Text" placeholder="Message…" disabled="@_busy" />
+                            <InputTextArea class="form-control" rows="2" @bind-Value="_chatInput.Text" placeholder="Messageâ€¦" disabled="@_busy" />
                             <div class="input-group-append">
                                 <button class="btn btn-primary" type="submit" disabled="@(_busy || string.IsNullOrWhiteSpace(_chatInput.Text))">Send</button>
                             </div>
@@ -241,36 +248,36 @@
             }
             else
             {
-                <div class="card-body">
+                <div class="kx-panel-body">
                     <label>Prompt</label>
                     <InputTextArea class="form-control" rows="8" @bind-Value="_generatePrompt" disabled="@_busy" />
                 </div>
-                <div class="card-footer">
+                <div class="kx-panel-foot">
                     <button class="btn btn-primary" type="button" @onclick="SendGenerateAsync" disabled="@(_busy || string.IsNullOrWhiteSpace(_generatePrompt))">Generate</button>
                 </div>
             }
 
             @if (_error is not null)
             {
-                <div class="card-footer border-top-0 pt-0"><div class="alert alert-danger mb-0">@_error</div></div>
+                <div class="kx-panel-foot border-top-0 pt-0"><div class="alert alert-danger mb-0">@_error</div></div>
             }
             @if (_info is not null)
             {
-                <div class="card-footer border-top-0 pt-0"><div class="alert alert-info mb-0">@_info</div></div>
+                <div class="kx-panel-foot border-top-0 pt-0"><div class="alert alert-info mb-0">@_info</div></div>
             }
         </div>
-    </div>
+    </section>
 
     @if (_settings.ShowRawJson)
     {
-        <div class="col-xl-3 mb-3">
-            <div class="card card-outline card-dark h-100">
-                <div class="card-header"><h3 class="card-title">Inspector</h3></div>
-                <div class="card-body p-2">
+        <aside class="kx-chat-side">
+            <div class="kx-panel">
+                <div class="kx-panel-head"><h3>Inspector</h3></div>
+                <div class="kx-panel-body p-2">
                     <label class="small font-weight-bold">Last request</label>
-                    <pre class="chat-raw">@(_lastRequestJson ?? "—")</pre>
+                    <pre class="chat-raw">@(_lastRequestJson ?? "â€”")</pre>
                     <label class="small font-weight-bold">Last response</label>
-                    <pre class="chat-raw">@(_lastResponseJson ?? "—")</pre>
+                    <pre class="chat-raw">@(_lastResponseJson ?? "â€”")</pre>
                     @if (_lastMeta is not null)
                     {
                         <div class="small text-muted mt-2">
@@ -296,14 +303,14 @@
                         </div>
                     }
                 </div>
-                <div class="card-footer">
-                    <button class="btn btn-sm btn-outline-warning btn-block" type="button" @onclick="NewSessionAsync" disabled="@_busy">
-                        New session (new X-Session-Id)
+                <div class="kx-panel-foot">
+                    <button class="btn btn-sm btn-outline-secondary btn-block" type="button" @onclick="NewSessionAsync" disabled="@_busy">
+                        New session
                     </button>
-                    <small class="text-muted">Clears the local sessionId and UI history. Previous wiki data remains on disk in the API.</small>
+                    <small class="text-muted">Clears local sessionId and UI history. Wiki data remains on the API.</small>
                 </div>
             </div>
-        </div>
+        </aside>
     }
 </div>
 
@@ -343,7 +350,7 @@
     }
 
     private string ModeBtnClass(ChatEndpointMode mode) =>
-        _settings.Mode == mode ? "btn-primary" : "btn-outline-primary";
+        _settings.Mode == mode ? "active" : "";
 
     private void SetMode(ChatEndpointMode mode) => _settings.Mode = mode;
 
@@ -414,8 +421,8 @@
 
             _info = $"Completed in {result.ElapsedMs} ms" +
                     (result.ResponseTimeHeaderMs is not null ? $" (gateway: {result.ResponseTimeHeaderMs} ms)" : "") +
-                    (result.MessageId is not null ? $" · msg {result.MessageId}" : "") +
-                    (result.SessionId is not null ? $" · session {result.SessionId}" : "");
+                    (result.MessageId is not null ? $" Â· msg {result.MessageId}" : "") +
+                    (result.SessionId is not null ? $" Â· session {result.SessionId}" : "");
         }
         catch (OperationCanceledException)
         {
@@ -525,7 +532,7 @@
         _lastResponseJson = null;
         _lastMeta = null;
         _error = null;
-        _info = "New session — the next request will make the API generate a new X-Session-Id.";
+        _info = "New session â€” the next request will make the API generate a new X-Session-Id.";
         await ChatSettingsStorage.SaveAsync(_settings);
     }
 
@@ -538,7 +545,7 @@
     private void CancelRequest()
     {
         _cts?.Cancel();
-        _info = "Cancelling…";
+        _info = "Cancellingâ€¦";
     }
 
     private void ClearUi()
@@ -618,11 +625,11 @@
     private static string StepIcon(string status) =>
         status switch
         {
-            "done" => "✓",
-            "error" => "✗",
-            "warning" => "⚠",
-            "pending" => "⏸",
-            _ => "…"
+            "done" => "âœ“",
+            "error" => "âœ—",
+            "warning" => "âš ",
+            "pending" => "â¸",
+            _ => "â€¦"
         };
 
     private async Task ScrollToBottomAsync()

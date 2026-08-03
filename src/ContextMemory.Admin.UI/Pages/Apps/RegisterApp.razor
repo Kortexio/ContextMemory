@@ -2,19 +2,24 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @layout MainLayout
 
-<PageTitle>New application - ContextMemory Admin</PageTitle>
+<PageTitle>New application - Kortexio Admin</PageTitle>
 
-<div class="row">
-    <div class="col-lg-8">
+<div class="kx-page-header">
+    <div>
+        <h1 class="kx-page-title">New app</h1>
+        <p class="kx-page-lead">Create a tenant with its own API key, session wiki, and optional Global Wiki.</p>
+    </div>
+</div>
+
+<div class="kx-form-narrow">
         @if (_created is null)
         {
-            <div class="card card-outline card-primary">
-                <div class="card-header">
-                    <h3 class="card-title">Register new application</h3>
+            <div class="kx-panel">
+                <div class="kx-panel-head">
+                    <h2>Register application</h2>
                 </div>
-                <div class="card-body">
+                <div class="kx-panel-body">
                     <p class="text-muted">
-                        Creates a tenant app with its own API key, session wiki, and optional Global Wiki.
                         You will see the API key <strong>once</strong> after creation — copy it immediately.
                     </p>
 
@@ -115,11 +120,11 @@
         }
         else
         {
-            <div class="card card-outline card-success">
-                <div class="card-header">
-                    <h3 class="card-title">Application created</h3>
+            <div class="kx-panel">
+                <div class="kx-panel-head">
+                    <h2>Application created</h2>
                 </div>
-                <div class="card-body">
+                <div class="kx-panel-body">
                     <div class="alert alert-warning">
                         <strong>Save the API key now.</strong> It will not be shown again on this screen.
                         Clients send it as <code>Authorization: Bearer …</code> with <code>X-App-Id: @_created.AppId</code>.
@@ -142,7 +147,7 @@
                         <dd class="col-sm-9">@_created.Status</dd>
                     </dl>
                 </div>
-                <div class="card-footer">
+                <div class="kx-panel-foot">
                     <NavLink class="btn btn-primary" href="@($"/apps/{_created.AppId}")">View statistics</NavLink>
                     <NavLink class="btn btn-outline-secondary ml-2" href="@($"/apps/{_created.AppId}/config")">Edit config</NavLink>
                     <NavLink class="btn btn-outline-info ml-2" href="/chat">Open Chat Lab</NavLink>
@@ -150,7 +155,6 @@
                 </div>
             </div>
         }
-    </div>
 </div>
 
 @code {

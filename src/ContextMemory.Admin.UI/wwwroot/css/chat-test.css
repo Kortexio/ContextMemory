@@ -1,8 +1,11 @@
-.chat-lab .chat-messages {
+.chat-lab .chat-messages,
+.chat-messages {
     min-height: 380px;
     max-height: 560px;
     overflow-y: auto;
-    background: #f8f9fa;
+    background: #f7f8fa;
+    padding: 1rem 1.1rem;
+    flex: 1;
 }
 
 .chat-row {
@@ -20,42 +23,42 @@
 
 .chat-meta {
     font-size: 0.75rem;
-    color: #6c757d;
+    color: #64748b;
     margin-bottom: 0.25rem;
 }
 
 .chat-bubble {
     display: inline-block;
     max-width: 92%;
-    padding: 0.6rem 0.85rem;
-    border-radius: 0.5rem;
+    padding: 0.65rem 0.9rem;
+    border-radius: 10px;
     text-align: left;
     white-space: pre-wrap;
     word-break: break-word;
     background: #fff;
-    border: 1px solid #dee2e6;
+    border: 1px solid #e2e8f0;
 }
 
 .chat-row-user .chat-bubble {
-    background: #007bff;
+    background: #0d9488;
     color: #fff;
-    border-color: #007bff;
+    border-color: #0d9488;
 }
 
 .chat-bubble-error {
-    background: #f8d7da !important;
-    color: #721c24 !important;
-    border-color: #f5c6cb !important;
+    background: #fef2f2 !important;
+    color: #991b1b !important;
+    border-color: #fecaca !important;
 }
 
 .chat-raw {
     font-size: 0.7rem;
     max-height: 180px;
     overflow: auto;
-    background: #1e1e1e;
-    color: #d4d4d4;
+    background: #0f172a;
+    color: #e2e8f0;
     padding: 0.5rem;
-    border-radius: 4px;
+    border-radius: 8px;
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -63,7 +66,7 @@
 .agentic-timeline {
     margin-bottom: 0.75rem;
     padding-bottom: 0.5rem;
-    border-bottom: 1px dashed #dee2e6;
+    border-bottom: 1px dashed #e2e8f0;
 }
 
 .agentic-timeline-title,
@@ -72,7 +75,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: #6c757d;
+    color: #64748b;
     margin-bottom: 0.35rem;
 }
 
@@ -83,7 +86,7 @@
     font-size: 0.82rem;
     line-height: 1.35;
     margin-bottom: 0.25rem;
-    color: #495057;
+    color: #334155;
 }
 
 .agentic-step-icon {
@@ -94,23 +97,23 @@
 }
 
 .agentic-step-running .agentic-step-icon {
-    color: #007bff;
+    color: #0d9488;
 }
 
 .agentic-step-done .agentic-step-icon {
-    color: #28a745;
+    color: #059669;
 }
 
 .agentic-step-error .agentic-step-icon {
-    color: #dc3545;
+    color: #dc2626;
 }
 
 .agentic-step-warning .agentic-step-icon {
-    color: #ffc107;
+    color: #d97706;
 }
 
 .agentic-step-pending .agentic-step-icon {
-    color: #fd7e14;
+    color: #ea580c;
 }
 
 .agentic-step-pending .agentic-step-label {
@@ -120,18 +123,18 @@
 .agentic-confirmation-hint {
     margin-bottom: 0.75rem;
     padding: 0.55rem 0.7rem;
-    border-radius: 0.35rem;
-    border: 1px solid #ffe8a1;
-    background: #fff9e6;
-    color: #856404;
+    border-radius: 8px;
+    border: 1px solid #fde68a;
+    background: #fffbeb;
+    color: #92400e;
     font-size: 0.82rem;
 }
 
 .agentic-confirmation-hint code {
-    color: #6f4e00;
-    background: #fff3cd;
+    color: #78350f;
+    background: #fef3c7;
     padding: 0.1rem 0.25rem;
-    border-radius: 0.2rem;
+    border-radius: 4px;
 }
 
 .agentic-answer {

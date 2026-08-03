@@ -6,8 +6,20 @@
 
 <PageTitle>Config - @AppId</PageTitle>
 
-<div class="mb-2">
-    <NavLink href="@($"/apps/{AppId}")">← Back to @AppId</NavLink>
+<div class="kx-breadcrumb">
+    <NavLink href="/">Applications</NavLink>
+    <span class="text-muted"> / </span>
+    <NavLink href="@($"/apps/{AppId}")">@AppId</NavLink>
+    <span class="text-muted"> / </span>
+    <span>Config</span>
+</div>
+
+<div class="kx-page-header">
+    <div>
+        <h1 class="kx-page-title">Runtime config</h1>
+        <p class="kx-page-lead">LLM, wiki memory, web search, and agentic settings for <code>@AppId</code>.</p>
+    </div>
+    <button type="button" class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@(_saving || _loading)">Reload</button>
 </div>
 
 @if (_loading)
@@ -16,23 +28,17 @@
 }
 else
 {
-    <div class="card card-outline card-primary">
-        <div class="card-header">
-            <h3 class="card-title">Runtime config — @AppId</h3>
-            <div class="card-tools">
-                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="LoadAsync" disabled="@_saving">Reload</button>
-            </div>
-        </div>
-        <div class="card-body">
+    <div class="kx-panel">
+        <div class="kx-panel-body">
             @if (_loadError is not null)
             {
                 <div class="alert alert-warning">@_loadError</div>
             }
 
             <EditForm Model="_form" OnValidSubmit="SaveAsync">
-                <div class="row">
-                    <div class="col-md-6">
-                        <h5>LLM</h5>
+                <div class="kx-config-cols">
+                    <div>
+                        <div class="kx-section-title">LLM</div>
                         <div class="form-group">
                             <label>Default language</label>
                             <InputText class="form-control" @bind-Value="_form.DefaultLanguage" />
@@ -85,8 +91,8 @@ else
                             <FieldHelp>Allow NDJSON token streaming on <code>/api/chat</code>.</FieldHelp>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <h5>Session wiki</h5>
+                    <div>
+                        <div class="kx-section-title">Session wiki</div>
                         <div class="form-group">
                             <label>Max wiki context chars</label>
                             <InputNumber class="form-control" @bind-Value="_form.MaxWikiContextChars" />
@@ -103,7 +109,7 @@ else
                             <FieldHelp>Minimum page count before compaction is allowed to run.</FieldHelp>
                         </div>
 
-                        <h5 class="mt-3">Global Wiki</h5>
+                        <div class="kx-section-title">Global Wiki</div>
                         <div class="form-check mb-2">
                             <InputCheckbox class="form-check-input" id="globalWikiEnabled" @bind-Value="_form.GlobalWikiEnabled" />
                             <label class="form-check-label" for="globalWikiEnabled">Enable Global Wiki (<code>wiki_search</code>)</label>
@@ -118,7 +124,7 @@ else
                             <FieldHelp>Max characters returned by a single <code>wiki_search</code> call. <code>0</code> = service default.</FieldHelp>
                         </div>
 
-                        <h5 class="mt-3">Web search</h5>
+                        <div class="kx-section-title">Web search</div>
                         <div class="form-check mb-2">
                             <InputCheckbox class="form-check-input" id="webSearchEnabled" @bind-Value="_form.WebSearchEnabled" />
                             <label class="form-check-label" for="webSearchEnabled">Enable web search</label>
@@ -164,7 +170,7 @@ else
                     </div>
                 </div>
 
-                <h5 class="mt-2">Rate limits</h5>
+                <div class="kx-section-title">Rate limits</div>
                 <div class="form-row">
                     <div class="col-md-4 form-group">
                         <label>Requests / min (app)</label>
@@ -197,7 +203,7 @@ else
 
                 <AgenticConfigEditor Model="_form.Agentic" />
 
-                <h5 class="mt-2">Persona and rules (markdown)</h5>
+                <div class="kx-section-title">Persona and rules (markdown)</div>
                 <div class="form-group">
                     <label>Base persona</label>
                     <InputTextArea class="form-control" rows="3" @bind-Value="_form.BasePersona" />
