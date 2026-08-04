@@ -73,6 +73,7 @@ public sealed class AppRuntimeConfigDto
     public long WikiCompactionThresholdBytes { get; set; }
     public int WikiCompactionMinPages { get; set; }
     public bool StreamingEnabled { get; set; }
+    public bool LlmThinkEnabled { get; set; }
     public bool GlobalWikiEnabled { get; set; } = true;
     public int MaxGlobalWikiToolChars { get; set; }
     public RateLimitConfig? RateLimits { get; set; }

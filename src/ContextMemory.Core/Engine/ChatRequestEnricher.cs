@@ -60,7 +60,8 @@ public sealed class ChatRequestEnricher : IChatRequestEnricher
         {
             Model = model,
             Messages = messages,
-            Think = ShouldDisableThinking(model) ? false : request.Think
+            // Tenant policy wins: off by default; /v1 maps false → reasoning_effort=none.
+            Think = runtimeConfig.LlmThinkEnabled
         };
 
         var prepared = (enriched, lastUser, TokenEstimator.Estimate(messages));
@@ -71,7 +72,4 @@ public sealed class ChatRequestEnricher : IChatRequestEnricher
     private static bool MessageAlreadyInHistory(IReadOnlyList<OllamaMessage> history, OllamaMessage lastUser) =>
         history.LastOrDefault(m => string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))?.Content
         == lastUser.Content;
-
-    private static bool ShouldDisableThinking(string model) =>
-        model.Contains("qwen3", StringComparison.OrdinalIgnoreCase);
 }

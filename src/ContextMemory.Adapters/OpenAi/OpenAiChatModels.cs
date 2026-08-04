@@ -31,6 +31,13 @@ internal sealed class OpenAiChatRequest
 
     [JsonPropertyName("tools")]
     public List<OpenAiTool>? Tools { get; init; }
+
+    /// <summary>
+    /// Ollama OpenAI-compat thinking control. Use <c>none</c> to disable;
+    /// omit (null) to leave the server default (often ON for thinking models).
+    /// </summary>
+    [JsonPropertyName("reasoning_effort")]
+    public string? ReasoningEffort { get; init; }
 }
 
 internal sealed class OpenAiChatMessage

@@ -29,6 +29,13 @@ public record AppRuntimeConfig
     public long WikiCompactionThresholdBytes { get; init; }
     public int WikiCompactionMinPages { get; init; }
     public bool StreamingEnabled { get; init; } = true;
+
+    /// <summary>
+    /// When true, allow model "thinking" / reasoning tokens (Qwen3, etc.).
+    /// Default false — Ollama otherwise auto-enables thinking on capable models via /v1.
+    /// </summary>
+    public bool LlmThinkEnabled { get; init; }
+
     public RateLimitConfig RateLimits { get; init; } = new();
     public WebSearchConfig WebSearch { get; init; } = WebSearchConfig.Disabled;
     public AgenticConfig Agentic { get; init; } = AgenticConfig.Disabled;
