@@ -73,7 +73,8 @@ public static class OpenAiProtocolMapper
                     },
                     FinishReason = response.Done ? finish : null
                 }
-            ]
+            ],
+            ContextMemory = response.ContextMemory
         };
     }
 
@@ -107,7 +108,8 @@ public static class OpenAiProtocolMapper
                     },
                     FinishReason = isFinal || chunk.Done ? (toolCalls is { Count: > 0 } ? "tool_calls" : "stop") : null
                 }
-            ]
+            ],
+            ContextMemory = chunk.ContextMemory
         };
     }
 
