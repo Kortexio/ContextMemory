@@ -31,7 +31,7 @@ jobs:
           Set-Location $dir
 
           if ([string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
-            throw "GITHUB_TOKEN em falta — nao e possivel fazer fetch nao-interactivo"
+            throw "GITHUB_TOKEN missing - cannot fetch non-interactively"
           }
           $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("x-access-token:$($env:GITHUB_TOKEN)"))
           $header = "AUTHORIZATION: basic $auth"
