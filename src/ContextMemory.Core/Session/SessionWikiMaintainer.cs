@@ -9,17 +9,20 @@ public sealed class SessionWikiMaintainer
 {
     private readonly ILlmAdapterResolver _adapterResolver;
     private readonly IAppConfigStore _appConfigStore;
+    private readonly IPlatformDefaultsStore _platformDefaults;
     private readonly ITelemetryCollector _telemetry;
     private readonly ILogger<SessionWikiMaintainer> _logger;
 
     public SessionWikiMaintainer(
         ILlmAdapterResolver adapterResolver,
         IAppConfigStore appConfigStore,
+        IPlatformDefaultsStore platformDefaults,
         ITelemetryCollector telemetry,
         ILogger<SessionWikiMaintainer> logger)
     {
         _adapterResolver = adapterResolver;
         _appConfigStore = appConfigStore;
+        _platformDefaults = platformDefaults;
         _telemetry = telemetry;
         _logger = logger;
     }
@@ -39,6 +42,9 @@ public sealed class SessionWikiMaintainer
         var config = _appConfigStore.GetConfig(appId);
         var lang = config.DefaultLanguage;
         var adapter = _adapterResolver.Resolve(config);
+        var model = SessionWikiSettings.ResolveWikiLlmModel(
+            config,
+            _platformDefaults.Get().DefaultWikiLlmModel);
 
         var pagesCompiled = SessionWikiCompiler.Compile(snapshot, userMessage, maintainerBudgetChars, includeIndex: false);
         var pagesText = pagesCompiled.IncludedPages > 0
@@ -69,10 +75,11 @@ public sealed class SessionWikiMaintainer
         {
             var response = await adapter.GenerateAsync(new OllamaGenerateRequest
             {
-                Model = config.LlmModel,
+                Model = model,
                 Prompt = prompt,
                 Stream = false,
-                Format = "json"
+                Format = "json",
+                Think = false
             }, cancellationToken).ConfigureAwait(false);
 
             var raw = OllamaLlmText.GetGenerateText(response);

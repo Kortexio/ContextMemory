@@ -11,6 +11,12 @@ public record AppConfigFile
     [JsonPropertyName("llmModel")]
     public string LlmModel { get; init; } = "qwen3.5:9b";
 
+    [JsonPropertyName("wikiLlmModel")]
+    public string WikiLlmModel { get; init; } = string.Empty;
+
+    [JsonPropertyName("wikiUpdateEveryNTurns")]
+    public int WikiUpdateEveryNTurns { get; init; } = 3;
+
     [JsonPropertyName("llmBackend")]
     public string LlmBackend { get; init; } = "ollama";
 
@@ -64,6 +70,12 @@ public record AppConfigPatchRequest
 
     [JsonPropertyName("llmModel")]
     public string? LlmModel { get; init; }
+
+    [JsonPropertyName("wikiLlmModel")]
+    public string? WikiLlmModel { get; init; }
+
+    [JsonPropertyName("wikiUpdateEveryNTurns")]
+    public int? WikiUpdateEveryNTurns { get; init; }
 
     [JsonPropertyName("llmBackend")]
     public string? LlmBackend { get; init; }

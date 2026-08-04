@@ -160,6 +160,13 @@ public class ContractTests : IClassFixture<StubOllamaWebApplicationFactory>
     public async Task Chat_UpdatesSessionWiki_AfterTurn()
     {
         const string sessionId = "wiki-maintainer-session";
+
+        using (var setupScope = _factory.Services.CreateScope())
+        {
+            var configStore = setupScope.ServiceProvider.GetRequiredService<IAppConfigStore>();
+            await configStore.UpdateAsync(AppId, new AppConfigPatchRequest { WikiUpdateEveryNTurns = 1 });
+        }
+
         var payload = """
             {
               "model": "qwen3.5:9b",

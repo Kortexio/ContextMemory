@@ -26,6 +26,13 @@ public class ContextMemoryOptions
     public List<string> AdminCorsOrigins { get; set; } = [];
     public string PersistenceProvider { get; set; } = "File";
     public string DefaultLlmModel { get; set; } = "qwen3.5:9b";
+
+    /// <summary>
+    /// Platform default model for session wiki maintainer/compactor when an app does not set <c>WikiLlmModel</c>.
+    /// Empty = fall back to the app chat model.
+    /// </summary>
+    public string DefaultWikiLlmModel { get; set; } = string.Empty;
+
     /// <summary>
     /// Optional HTTP base URL of the MCP stdio runtime sidecar (e.g. http://mcp-runtime:8080).
     /// When set, stdio MCP servers are executed in the sidecar instead of the API process.

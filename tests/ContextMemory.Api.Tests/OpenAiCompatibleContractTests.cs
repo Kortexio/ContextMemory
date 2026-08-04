@@ -115,4 +115,24 @@ public class OpenAiCompatibleContractTests : IClassFixture<StubOllamaWebApplicat
         var mapped = OpenAiChatClient.MapRequest(request, stream: false);
         Assert.Null(mapped.ReasoningEffort);
     }
+
+    [Fact]
+    public void ToChatRequest_ForwardsThinkFromGenerate()
+    {
+        var generate = new OllamaGenerateRequest
+        {
+            Model = "wiki-small",
+            Prompt = "update wiki",
+            Think = false,
+            Format = "json"
+        };
+
+        var chat = OpenAiChatClient.ToChatRequest(generate, stream: false);
+        Assert.False(chat.Think);
+        Assert.Equal("json", chat.Format);
+        Assert.Equal("wiki-small", chat.Model);
+
+        var mapped = OpenAiChatClient.MapRequest(chat, stream: false);
+        Assert.Equal("none", mapped.ReasoningEffort);
+    }
 }

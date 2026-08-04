@@ -56,6 +56,10 @@ public sealed class WikiUpdateProcessor
                     .ConfigureAwait(false);
             }
 
+            var everyNTurns = SessionWikiSettings.ResolveWikiUpdateEveryNTurns(config);
+            if (!SessionWikiSettings.ShouldRunWikiLlm(snapshot, everyNTurns))
+                return;
+
             var maintainerBudget = SessionWikiSettings.ResolveMaintainerWikiBudgetChars(config, _options);
             string? webSection = null;
             if (job.WebEnrichment?.Used == true

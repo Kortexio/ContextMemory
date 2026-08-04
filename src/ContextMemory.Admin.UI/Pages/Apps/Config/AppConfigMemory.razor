@@ -40,6 +40,20 @@ else
                     <label>Compaction min pages</label>
                     <InputNumber class="form-control" @bind-Value="_form.WikiCompactionMinPages" />
                 </div>
+                <div class="form-group">
+                    <label>Wiki maintainer model</label>
+                    <InputText class="form-control" @bind-Value="_form.WikiLlmModel" placeholder="(platform default → chat model)" />
+                    <FieldHelp>
+                        Optional. Empty uses platform <code>DefaultWikiLlmModel</code>, then the app chat model.
+                    </FieldHelp>
+                </div>
+                <div class="form-group">
+                    <label>Update wiki every N turns</label>
+                    <InputNumber class="form-control" @bind-Value="_form.WikiUpdateEveryNTurns" />
+                    <FieldHelp>
+                        Run the wiki maintainer LLM every N assistant turns (default <code>3</code>). Values ≤0 run every turn.
+                    </FieldHelp>
+                </div>
 
                 <div class="kx-section-title">Global Wiki</div>
                 <div class="form-check mb-2">
@@ -70,6 +84,8 @@ else
         _form.MaxWikiContextChars = config.MaxWikiContextChars;
         _form.WikiCompactionThresholdBytes = config.WikiCompactionThresholdBytes;
         _form.WikiCompactionMinPages = config.WikiCompactionMinPages;
+        _form.WikiLlmModel = config.WikiLlmModel ?? string.Empty;
+        _form.WikiUpdateEveryNTurns = config.WikiUpdateEveryNTurns > 0 ? config.WikiUpdateEveryNTurns : 3;
         _form.GlobalWikiEnabled = config.GlobalWikiEnabled;
         _form.MaxGlobalWikiToolChars = config.MaxGlobalWikiToolChars;
     }
@@ -79,6 +95,8 @@ else
         MaxWikiContextChars = _form.MaxWikiContextChars > 0 ? _form.MaxWikiContextChars : null,
         WikiCompactionThresholdBytes = _form.WikiCompactionThresholdBytes > 0 ? _form.WikiCompactionThresholdBytes : null,
         WikiCompactionMinPages = _form.WikiCompactionMinPages > 0 ? _form.WikiCompactionMinPages : null,
+        WikiLlmModel = _form.WikiLlmModel?.Trim() ?? string.Empty,
+        WikiUpdateEveryNTurns = _form.WikiUpdateEveryNTurns > 0 ? _form.WikiUpdateEveryNTurns : 1,
         GlobalWikiEnabled = _form.GlobalWikiEnabled,
         MaxGlobalWikiToolChars = _form.MaxGlobalWikiToolChars > 0 ? _form.MaxGlobalWikiToolChars : null
     };
@@ -88,6 +106,8 @@ else
         public int MaxWikiContextChars { get; set; }
         public long WikiCompactionThresholdBytes { get; set; }
         public int WikiCompactionMinPages { get; set; }
+        public string WikiLlmModel { get; set; } = string.Empty;
+        public int WikiUpdateEveryNTurns { get; set; } = 3;
         public bool GlobalWikiEnabled { get; set; } = true;
         public int MaxGlobalWikiToolChars { get; set; }
     }

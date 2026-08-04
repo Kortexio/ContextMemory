@@ -106,14 +106,7 @@ internal sealed class OpenAiChatClient
 
     public async Task<OllamaResponse> GenerateAsync(OllamaGenerateRequest request, CancellationToken cancellationToken)
     {
-        var chatRequest = new OllamaRequest
-        {
-            Model = request.Model,
-            Messages = [new OllamaMessage { Role = "user", Content = request.Prompt }],
-            Stream = false,
-            Options = request.Options
-        };
-
+        var chatRequest = ToChatRequest(request, stream: false);
         var chatResponse = await ChatAsync(chatRequest, cancellationToken).ConfigureAwait(false);
         return ToGenerateResponse(chatResponse);
     }
@@ -122,13 +115,7 @@ internal sealed class OpenAiChatClient
         OllamaGenerateRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var chatRequest = new OllamaRequest
-        {
-            Model = request.Model,
-            Messages = [new OllamaMessage { Role = "user", Content = request.Prompt }],
-            Stream = true,
-            Options = request.Options
-        };
+        var chatRequest = ToChatRequest(request, stream: true);
 
         await foreach (var chunk in ChatStreamAsync(chatRequest, cancellationToken).ConfigureAwait(false))
         {
@@ -141,6 +128,18 @@ internal sealed class OpenAiChatClient
             };
         }
     }
+
+    internal static OllamaRequest ToChatRequest(OllamaGenerateRequest request, bool stream) =>
+        new()
+        {
+            Model = request.Model,
+            Messages = [new OllamaMessage { Role = "user", Content = request.Prompt }],
+            Stream = stream,
+            Options = request.Options,
+            Format = request.Format,
+            KeepAlive = request.KeepAlive,
+            Think = request.Think
+        };
 
     private static OllamaResponse ToGenerateResponse(OllamaResponse chatResponse) =>
         chatResponse with

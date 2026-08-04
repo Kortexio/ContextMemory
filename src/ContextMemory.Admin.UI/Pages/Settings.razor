@@ -115,6 +115,56 @@
             Prometheus metrics: <a href="@_metricsUrl" target="_blank" rel="noopener">@_metricsUrl</a>
         </p>
     }
+
+    @if (Session.IsConfigured)
+    {
+        <div class="kx-panel mt-3">
+            <div class="kx-panel-head">
+                <h2>Platform defaults</h2>
+            </div>
+            <div class="kx-panel-body">
+                <p class="text-muted small mb-3">
+                    Defaults applied across apps when per-app values are empty. Stored in
+                    <code>platform-defaults.json</code> under the API data path.
+                </p>
+
+                @if (_platformLoading)
+                {
+                    <div class="kx-loading-banner"><i class="fas fa-spinner fa-spin"></i> Loading platform defaults…</div>
+                }
+                else
+                {
+                    <div class="form-group">
+                        <label for="defaultWikiLlmModel">Default wiki maintainer model</label>
+                        <InputText id="defaultWikiLlmModel" class="form-control" @bind-Value="_platformForm.DefaultWikiLlmModel"
+                                   placeholder="(empty = each app's chat model)" />
+                        <FieldHelp>
+                            Used by session wiki maintainer/compactor when the app does not set
+                            <code>WikiLlmModel</code>. Empty falls back to the app chat model.
+                        </FieldHelp>
+                    </div>
+
+                    @if (_platformMessage is not null)
+                    {
+                        <div class="alert alert-success">@_platformMessage</div>
+                    }
+                    @if (_platformError is not null)
+                    {
+                        <div class="alert alert-danger">@_platformError</div>
+                    }
+
+                    <div class="d-flex flex-wrap" style="gap:0.5rem">
+                        <button class="btn btn-primary" type="button" @onclick="SavePlatformDefaultsAsync" disabled="@_platformSaving">
+                            @(_platformSaving ? "Saving…" : "Save platform defaults")
+                        </button>
+                        <button class="btn btn-outline-secondary" type="button" @onclick="LoadPlatformDefaultsAsync" disabled="@_platformSaving">
+                            Reload
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    }
 </div>
 
 @code {
@@ -129,6 +179,12 @@
     private string? _message;
     private string? _error;
 
+    private readonly PlatformDefaultsForm _platformForm = new();
+    private bool _platformLoading;
+    private bool _platformSaving;
+    private string? _platformMessage;
+    private string? _platformError;
+
     protected override async Task OnInitializedAsync()
     {
         await Session.InitializeAsync();
@@ -139,7 +195,57 @@
         };
 
         if (Session.IsConfigured)
+        {
             _metricsUrl = Api.GetMetricsUrl();
+            await LoadPlatformDefaultsAsync();
+        }
+    }
+
+    private async Task LoadPlatformDefaultsAsync()
+    {
+        if (!Session.IsConfigured)
+            return;
+
+        _platformLoading = true;
+        _platformMessage = null;
+        _platformError = null;
+        try
+        {
+            var defaults = await Api.GetPlatformDefaultsAsync();
+            _platformForm.DefaultWikiLlmModel = defaults?.DefaultWikiLlmModel ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _platformError = FriendlyConnectionError(ex.Message);
+        }
+        finally
+        {
+            _platformLoading = false;
+        }
+    }
+
+    private async Task SavePlatformDefaultsAsync()
+    {
+        _platformSaving = true;
+        _platformMessage = null;
+        _platformError = null;
+        try
+        {
+            var updated = await Api.PatchPlatformDefaultsAsync(new PlatformDefaultsPatchRequest
+            {
+                DefaultWikiLlmModel = _platformForm.DefaultWikiLlmModel?.Trim() ?? string.Empty
+            });
+            _platformForm.DefaultWikiLlmModel = updated?.DefaultWikiLlmModel ?? string.Empty;
+            _platformMessage = "Platform defaults saved.";
+        }
+        catch (Exception ex)
+        {
+            _platformError = FriendlyConnectionError(ex.Message);
+        }
+        finally
+        {
+            _platformSaving = false;
+        }
     }
 
     private async Task SaveAsync()
@@ -152,6 +258,8 @@
             await Session.SaveAsync(_model);
             _metricsUrl = Api.GetMetricsUrl();
             _message = "Settings saved in this browser.";
+            if (Session.IsConfigured)
+                await LoadPlatformDefaultsAsync();
         }
         catch (Exception ex)
         {
@@ -177,6 +285,7 @@
             var apps = await Api.GetAppsAsync();
             _health = await Api.GetHealthAsync();
             _message = $"Connected: {apps.Count} app(s). Health: {_health?.Status ?? "n/a"}.";
+            await LoadPlatformDefaultsAsync();
         }
         catch (Exception ex)
         {
@@ -236,4 +345,10 @@
 
         return message;
     }
+
+    private sealed class PlatformDefaultsForm
+    {
+        public string DefaultWikiLlmModel { get; set; } = string.Empty;
+    }
 }
+

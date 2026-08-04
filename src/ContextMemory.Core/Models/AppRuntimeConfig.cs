@@ -11,6 +11,17 @@ public record AppRuntimeConfig
     public string WikiSchema { get; init; } = string.Empty;
     public string DefaultLanguage { get; init; } = "en-US";
     public string LlmModel { get; init; } = "qwen3.5:9b";
+
+    /// <summary>
+    /// Optional model for session wiki maintainer/compactor. Empty = platform default, then <see cref="LlmModel"/>.
+    /// </summary>
+    public string WikiLlmModel { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Run wiki maintainer LLM every N assistant turns (default 3). Values ≤0 are treated as 1 at resolve time.
+    /// </summary>
+    public int WikiUpdateEveryNTurns { get; init; } = 3;
+
     public string LlmBackend { get; init; } = "ollama";
 
     /// <summary>
