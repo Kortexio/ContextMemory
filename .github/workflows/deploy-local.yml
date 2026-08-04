@@ -9,6 +9,9 @@ concurrency:
   group: deploy-local-contextmemory
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: [self-hosted, Windows, network-local]
@@ -16,13 +19,26 @@ jobs:
     steps:
       - name: Pull and rebuild on this PC
         shell: powershell
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GIT_TERMINAL_PROMPT: "0"
+          GCM_INTERACTIVE: never
         run: |
           $ErrorActionPreference = "Stop"
           $env:Path = "C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\Git\cmd;" + $env:Path
           $dir = "C:\Network\_work\ContextMemory"
           if (-not (Test-Path $dir)) { throw "Pasta em falta: $dir" }
           Set-Location $dir
-          git fetch origin main
+
+          if ([string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
+            throw "GITHUB_TOKEN em falta — nao e possivel fazer fetch nao-interactivo"
+          }
+          $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("x-access-token:$($env:GITHUB_TOKEN)"))
+          $header = "AUTHORIZATION: basic $auth"
+          git -c "http.https://github.com/.extraheader=$header" `
+              -c http.lowSpeedLimit=1000 `
+              -c http.lowSpeedTime=60 `
+              fetch origin main
           git checkout main
           git reset --hard origin/main
           if (-not (Test-Path .env) -and (Test-Path .env.example)) {
