@@ -134,15 +134,16 @@
                 }
                 else
                 {
-                    <div class="form-group">
-                        <label for="defaultWikiLlmModel">Default wiki maintainer model</label>
-                        <InputText id="defaultWikiLlmModel" class="form-control" @bind-Value="_platformForm.DefaultWikiLlmModel"
-                                   placeholder="(empty = each app's chat model)" />
+                    <ModelPicker @bind-Value="_platformForm.DefaultWikiLlmModel"
+                                 Label="Default wiki maintainer model"
+                                 AllowEmpty="true"
+                                 EmptyLabel="(empty = each app's chat model)"
+                                 InputId="defaultWikiLlmModel">
                         <FieldHelp>
                             Used by session wiki maintainer/compactor when the app does not set
                             <code>WikiLlmModel</code>. Empty falls back to the app chat model.
                         </FieldHelp>
-                    </div>
+                    </ModelPicker>
 
                     @if (_platformMessage is not null)
                     {

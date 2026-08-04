@@ -40,13 +40,16 @@ else
                     <label>Compaction min pages</label>
                     <InputNumber class="form-control" @bind-Value="_form.WikiCompactionMinPages" />
                 </div>
-                <div class="form-group">
-                    <label>Wiki maintainer model</label>
-                    <InputText class="form-control" @bind-Value="_form.WikiLlmModel" placeholder="(platform default → chat model)" />
+                <ModelPicker @bind-Value="_form.WikiLlmModel"
+                             Label="Wiki maintainer model"
+                             AppId="@AppId"
+                             AllowEmpty="true"
+                             EmptyLabel="(platform default → chat model)"
+                             InputId="wikiLlmModel">
                     <FieldHelp>
                         Optional. Empty uses platform <code>DefaultWikiLlmModel</code>, then the app chat model.
                     </FieldHelp>
-                </div>
+                </ModelPicker>
                 <div class="form-group">
                     <label>Update wiki every N turns</label>
                     <InputNumber class="form-control" @bind-Value="_form.WikiUpdateEveryNTurns" />

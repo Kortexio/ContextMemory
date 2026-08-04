@@ -32,11 +32,9 @@ else
                     <InputText class="form-control" @bind-Value="_form.DefaultLanguage" />
                     <FieldHelp>BCP-47 locale injected into prompts (e.g. en-US).</FieldHelp>
                 </div>
-                <div class="form-group">
-                    <label>LLM model</label>
-                    <InputText class="form-control" @bind-Value="_form.LlmModel" />
+                <ModelPicker @bind-Value="_form.LlmModel" Label="LLM model" AppId="@AppId" InputId="llmModel">
                     <FieldHelp>Model id for this tenant. Must exist on the configured backend.</FieldHelp>
-                </div>
+                </ModelPicker>
                 <div class="form-group">
                     <label>Backend</label>
                     <InputSelect class="form-control" @bind-Value="_form.LlmBackend">

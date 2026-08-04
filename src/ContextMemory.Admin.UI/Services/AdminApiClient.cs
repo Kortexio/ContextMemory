@@ -331,6 +331,25 @@ public sealed class AdminApiClient
         return $"{_session.Settings.ApiBaseUrl.TrimEnd('/')}/admin/apps/{Uri.EscapeDataString(appId)}/guardrails/{Uri.EscapeDataString(id)}/export";
     }
 
+    public async Task<IReadOnlyList<string>> ListLlmModelsAsync(
+        string? appId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var path = string.IsNullOrWhiteSpace(appId)
+            ? "/admin/models"
+            : $"/admin/models?appId={Uri.EscapeDataString(appId.Trim())}";
+        var payload = await GetAsync<AdminModelsListDto>(path, cancellationToken).ConfigureAwait(false);
+        if (payload?.Data is null || payload.Data.Count == 0)
+            return [];
+        return payload.Data
+            .Select(m => m.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     public async Task<RegisterAppResponse> RegisterAppAsync(
         RegisterAppRequest request,
         CancellationToken cancellationToken = default)

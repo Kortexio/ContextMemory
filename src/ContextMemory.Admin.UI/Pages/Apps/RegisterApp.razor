@@ -75,11 +75,12 @@
                                 </div>
                             </div>
 
-                            <div class="form-group">
-                                <label>LLM model</label>
-                                <InputText class="form-control" @bind-Value="_form.LlmModel" placeholder="qwen3.5:9b" />
+                            <ModelPicker @bind-Value="_form.LlmModel"
+                                         Label="LLM model"
+                                         Placeholder="qwen3.5:9b"
+                                         InputId="registerLlmModel">
                                 <FieldHelp>Model id understood by the chosen backend (must already be pulled/available).</FieldHelp>
-                            </div>
+                            </ModelPicker>
 
                             <div class="form-group">
                                 <label>LLM endpoint URL (optional)</label>

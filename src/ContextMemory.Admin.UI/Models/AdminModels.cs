@@ -166,6 +166,17 @@ public sealed class PlatformDefaultsDto
     public string DefaultWikiLlmModel { get; set; } = string.Empty;
 }
 
+public sealed class AdminModelsListDto
+{
+    public List<AdminModelItemDto> Data { get; set; } = [];
+}
+
+public sealed class AdminModelItemDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string? OwnedBy { get; set; }
+}
+
 public sealed class HealthResponseDto
 {
     public string Status { get; set; } = string.Empty;
