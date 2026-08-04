@@ -21,4 +21,11 @@ public record OllamaGenerateRequest
 
     [JsonPropertyName("keep_alive")]
     public string? KeepAlive { get; init; }
+
+    /// <summary>
+    /// When false, disables model thinking/reasoning (native Ollama <c>think</c>;
+    /// OpenAI-compatible path maps to <c>reasoning_effort: none</c>).
+    /// </summary>
+    [JsonPropertyName("think")]
+    public bool? Think { get; init; }
 }

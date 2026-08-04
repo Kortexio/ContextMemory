@@ -72,6 +72,8 @@ public sealed class AppRuntimeConfigDto
     public int MaxWikiContextChars { get; set; }
     public long WikiCompactionThresholdBytes { get; set; }
     public int WikiCompactionMinPages { get; set; }
+    public string WikiLlmModel { get; set; } = string.Empty;
+    public int WikiUpdateEveryNTurns { get; set; } = 3;
     public bool StreamingEnabled { get; set; }
     public bool LlmThinkEnabled { get; set; }
     public bool GlobalWikiEnabled { get; set; } = true;
@@ -157,6 +159,11 @@ public sealed class McpCatalogSyncAdminDto
     public bool Success { get; set; }
     public string? Error { get; set; }
     public DateTimeOffset SyncedAt { get; set; }
+}
+
+public sealed class PlatformDefaultsDto
+{
+    public string DefaultWikiLlmModel { get; set; } = string.Empty;
 }
 
 public sealed class HealthResponseDto

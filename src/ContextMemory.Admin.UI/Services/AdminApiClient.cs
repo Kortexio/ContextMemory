@@ -54,6 +54,20 @@ public sealed class AdminApiClient
         return await ReadJsonAsync<AppRuntimeConfigDto>(response, cancellationToken).ConfigureAwait(false);
     }
 
+    public Task<PlatformDefaultsDto?> GetPlatformDefaultsAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<PlatformDefaultsDto>("/admin/platform-defaults", cancellationToken);
+
+    public async Task<PlatformDefaultsDto?> PatchPlatformDefaultsAsync(
+        PlatformDefaultsPatchRequest patch,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Patch, "/admin/platform-defaults");
+        request.Content = JsonContent.Create(patch);
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+        return await ReadJsonAsync<PlatformDefaultsDto>(response, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<McpServerAdminDto>> GetMcpServersAsync(
         string appId,
         CancellationToken cancellationToken = default)

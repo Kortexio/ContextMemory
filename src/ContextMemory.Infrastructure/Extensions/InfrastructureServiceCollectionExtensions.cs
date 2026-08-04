@@ -70,6 +70,7 @@ public static class InfrastructureServiceCollectionExtensions
     {
         services.AddSingleton<ITelemetryCollector, TelemetryCollector>();
         services.AddSingleton<IRateLimitService, RateLimitService>();
+        services.AddSingleton<IPlatformDefaultsStore, FilePlatformDefaultsStore>();
 
         services.AddHttpClient<AcaDynamicSessionsClient>(client => client.Timeout = TimeSpan.FromMinutes(5));
         services.AddHttpClient<SelfHostedSandboxClient>(client => client.Timeout = TimeSpan.FromMinutes(5));

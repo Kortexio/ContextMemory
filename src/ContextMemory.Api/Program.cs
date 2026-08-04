@@ -64,6 +64,7 @@ app.MapChatCompletionsEndpoint();
 app.MapOpenAiModelsEndpoint();
 app.MapAppsEndpoint();
 app.MapAdminEndpoints();
+app.MapAdminPlatformDefaultsEndpoints();
 app.MapAdminAgenticCatalogEndpoints();
 app.MapAdminAppAgenticCatalogEndpoints();
 app.MapAdminSessionsEndpoints();

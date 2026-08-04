@@ -79,6 +79,8 @@ public sealed class PostgresAppConfigStore : IAppConfigStore
             {
                 DefaultLanguage = patch.DefaultLanguage ?? current.DefaultLanguage,
                 LlmModel = patch.LlmModel ?? current.LlmModel,
+                WikiLlmModel = patch.WikiLlmModel ?? current.WikiLlmModel,
+                WikiUpdateEveryNTurns = patch.WikiUpdateEveryNTurns ?? current.WikiUpdateEveryNTurns,
                 LlmBackend = patch.LlmBackend ?? current.LlmBackend,
                 LlmEndpoint = patch.LlmEndpoint ?? current.LlmEndpoint,
                 LlmApiKey = patch.LlmApiKey ?? current.LlmApiKey,
@@ -127,6 +129,8 @@ public sealed class PostgresAppConfigStore : IAppConfigStore
         {
             DefaultLanguage = seed.DefaultLanguage,
             LlmModel = seed.LlmModel,
+            WikiLlmModel = seed.WikiLlmModel,
+            WikiUpdateEveryNTurns = seed.WikiUpdateEveryNTurns > 0 ? seed.WikiUpdateEveryNTurns : 3,
             LlmBackend = seed.LlmBackend,
             LlmEndpoint = seed.LlmEndpoint,
             LlmApiKey = seed.LlmApiKey,
@@ -200,6 +204,8 @@ public sealed class PostgresAppConfigStore : IAppConfigStore
             WikiSchema = row.WikiSchema.Trim(),
             DefaultLanguage = configFile.DefaultLanguage,
             LlmModel = string.IsNullOrWhiteSpace(configFile.LlmModel) ? _defaults.DefaultLlmModel : configFile.LlmModel,
+            WikiLlmModel = configFile.WikiLlmModel ?? string.Empty,
+            WikiUpdateEveryNTurns = configFile.WikiUpdateEveryNTurns > 0 ? configFile.WikiUpdateEveryNTurns : 3,
             LlmBackend = configFile.LlmBackend,
             LlmEndpoint = configFile.LlmEndpoint ?? string.Empty,
             LlmApiKey = configFile.LlmApiKey ?? string.Empty,
