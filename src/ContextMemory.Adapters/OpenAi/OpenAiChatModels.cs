@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ContextMemory.Core.Models;
 
 namespace ContextMemory.Adapters.OpenAi;
 
@@ -248,6 +249,12 @@ public sealed class OpenAiCompatibleChatResponse
 
     [JsonPropertyName("choices")]
     public List<OpenAiCompatibleChoice> Choices { get; set; } = [];
+
+    /// <summary>
+    /// Kortexio extension (ignored by standard OpenAI clients). Carries agentic progress / HITL metadata.
+    /// </summary>
+    [JsonPropertyName("context_memory")]
+    public ContextMemoryMetadata? ContextMemory { get; set; }
 }
 
 public sealed class OpenAiCompatibleChoice
