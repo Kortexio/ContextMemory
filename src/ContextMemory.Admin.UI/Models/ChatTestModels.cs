@@ -14,7 +14,7 @@ public sealed class ChatTestSettings
     public string ApiKey { get; set; } = string.Empty;
     public string Model { get; set; } = "qwen3.5:9b";
     public ChatEndpointMode Mode { get; set; } = ChatEndpointMode.Chat;
-    public bool Stream { get; set; }
+    public bool Stream { get; set; } = true;
     public string? Format { get; set; }
     public string? KeepAlive { get; set; } = "5m";
     public string? SystemPrompt { get; set; }
