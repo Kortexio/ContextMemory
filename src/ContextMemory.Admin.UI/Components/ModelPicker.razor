@@ -1,0 +1,121 @@
+@namespace ContextMemory.Admin.UI.Components
+
+<div class="form-group">
+    @if (!string.IsNullOrWhiteSpace(Label))
+    {
+        <label for="@InputId">@Label</label>
+    }
+
+    @if (_loading)
+    {
+        <div class="form-control text-muted" style="opacity:0.85">
+            <i class="fas fa-spinner fa-spin"></i> Loading models…
+        </div>
+    }
+    else if (_models.Count > 0)
+    {
+        <InputSelect id="@InputId" class="form-control" @bind-Value="CurrentValue">
+            @if (AllowEmpty)
+            {
+                <option value="">@EmptyLabel</option>
+            }
+            @if (HasOrphanCurrentValue)
+            {
+                <option value="@Value">@Value (current)</option>
+            }
+            @foreach (var id in _models)
+            {
+                <option value="@id">@id</option>
+            }
+        </InputSelect>
+        @if (!string.IsNullOrWhiteSpace(_loadNote))
+        {
+            <small class="text-muted d-block mt-1">@_loadNote</small>
+        }
+    }
+    else
+    {
+        <InputText id="@InputId" class="form-control" @bind-Value="CurrentValue" placeholder="@Placeholder" />
+        @if (!string.IsNullOrWhiteSpace(_loadNote))
+        {
+            <small class="text-warning d-block mt-1">@_loadNote</small>
+        }
+    }
+
+    @ChildContent
+</div>
+
+@code {
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+    [Inject] private AdminSession Session { get; set; } = default!;
+
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string Value { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string? AppId { get; set; }
+    [Parameter] public bool AllowEmpty { get; set; }
+    [Parameter] public string EmptyLabel { get; set; } = "(use default)";
+    [Parameter] public string Placeholder { get; set; } = "model-id";
+    [Parameter] public string? InputId { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private readonly List<string> _models = [];
+    private bool _loading = true;
+    private string? _loadNote;
+    private string? _loadedForAppId;
+
+    private string CurrentValue
+    {
+        get => Value ?? string.Empty;
+        set
+        {
+            if (string.Equals(Value, value, StringComparison.Ordinal))
+                return;
+            _ = ValueChanged.InvokeAsync(value ?? string.Empty);
+        }
+    }
+
+    private bool HasOrphanCurrentValue =>
+        !string.IsNullOrWhiteSpace(Value)
+        && !_models.Contains(Value, StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        InputId ??= "model-" + Guid.NewGuid().ToString("n")[..8];
+        var key = AppId?.Trim() ?? "";
+        if (_loadedForAppId == key)
+            return;
+
+        _loadedForAppId = key;
+        await LoadModelsAsync().ConfigureAwait(false);
+    }
+
+    private async Task LoadModelsAsync()
+    {
+        _loading = true;
+        _loadNote = null;
+        _models.Clear();
+        try
+        {
+            await Session.InitializeAsync().ConfigureAwait(false);
+            if (!Session.IsConfigured)
+            {
+                _loadNote = "Configure Settings to load available models.";
+                return;
+            }
+
+            var ids = await Api.ListLlmModelsAsync(string.IsNullOrWhiteSpace(AppId) ? null : AppId).ConfigureAwait(false);
+            _models.AddRange(ids);
+            if (_models.Count == 0)
+                _loadNote = "No models returned from the backend — type a model id manually.";
+        }
+        catch (Exception ex)
+        {
+            _loadNote = "Could not list models (" + ex.Message + "). Type a model id manually.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

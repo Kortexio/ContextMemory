@@ -65,6 +65,7 @@ app.MapOpenAiModelsEndpoint();
 app.MapAppsEndpoint();
 app.MapAdminEndpoints();
 app.MapAdminPlatformDefaultsEndpoints();
+app.MapAdminModelsEndpoints();
 app.MapAdminAgenticCatalogEndpoints();
 app.MapAdminAppAgenticCatalogEndpoints();
 app.MapAdminSessionsEndpoints();

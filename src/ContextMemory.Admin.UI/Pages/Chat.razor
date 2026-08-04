@@ -48,11 +48,14 @@
                     <InputText class="form-control form-control-sm" type="password" @bind-Value="_settings.ApiKey" disabled="@_boundToApp" />
                     <FieldHelp>App Bearer token (loaded from credentials@( _boundToApp ? ", read-only" : "" )).</FieldHelp>
                 </div>
-                <div class="form-group">
-                    <label>Model</label>
-                    <InputText class="form-control form-control-sm" @bind-Value="_settings.Model" />
+                <ModelPicker @bind-Value="_settings.Model"
+                             Label="Model"
+                             AppId="@AppId"
+                             AllowEmpty="true"
+                             EmptyLabel="(app default)"
+                             InputId="playgroundModel">
                     <FieldHelp>Body <code>model</code>. Should match the app config / pulled Ollama tag.</FieldHelp>
-                </div>
+                </ModelPicker>
 
                 <div class="kx-segment">
                     <button type="button" class="@ModeBtnClass(ChatEndpointMode.Chat)" @onclick="() => SetMode(ChatEndpointMode.Chat)">Chat</button>
