@@ -1,4 +1,4 @@
-﻿> Part of the ContextMemory docs. [Back to README](../README.md).
+> Part of the ContextMemory docs. [Back to README](../README.md).
 
 ## Architecture in 30 seconds
 
@@ -172,10 +172,11 @@ Clients keep sending a normal chat body; they do not implement retrieval or orch
 
 - **Same endpoint** — preferred `POST /v1/chat/completions` (legacy `POST /api/chat`). Loop runs when `AgenticEnabled` is true: `(agentic.enabled && tools) || GlobalWikiEnabled` — see [Retrieval + agentic loop](#retrieval--agentic-loop).
 - **Orchestrator** — loop with iteration cap, configurable timeout, and validation before returning the final answer. Built-in `wiki_search` participates like any other tool when Global Wiki is on.
-- **Skills & guardrail packs (configurable per app)** — shared catalog (File or Postgres), seeded on startup; each tenant picks which packs are active via `agentic.policyPacks`.
-  - **Skills** — Markdown policy text injected into the agent system prompt (anti-hallucination, wiki-first, MCP preference, Zuora discover-first, …). Create/edit/import/export in Admin **Skills** or `/admin/agentic/skills`.
-  - **Guardrail packs** — deterministic validators by `kind` (`url-fetch`, `sandbox-claim`, `tool-failure-disclosure`, `blocked-patterns`) that can reject a final answer and force another loop iteration.
-  - **Per-app selection** — `enabledSkillIds` / `enabledGuardrailIds`. Omit both → defaults (`IsDefaultEnabled` in the catalog). Explicit empty arrays → none. Skill `sandbox-facts-selfhosted` only applies when a self-hosted sandbox tool is configured.
+- **Skills & guardrail packs (two levels)** — platform catalog (File or Postgres), seeded on startup, plus optional per-app inventory.
+  - **Platform** — Markdown skills + guardrail packs with `IsDefaultEnabled`; apply to **all** apps. Admin **Skills** (`/skills`) or `/admin/agentic/skills|guardrails`.
+  - **Per app** — CRUD under `/apps/{appId}/policies` or `/admin/apps/{appId}/skills|guardrails`. `IsEnabled` toggles; additive to platform defaults (apps cannot turn off platform packs).
+  - **Runtime** — union of platform default-on + app enabled. Skill `sandbox-facts-selfhosted` only when a self-hosted sandbox tool is configured.
+  - Legacy `agentic.policyPacks` is ignored.
   - Distinct from loop **`guardrails`** below (`maxIterations`, HITL keywords, egress, validation mode) — those remain numeric/policy knobs on the orchestrator.
 - **Execution tools**
   - ACA Dynamic Sessions: `shell_execute`, `python_execute`, `node_execute`, `container_execute` (custom image)

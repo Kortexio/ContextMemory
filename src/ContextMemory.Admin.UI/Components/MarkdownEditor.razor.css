@@ -1,0 +1,38 @@
+.kx-md-editor {
+  border: 1px solid var(--kx-border, #e2e8f0);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.kx-md-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid var(--kx-border, #e2e8f0);
+  background: var(--kx-surface-2, #f8fafc);
+}
+
+.kx-md-tabs {
+  margin-left: auto;
+  display: flex;
+  gap: 0.25rem;
+}
+
+.kx-md-textarea {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  min-height: 12rem;
+}
+
+.kx-md-preview {
+  padding: 0.85rem 1rem;
+  min-height: 12rem;
+  max-height: 28rem;
+  overflow: auto;
+}

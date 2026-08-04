@@ -152,6 +152,171 @@ public sealed class AdminApiClient
         return $"{_session.Settings.ApiBaseUrl.TrimEnd('/')}/admin/agentic/skills/{Uri.EscapeDataString(id)}/export";
     }
 
+    public async Task<AgenticGuardrailAdminDto> UpsertAgenticGuardrailAsync(
+        AgenticGuardrailAdminDto guardrail,
+        bool create,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(
+            create ? HttpMethod.Post : HttpMethod.Put,
+            create
+                ? "/admin/agentic/guardrails"
+                : $"/admin/agentic/guardrails/{Uri.EscapeDataString(guardrail.Id)}");
+        request.Content = JsonContent.Create(guardrail);
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+        return await ReadJsonAsync<AgenticGuardrailAdminDto>(response, cancellationToken).ConfigureAwait(false)
+               ?? throw new InvalidOperationException("Empty guardrail response.");
+    }
+
+    public async Task DeleteAgenticGuardrailAsync(string id, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Delete, $"/admin/agentic/guardrails/{Uri.EscapeDataString(id)}");
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+    }
+
+    public async Task<AgenticGuardrailAdminDto> ImportAgenticGuardrailAsync(
+        Stream fileStream,
+        string fileName,
+        bool replace,
+        CancellationToken cancellationToken = default)
+    {
+        using var content = new MultipartFormDataContent();
+        content.Add(new StreamContent(fileStream), "file", fileName);
+        content.Add(new StringContent(replace ? "true" : "false"), "replace");
+        using var request = CreateRequest(
+            HttpMethod.Post,
+            $"/admin/agentic/guardrails/import?replace={(replace ? "true" : "false")}");
+        request.Content = content;
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+        return await ReadJsonAsync<AgenticGuardrailAdminDto>(response, cancellationToken).ConfigureAwait(false)
+               ?? throw new InvalidOperationException("Empty import response.");
+    }
+
+    public string GetGuardrailExportUrl(string id)
+    {
+        if (!_session.IsConfigured)
+            throw new InvalidOperationException("Configure API URL and master key in Settings.");
+        return $"{_session.Settings.ApiBaseUrl.TrimEnd('/')}/admin/agentic/guardrails/{Uri.EscapeDataString(id)}/export";
+    }
+
+    public Task<AgenticAppCatalogAdminDto?> GetAppAgenticCatalogAsync(
+        string appId,
+        CancellationToken cancellationToken = default) =>
+        GetAsync<AgenticAppCatalogAdminDto>(
+            $"/admin/apps/{Uri.EscapeDataString(appId)}/agentic/catalog",
+            cancellationToken);
+
+    public async Task<AgenticAppSkillAdminDto> UpsertAppSkillAsync(
+        string appId,
+        AgenticAppSkillAdminDto skill,
+        bool create,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(
+            create ? HttpMethod.Post : HttpMethod.Put,
+            create
+                ? $"/admin/apps/{Uri.EscapeDataString(appId)}/skills"
+                : $"/admin/apps/{Uri.EscapeDataString(appId)}/skills/{Uri.EscapeDataString(skill.Id)}");
+        request.Content = JsonContent.Create(skill);
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+        return await ReadJsonAsync<AgenticAppSkillAdminDto>(response, cancellationToken).ConfigureAwait(false)
+               ?? throw new InvalidOperationException("Empty app skill response.");
+    }
+
+    public async Task DeleteAppSkillAsync(string appId, string id, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(
+            HttpMethod.Delete,
+            $"/admin/apps/{Uri.EscapeDataString(appId)}/skills/{Uri.EscapeDataString(id)}");
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+    }
+
+    public async Task<AgenticAppSkillAdminDto> ImportAppSkillAsync(
+        string appId,
+        Stream fileStream,
+        string fileName,
+        bool replace,
+        CancellationToken cancellationToken = default)
+    {
+        using var content = new MultipartFormDataContent();
+        content.Add(new StreamContent(fileStream), "file", fileName);
+        content.Add(new StringContent(replace ? "true" : "false"), "replace");
+        using var request = CreateRequest(
+            HttpMethod.Post,
+            $"/admin/apps/{Uri.EscapeDataString(appId)}/skills/import?replace={(replace ? "true" : "false")}");
+        request.Content = content;
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+        return await ReadJsonAsync<AgenticAppSkillAdminDto>(response, cancellationToken).ConfigureAwait(false)
+               ?? throw new InvalidOperationException("Empty import response.");
+    }
+
+    public string GetAppSkillExportUrl(string appId, string id)
+    {
+        if (!_session.IsConfigured)
+            throw new InvalidOperationException("Configure API URL and master key in Settings.");
+        return $"{_session.Settings.ApiBaseUrl.TrimEnd('/')}/admin/apps/{Uri.EscapeDataString(appId)}/skills/{Uri.EscapeDataString(id)}/export";
+    }
+
+    public async Task<AgenticAppGuardrailAdminDto> UpsertAppGuardrailAsync(
+        string appId,
+        AgenticAppGuardrailAdminDto guardrail,
+        bool create,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(
+            create ? HttpMethod.Post : HttpMethod.Put,
+            create
+                ? $"/admin/apps/{Uri.EscapeDataString(appId)}/guardrails"
+                : $"/admin/apps/{Uri.EscapeDataString(appId)}/guardrails/{Uri.EscapeDataString(guardrail.Id)}");
+        request.Content = JsonContent.Create(guardrail);
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+        return await ReadJsonAsync<AgenticAppGuardrailAdminDto>(response, cancellationToken).ConfigureAwait(false)
+               ?? throw new InvalidOperationException("Empty app guardrail response.");
+    }
+
+    public async Task DeleteAppGuardrailAsync(string appId, string id, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(
+            HttpMethod.Delete,
+            $"/admin/apps/{Uri.EscapeDataString(appId)}/guardrails/{Uri.EscapeDataString(id)}");
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+    }
+
+    public async Task<AgenticAppGuardrailAdminDto> ImportAppGuardrailAsync(
+        string appId,
+        Stream fileStream,
+        string fileName,
+        bool replace,
+        CancellationToken cancellationToken = default)
+    {
+        using var content = new MultipartFormDataContent();
+        content.Add(new StreamContent(fileStream), "file", fileName);
+        content.Add(new StringContent(replace ? "true" : "false"), "replace");
+        using var request = CreateRequest(
+            HttpMethod.Post,
+            $"/admin/apps/{Uri.EscapeDataString(appId)}/guardrails/import?replace={(replace ? "true" : "false")}");
+        request.Content = content;
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+        return await ReadJsonAsync<AgenticAppGuardrailAdminDto>(response, cancellationToken).ConfigureAwait(false)
+               ?? throw new InvalidOperationException("Empty import response.");
+    }
+
+    public string GetAppGuardrailExportUrl(string appId, string id)
+    {
+        if (!_session.IsConfigured)
+            throw new InvalidOperationException("Configure API URL and master key in Settings.");
+        return $"{_session.Settings.ApiBaseUrl.TrimEnd('/')}/admin/apps/{Uri.EscapeDataString(appId)}/guardrails/{Uri.EscapeDataString(id)}/export";
+    }
+
     public async Task<RegisterAppResponse> RegisterAppAsync(
         RegisterAppRequest request,
         CancellationToken cancellationToken = default)

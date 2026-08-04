@@ -1,28 +1,27 @@
 @page "/skills"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject AdminApiClient Api
 @inject AdminSession Session
 @inject IJSRuntime Js
+@using ContextMemory.Admin.UI.Components
 @using ContextMemory.Admin.UI.Models
 @using ContextMemory.Admin.UI.Services
 @layout MainLayout
 
-<PageTitle>Skills &amp; Guardrails - Kortexio Admin</PageTitle>
+<PageTitle>Platform Skills &amp; Guardrails - Kortexio Admin</PageTitle>
 
 <div class="kx-page-header">
     <div>
-        <h1 class="kx-page-title">Skills &amp; Guardrails</h1>
+        <h1 class="kx-page-title">Platform Skills &amp; Guardrails</h1>
         <p class="kx-page-lead">
-            Platform defaults shared by all apps. Per-app overrides live on each tenant’s
-            <strong>Policies</strong> page (or Config → Agentic).
+            Generic defaults for <strong>all apps</strong>. Items marked default-on are always active.
+            App-specific packs are managed under each app’s <strong>Skills &amp; guardrails</strong>.
         </p>
     </div>
     <div class="d-flex flex-wrap" style="gap:0.5rem">
-        <button class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@_busy">
-            <i class="fas fa-sync"></i> Refresh
-        </button>
-        <button class="btn btn-primary" @onclick="StartCreate" disabled="@_busy">
-            <i class="fas fa-plus"></i> New skill
-        </button>
+        <button class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@_busy"><i class="fas fa-sync"></i> Refresh</button>
+        <button class="btn btn-outline-primary" @onclick="StartCreateGuardrail" disabled="@_busy"><i class="fas fa-plus"></i> New guardrail</button>
+        <button class="btn btn-primary" @onclick="StartCreateSkill" disabled="@_busy"><i class="fas fa-plus"></i> New skill</button>
     </div>
 </div>
 
@@ -37,196 +36,181 @@
 else
 {
     <div class="kx-metrics" style="margin-bottom:1rem">
-        <div class="kx-metric">
-            <div class="kx-metric-label">Skills</div>
-            <div class="kx-metric-value">@_skills.Count</div>
-        </div>
-        <div class="kx-metric">
-            <div class="kx-metric-label">Default-on skills</div>
-            <div class="kx-metric-value">@_skills.Count(s => s.IsDefaultEnabled)</div>
-        </div>
-        <div class="kx-metric">
-            <div class="kx-metric-label">Guardrails</div>
-            <div class="kx-metric-value">@_guardrails.Count</div>
-        </div>
-        <div class="kx-metric">
-            <div class="kx-metric-label">Default-on guardrails</div>
-            <div class="kx-metric-value">@_guardrails.Count(g => g.IsDefaultEnabled)</div>
-        </div>
+        <div class="kx-metric"><div class="kx-metric-label">Skills</div><div class="kx-metric-value">@_skills.Count</div></div>
+        <div class="kx-metric"><div class="kx-metric-label">Default-on skills</div><div class="kx-metric-value">@_skills.Count(s => s.IsDefaultEnabled)</div></div>
+        <div class="kx-metric"><div class="kx-metric-label">Guardrails</div><div class="kx-metric-value">@_guardrails.Count</div></div>
+        <div class="kx-metric"><div class="kx-metric-label">Default-on guardrails</div><div class="kx-metric-value">@_guardrails.Count(g => g.IsDefaultEnabled)</div></div>
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(_error))
-    {
-        <div class="alert alert-danger">@_error</div>
-    }
-    @if (!string.IsNullOrWhiteSpace(_info))
-    {
-        <div class="alert alert-success">@_info</div>
-    }
+    @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert alert-danger">@_error</div> }
+    @if (!string.IsNullOrWhiteSpace(_info)) { <div class="alert alert-success">@_info</div> }
 
-    <div class="kx-panel">
-        <div class="kx-panel-head"><h2>Import skill</h2></div>
-        <div class="kx-panel-body">
-            <InputFile OnChange="OnImportFileAsync" accept=".json,.md,.skill.json" />
-            <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" id="replaceImport" @bind="_replaceOnImport" />
-                <label class="form-check-label" for="replaceImport">Replace if id already exists</label>
-            </div>
-        </div>
-    </div>
-
-    @if (_editing is not null)
+    @if (_editingSkill is not null)
     {
         <div class="kx-panel">
             <div class="kx-panel-head">
-                <h2>@(_isCreate ? "Create skill" : $"Edit {_editing.Id}")</h2>
-                @if (_editing.IsSystem)
-                {
-                    <span class="kx-badge">system (prompt editable)</span>
-                }
+                <h2>@(_isCreateSkill ? "Create skill" : $"Edit {_editingSkill.Id}")</h2>
+                @if (_editingSkill.IsSystem) { <span class="kx-badge">system</span> }
             </div>
             <div class="kx-panel-body">
                 <div class="form-row">
                     <div class="col-md-4 form-group">
                         <label>Id (slug)</label>
-                        <InputText class="form-control" @bind-Value="_editing.Id" disabled="@(!_isCreate)" />
+                        <InputText class="form-control" @bind-Value="_editingSkill.Id" disabled="@(!_isCreateSkill)" />
                     </div>
                     <div class="col-md-4 form-group">
                         <label>Name</label>
-                        <InputText class="form-control" @bind-Value="_editing.Name" />
+                        <InputText class="form-control" @bind-Value="_editingSkill.Name" />
                     </div>
                     <div class="col-md-4 form-group">
                         <label>Category</label>
-                        <InputText class="form-control" @bind-Value="_editing.Category" />
+                        <InputText class="form-control" @bind-Value="_editingSkill.Category" />
                     </div>
                 </div>
                 <div class="form-group">
                     <label>Description</label>
-                    <InputText class="form-control" @bind-Value="_editing.Description" />
+                    <InputText class="form-control" @bind-Value="_editingSkill.Description" />
                 </div>
                 <div class="form-group">
                     <label>Prompt markdown</label>
-                    <InputTextArea class="form-control" rows="12" @bind-Value="_editing.PromptMarkdown" />
+                    <MarkdownEditor @bind-Value="_editingSkill.PromptMarkdown" Rows="14" />
                 </div>
                 <div class="form-row">
                     <div class="col-md-4 form-group">
                         <label>Sort order</label>
-                        <InputNumber class="form-control" @bind-Value="_editing.SortOrder" />
+                        <InputNumber class="form-control" @bind-Value="_editingSkill.SortOrder" />
                     </div>
-                    <div class="col-md-4 form-group d-flex align-items-end">
+                    <div class="col-md-6 form-group d-flex align-items-end">
                         <div class="form-check mb-2">
-                            <InputCheckbox class="form-check-input" @bind-Value="_editing.IsDefaultEnabled" />
-                            <label class="form-check-label">Default enabled for apps that inherit</label>
+                            <InputCheckbox class="form-check-input" @bind-Value="_editingSkill.IsDefaultEnabled" />
+                            <label class="form-check-label">Default enabled for all apps</label>
                         </div>
                     </div>
                 </div>
-                <button class="btn btn-primary btn-sm" @onclick="SaveAsync" disabled="@_busy">Save</button>
-                <button class="btn btn-link btn-sm" @onclick="CancelEdit">Cancel</button>
+                <button class="btn btn-primary btn-sm" @onclick="SaveSkillAsync" disabled="@_busy">Save</button>
+                <button class="btn btn-link btn-sm" @onclick="() => _editingSkill = null">Cancel</button>
             </div>
         </div>
     }
 
-    <div class="kx-section-head">
-        <h2>Platform skill defaults</h2>
-        <p>Content injected into the agentic system prompt. Mark default-on for apps that inherit.</p>
-    </div>
-
-    <div class="kx-panel">
-        <div class="kx-panel-head"><h2>Skills</h2></div>
-        @if (_skills.Count == 0 && !_busy)
-        {
+    @if (_editingGuardrail is not null)
+    {
+        <div class="kx-panel">
+            <div class="kx-panel-head">
+                <h2>@(_isCreateGuardrail ? "Create guardrail" : $"Edit {_editingGuardrail.Id}")</h2>
+                @if (_editingGuardrail.IsSystem) { <span class="kx-badge">system</span> }
+            </div>
             <div class="kx-panel-body">
-                <div class="kx-empty" style="border:0;max-width:none">
-                    <h2>No skills yet</h2>
-                    <p>Create a custom skill or import a <code>.skill.json</code> file.</p>
-                    <button class="btn btn-primary" @onclick="StartCreate">New skill</button>
+                <div class="form-row">
+                    <div class="col-md-3 form-group">
+                        <label>Id (slug)</label>
+                        <InputText class="form-control" @bind-Value="_editingGuardrail.Id" disabled="@(!_isCreateGuardrail)" />
+                    </div>
+                    <div class="col-md-3 form-group">
+                        <label>Name</label>
+                        <InputText class="form-control" @bind-Value="_editingGuardrail.Name" />
+                    </div>
+                    <div class="col-md-3 form-group">
+                        <label>Kind</label>
+                        <InputText class="form-control" @bind-Value="_editingGuardrail.Kind" placeholder="url-fetch" />
+                    </div>
+                    <div class="col-md-3 form-group">
+                        <label>Sort order</label>
+                        <InputNumber class="form-control" @bind-Value="_editingGuardrail.SortOrder" />
+                    </div>
                 </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <InputText class="form-control" @bind-Value="_editingGuardrail.Description" />
+                </div>
+                <div class="form-group">
+                    <label>Config JSON</label>
+                    <InputTextArea class="form-control" rows="6" @bind-Value="_editingGuardrail.ConfigJson" />
+                </div>
+                <div class="form-check mb-3">
+                    <InputCheckbox class="form-check-input" @bind-Value="_editingGuardrail.IsDefaultEnabled" />
+                    <label class="form-check-label">Default enabled for all apps</label>
+                </div>
+                <button class="btn btn-primary btn-sm" @onclick="SaveGuardrailAsync" disabled="@_busy">Save</button>
+                <button class="btn btn-link btn-sm" @onclick="() => _editingGuardrail = null">Cancel</button>
             </div>
-        }
-        else
-        {
-            <div class="kx-table-wrap">
-                <table class="kx-table">
-                    <thead>
-                    <tr>
-                        <th>Id</th>
-                        <th>Name</th>
-                        <th>Category</th>
-                        <th>Default</th>
-                        <th></th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    @foreach (var skill in _skills)
-                    {
-                        <tr>
-                            <td><code>@skill.Id</code></td>
-                            <td>
-                                @skill.Name
-                                @if (skill.IsSystem)
-                                {
-                                    <span class="kx-badge ml-1">system</span>
-                                }
-                            </td>
-                            <td>@skill.Category</td>
-                            <td>@(skill.IsDefaultEnabled ? "yes" : "no")</td>
-                            <td>
-                                <div class="kx-actions">
-                                    <button class="btn btn-xs btn-outline-primary" @onclick="() => StartEdit(skill)">Edit</button>
-                                    <button class="btn btn-xs btn-outline-secondary" @onclick="() => ExportAsync(skill)">Download</button>
-                                    @if (!skill.IsSystem)
-                                    {
-                                        <button class="btn btn-xs btn-outline-danger" @onclick="() => DeleteAsync(skill)">Delete</button>
-                                    }
-                                </div>
-                            </td>
-                        </tr>
-                    }
-                    </tbody>
-                </table>
+        </div>
+    }
+
+    <div class="kx-panel">
+        <div class="kx-panel-head"><h2>Import skill</h2></div>
+        <div class="kx-panel-body">
+            <InputFile OnChange="OnImportSkillAsync" accept=".json,.md,.skill.json" />
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" id="replaceSkillImport" @bind="_replaceOnImport" />
+                <label class="form-check-label" for="replaceSkillImport">Replace if id already exists</label>
             </div>
-        }
+        </div>
     </div>
 
     <div class="kx-section-head">
-        <h2>Platform guardrail defaults</h2>
-        <p>Runtime checks applied when an app inherits or enables the pack. Toggle per app under Policies.</p>
+        <h2>Platform skills</h2>
+        <p>Markdown injected into the agentic system prompt when default-on.</p>
+    </div>
+    <div class="kx-panel">
+        <div class="kx-table-wrap">
+            <table class="kx-table">
+                <thead><tr><th>Id</th><th>Name</th><th>Category</th><th>Default</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var skill in _skills)
+                {
+                    <tr>
+                        <td><code>@skill.Id</code></td>
+                        <td>@skill.Name @if (skill.IsSystem) { <span class="kx-badge ml-1">system</span> }</td>
+                        <td>@skill.Category</td>
+                        <td>@(skill.IsDefaultEnabled ? "yes" : "no")</td>
+                        <td class="kx-actions">
+                            <button class="btn btn-xs btn-outline-primary" @onclick="() => StartEditSkill(skill)">Edit</button>
+                            <button class="btn btn-xs btn-outline-secondary" @onclick="() => ExportSkillAsync(skill)">Download</button>
+                            @if (!skill.IsSystem)
+                            {
+                                <button class="btn btn-xs btn-outline-danger" @onclick="() => DeleteSkillAsync(skill)">Delete</button>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
     </div>
 
+    <div class="kx-section-head">
+        <h2>Platform guardrails</h2>
+        <p>Runtime validators applied when default-on. App-owned guardrails are additive.</p>
+    </div>
     <div class="kx-panel">
-        <div class="kx-panel-head">
-            <h2>Guardrail packs</h2>
+        <div class="kx-panel-body mb-2">
+            <InputFile OnChange="OnImportGuardrailAsync" accept=".json,.guardrail.json" />
+            <span class="text-muted small ml-2">Import guardrail JSON</span>
         </div>
-        @if (_guardrails.Count == 0 && !_busy)
-        {
-            <div class="kx-panel-body">
-                <p class="text-muted mb-0">No guardrails in catalog. Restart API to re-seed if the database was empty.</p>
-            </div>
-        }
-        else
-        {
-            <div class="kx-table-wrap">
-                <table class="kx-table">
-                    <thead>
-                    <tr><th>Id</th><th>Name</th><th>Kind</th><th>Default</th></tr>
-                    </thead>
-                    <tbody>
-                    @foreach (var g in _guardrails)
-                    {
-                        <tr>
-                            <td><code>@g.Id</code></td>
-                            <td>@g.Name</td>
-                            <td><code>@g.Kind</code></td>
-                            <td>@(g.IsDefaultEnabled ? "yes" : "no")</td>
-                        </tr>
-                    }
-                    </tbody>
-                </table>
-            </div>
-        }
-        <div class="kx-panel-foot">
-            <span class="text-muted">Per-app selection:</span>
-            open an app → <strong>Skills &amp; guardrails</strong> in the app menu
+        <div class="kx-table-wrap">
+            <table class="kx-table">
+                <thead><tr><th>Id</th><th>Name</th><th>Kind</th><th>Default</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var g in _guardrails)
+                {
+                    <tr>
+                        <td><code>@g.Id</code></td>
+                        <td>@g.Name @if (g.IsSystem) { <span class="kx-badge ml-1">system</span> }</td>
+                        <td><code>@g.Kind</code></td>
+                        <td>@(g.IsDefaultEnabled ? "yes" : "no")</td>
+                        <td class="kx-actions">
+                            <button class="btn btn-xs btn-outline-primary" @onclick="() => StartEditGuardrail(g)">Edit</button>
+                            <button class="btn btn-xs btn-outline-secondary" @onclick="() => ExportGuardrailAsync(g)">Download</button>
+                            @if (!g.IsSystem)
+                            {
+                                <button class="btn btn-xs btn-outline-danger" @onclick="() => DeleteGuardrailAsync(g)">Delete</button>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
         </div>
     </div>
 }
@@ -234,8 +218,10 @@ else
 @code {
     private List<AgenticSkillAdminDto> _skills = [];
     private List<AgenticGuardrailAdminDto> _guardrails = [];
-    private AgenticSkillAdminDto? _editing;
-    private bool _isCreate;
+    private AgenticSkillAdminDto? _editingSkill;
+    private AgenticGuardrailAdminDto? _editingGuardrail;
+    private bool _isCreateSkill;
+    private bool _isCreateGuardrail;
     private bool _busy;
     private bool _replaceOnImport;
     private string? _error;
@@ -245,149 +231,172 @@ else
 
     private async Task LoadAsync()
     {
-        if (!Session.IsConfigured)
-        {
-            _error = null;
-            return;
-        }
-
-        _busy = true;
-        _error = null;
+        if (!Session.IsConfigured) return;
+        _busy = true; _error = null;
         try
         {
             var catalog = await Api.GetAgenticCatalogAsync();
             _skills = catalog?.Skills?.OrderBy(s => s.SortOrder).ThenBy(s => s.Name).ToList() ?? [];
             _guardrails = catalog?.Guardrails?.OrderBy(g => g.SortOrder).ThenBy(g => g.Name).ToList() ?? [];
         }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-        finally
-        {
-            _busy = false;
-        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
     }
 
-    private void StartCreate()
+    private void StartCreateSkill()
     {
-        _isCreate = true;
-        _editing = new AgenticSkillAdminDto
+        _isCreateSkill = true;
+        _editingGuardrail = null;
+        _editingSkill = new AgenticSkillAdminDto
         {
-            Category = "general",
-            SortOrder = 500,
-            IsDefaultEnabled = false,
-            PromptMarkdown = "## My skill\n- Rule one\n- Reply in the user's language.\n"
+            Category = "general", SortOrder = 500, IsDefaultEnabled = false,
+            PromptMarkdown = "## My skill\n- Rule one\n"
         };
-        _info = null;
     }
 
-    private void StartEdit(AgenticSkillAdminDto skill)
+    private void StartEditSkill(AgenticSkillAdminDto skill)
     {
-        _isCreate = false;
-        _editing = new AgenticSkillAdminDto
+        _isCreateSkill = false;
+        _editingGuardrail = null;
+        _editingSkill = new AgenticSkillAdminDto
         {
-            Id = skill.Id,
-            Name = skill.Name,
-            Description = skill.Description,
-            PromptMarkdown = skill.PromptMarkdown,
-            Category = skill.Category,
-            IsSystem = skill.IsSystem,
-            IsDefaultEnabled = skill.IsDefaultEnabled,
-            SortOrder = skill.SortOrder,
-            LinkedGuardrailIds = skill.LinkedGuardrailIds.ToList()
+            Id = skill.Id, Name = skill.Name, Description = skill.Description,
+            PromptMarkdown = skill.PromptMarkdown, Category = skill.Category,
+            IsSystem = skill.IsSystem, IsDefaultEnabled = skill.IsDefaultEnabled,
+            SortOrder = skill.SortOrder, LinkedGuardrailIds = skill.LinkedGuardrailIds.ToList()
         };
-        _info = null;
     }
 
-    private void CancelEdit() => _editing = null;
-
-    private async Task SaveAsync()
+    private void StartCreateGuardrail()
     {
-        if (_editing is null) return;
-        _busy = true;
-        _error = null;
+        _isCreateGuardrail = true;
+        _editingSkill = null;
+        _editingGuardrail = new AgenticGuardrailAdminDto
+        {
+            Kind = "blocked-patterns", SortOrder = 500, IsDefaultEnabled = false,
+            ConfigJson = "{\n  \"patterns\": []\n}"
+        };
+    }
+
+    private void StartEditGuardrail(AgenticGuardrailAdminDto g)
+    {
+        _isCreateGuardrail = false;
+        _editingSkill = null;
+        _editingGuardrail = new AgenticGuardrailAdminDto
+        {
+            Id = g.Id, Name = g.Name, Description = g.Description, Kind = g.Kind,
+            ConfigJson = g.ConfigJson, IsSystem = g.IsSystem,
+            IsDefaultEnabled = g.IsDefaultEnabled, SortOrder = g.SortOrder
+        };
+    }
+
+    private async Task SaveSkillAsync()
+    {
+        if (_editingSkill is null) return;
+        _busy = true; _error = null;
         try
         {
-            await Api.UpsertAgenticSkillAsync(_editing, _isCreate);
-            _info = $"Saved '{_editing.Id}'.";
-            _editing = null;
+            await Api.UpsertAgenticSkillAsync(_editingSkill, _isCreateSkill);
+            _info = $"Saved skill '{_editingSkill.Id}'.";
+            _editingSkill = null;
             await LoadAsync();
         }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-        finally
-        {
-            _busy = false;
-        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
     }
 
-    private async Task DeleteAsync(AgenticSkillAdminDto skill)
+    private async Task SaveGuardrailAsync()
     {
-        _busy = true;
-        _error = null;
+        if (_editingGuardrail is null) return;
+        _busy = true; _error = null;
+        try
+        {
+            await Api.UpsertAgenticGuardrailAsync(_editingGuardrail, _isCreateGuardrail);
+            _info = $"Saved guardrail '{_editingGuardrail.Id}'.";
+            _editingGuardrail = null;
+            await LoadAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task DeleteSkillAsync(AgenticSkillAdminDto skill)
+    {
+        _busy = true; _error = null;
         try
         {
             await Api.DeleteAgenticSkillAsync(skill.Id);
             _info = $"Deleted '{skill.Id}'.";
             await LoadAsync();
         }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-        finally
-        {
-            _busy = false;
-        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
     }
 
-    private async Task ExportAsync(AgenticSkillAdminDto skill)
+    private async Task DeleteGuardrailAsync(AgenticGuardrailAdminDto g)
+    {
+        _busy = true; _error = null;
+        try
+        {
+            await Api.DeleteAgenticGuardrailAsync(g.Id);
+            _info = $"Deleted '{g.Id}'.";
+            await LoadAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task ExportSkillAsync(AgenticSkillAdminDto skill) =>
+        await DownloadAsync(Api.GetSkillExportUrl(skill.Id), $"{skill.Id}.skill.json");
+
+    private async Task ExportGuardrailAsync(AgenticGuardrailAdminDto g) =>
+        await DownloadAsync(Api.GetGuardrailExportUrl(g.Id), $"{g.Id}.guardrail.json");
+
+    private async Task DownloadAsync(string url, string fileName)
     {
         try
         {
-            var url = Api.GetSkillExportUrl(skill.Id);
             using var http = new HttpClient();
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", Session.Settings.MasterKey);
             using var res = await http.SendAsync(req);
             res.EnsureSuccessStatusCode();
-            var bytes = await res.Content.ReadAsByteArrayAsync();
-            var b64 = Convert.ToBase64String(bytes);
-            await Js.InvokeVoidAsync(
-                "eval",
-                $@"(function(){{var a=document.createElement('a');a.href='data:application/json;base64,{b64}';a.download='{skill.Id}.skill.json';a.click();}})()");
-            _info = $"Downloaded {skill.Id}.skill.json";
+            var b64 = Convert.ToBase64String(await res.Content.ReadAsByteArrayAsync());
+            await Js.InvokeVoidAsync("eval",
+                $@"(function(){{var a=document.createElement('a');a.href='data:application/json;base64,{b64}';a.download='{fileName}';a.click();}})()");
+            _info = $"Downloaded {fileName}";
         }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
+        catch (Exception ex) { _error = ex.Message; }
     }
 
-    private async Task OnImportFileAsync(InputFileChangeEventArgs e)
+    private async Task OnImportSkillAsync(InputFileChangeEventArgs e)
     {
-        var file = e.File;
-        if (file is null) return;
-        _busy = true;
-        _error = null;
+        var file = e.File; if (file is null) return;
+        _busy = true; _error = null;
         try
         {
-            await using var stream = file.OpenReadStream(maxAllowedSize: 2_000_000);
+            await using var stream = file.OpenReadStream(2_000_000);
             var imported = await Api.ImportAgenticSkillAsync(stream, file.Name, _replaceOnImport);
-            _info = $"Imported '{imported.Id}'.";
+            _info = $"Imported skill '{imported.Id}'.";
             await LoadAsync();
         }
-        catch (Exception ex)
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task OnImportGuardrailAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File; if (file is null) return;
+        _busy = true; _error = null;
+        try
         {
-            _error = ex.Message;
+            await using var stream = file.OpenReadStream(2_000_000);
+            var imported = await Api.ImportAgenticGuardrailAsync(stream, file.Name, _replaceOnImport);
+            _info = $"Imported guardrail '{imported.Id}'.";
+            await LoadAsync();
         }
-        finally
-        {
-            _busy = false;
-        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
     }
 }

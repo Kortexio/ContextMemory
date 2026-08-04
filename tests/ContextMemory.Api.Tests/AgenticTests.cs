@@ -212,7 +212,11 @@ public sealed class AgenticIntegrationTests : IClassFixture<AgenticStubWebApplic
                             }
                         ]
                     },
-                    Guardrails = new AgenticGuardrailsConfig { MaxIterations = 5 }
+                    Guardrails = new AgenticGuardrailsConfig
+                    {
+                        MaxIterations = 5,
+                        ValidationMode = "deterministic"
+                    }
                 }
             });
 
@@ -588,7 +592,11 @@ public sealed class McpAgenticIntegrationTests : IClassFixture<AgenticStubWebApp
                             }
                         ]
                     },
-                    Guardrails = new AgenticGuardrailsConfig { MaxIterations = 5 }
+                    Guardrails = new AgenticGuardrailsConfig
+                    {
+                        MaxIterations = 5,
+                        ValidationMode = "deterministic"
+                    }
                 }
             });
 

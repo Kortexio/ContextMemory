@@ -156,6 +156,83 @@ public sealed class FileAgenticPolicyCatalogStore : IAgenticPolicyCatalogStore
         return catalog.Guardrails;
     }
 
+    public async Task<AgenticGuardrailDefinition?> GetGuardrailAsync(
+        string id,
+        CancellationToken cancellationToken = default)
+    {
+        var catalog = await GetCatalogAsync(cancellationToken).ConfigureAwait(false);
+        return catalog.Guardrails.FirstOrDefault(g =>
+            string.Equals(g.Id, id, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public async Task<AgenticGuardrailDefinition> UpsertGuardrailAsync(
+        AgenticGuardrailDefinition guardrail,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureSeededAsync(cancellationToken).ConfigureAwait(false);
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var list = await ReadGuardrailsAsync(cancellationToken).ConfigureAwait(false);
+            var idx = list.FindIndex(g => string.Equals(g.Id, guardrail.Id, StringComparison.OrdinalIgnoreCase));
+            var now = DateTimeOffset.UtcNow;
+
+            if (idx < 0)
+            {
+                list.Add(guardrail with
+                {
+                    IsSystem = false,
+                    ConfigJson = string.IsNullOrWhiteSpace(guardrail.ConfigJson) ? "{}" : guardrail.ConfigJson,
+                    UpdatedAt = now
+                });
+            }
+            else
+            {
+                var existing = list[idx];
+                list[idx] = existing with
+                {
+                    Name = guardrail.Name,
+                    Description = guardrail.Description,
+                    Kind = guardrail.Kind,
+                    ConfigJson = string.IsNullOrWhiteSpace(guardrail.ConfigJson) ? "{}" : guardrail.ConfigJson,
+                    IsDefaultEnabled = guardrail.IsDefaultEnabled,
+                    SortOrder = guardrail.SortOrder,
+                    UpdatedAt = now
+                };
+            }
+
+            await WriteGuardrailsAsync(list, cancellationToken).ConfigureAwait(false);
+            return list.First(g => string.Equals(g.Id, guardrail.Id, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    public async Task<bool> DeleteGuardrailAsync(string id, CancellationToken cancellationToken = default)
+    {
+        await EnsureSeededAsync(cancellationToken).ConfigureAwait(false);
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var list = await ReadGuardrailsAsync(cancellationToken).ConfigureAwait(false);
+            var existing = list.FirstOrDefault(g => string.Equals(g.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (existing is null)
+                return false;
+            if (existing.IsSystem)
+                throw new InvalidOperationException("System guardrails cannot be deleted.");
+
+            list.RemoveAll(g => string.Equals(g.Id, id, StringComparison.OrdinalIgnoreCase));
+            await WriteGuardrailsAsync(list, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
     private async Task<List<AgenticSkillDefinition>> ReadSkillsAsync(CancellationToken ct)
     {
         var json = await File.ReadAllTextAsync(_skillsPath, ct).ConfigureAwait(false);

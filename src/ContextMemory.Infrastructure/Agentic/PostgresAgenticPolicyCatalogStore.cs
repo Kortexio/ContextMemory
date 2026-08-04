@@ -167,6 +167,69 @@ public sealed class PostgresAgenticPolicyCatalogStore : IAgenticPolicyCatalogSto
         return catalog.Guardrails;
     }
 
+    public async Task<AgenticGuardrailDefinition?> GetGuardrailAsync(
+        string id,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureSeededAsync(cancellationToken).ConfigureAwait(false);
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var row = await db.AgenticGuardrailCatalog.AsNoTracking()
+            .FirstOrDefaultAsync(g => g.Id == id, cancellationToken)
+            .ConfigureAwait(false);
+        return row is null ? null : FromEntity(row);
+    }
+
+    public async Task<AgenticGuardrailDefinition> UpsertGuardrailAsync(
+        AgenticGuardrailDefinition guardrail,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureSeededAsync(cancellationToken).ConfigureAwait(false);
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var row = await db.AgenticGuardrailCatalog
+            .FirstOrDefaultAsync(g => g.Id == guardrail.Id, cancellationToken)
+            .ConfigureAwait(false);
+
+        var now = DateTimeOffset.UtcNow;
+        if (row is null)
+        {
+            row = ToEntity(guardrail with
+            {
+                UpdatedAt = now,
+                IsSystem = false,
+                ConfigJson = string.IsNullOrWhiteSpace(guardrail.ConfigJson) ? "{}" : guardrail.ConfigJson
+            });
+            db.AgenticGuardrailCatalog.Add(row);
+        }
+        else
+        {
+            row.Name = guardrail.Name;
+            row.Description = guardrail.Description;
+            row.Kind = guardrail.Kind;
+            row.ConfigJson = string.IsNullOrWhiteSpace(guardrail.ConfigJson) ? "{}" : guardrail.ConfigJson;
+            row.IsDefaultEnabled = guardrail.IsDefaultEnabled;
+            row.SortOrder = guardrail.SortOrder;
+            row.UpdatedAt = now;
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return FromEntity(row);
+    }
+
+    public async Task<bool> DeleteGuardrailAsync(string id, CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var row = await db.AgenticGuardrailCatalog.FirstOrDefaultAsync(g => g.Id == id, cancellationToken)
+            .ConfigureAwait(false);
+        if (row is null)
+            return false;
+        if (row.IsSystem)
+            throw new InvalidOperationException("System guardrails cannot be deleted.");
+
+        db.AgenticGuardrailCatalog.Remove(row);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
     private static AgenticSkillCatalogEntity ToEntity(AgenticSkillDefinition skill) =>
         new()
         {

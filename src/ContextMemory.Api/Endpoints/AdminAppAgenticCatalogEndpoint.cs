@@ -6,109 +6,99 @@ using ContextMemory.Core.Contracts;
 
 namespace ContextMemory.Api.Endpoints;
 
-public static class AdminAgenticCatalogEndpoint
+public static class AdminAppAgenticCatalogEndpoint
 {
-    public static void MapAdminAgenticCatalogEndpoints(this WebApplication app)
+    public static void MapAdminAppAgenticCatalogEndpoints(this WebApplication app)
     {
-        app.MapGet("/admin/agentic/catalog", GetCatalog);
-        app.MapGet("/admin/agentic/skills/{id}", GetSkill);
-        app.MapPost("/admin/agentic/skills", CreateSkill).DisableAntiforgery();
-        app.MapPut("/admin/agentic/skills/{id}", UpdateSkill).DisableAntiforgery();
-        app.MapDelete("/admin/agentic/skills/{id}", DeleteSkill);
-        app.MapGet("/admin/agentic/skills/{id}/export", ExportSkill);
-        app.MapPost("/admin/agentic/skills/import", ImportSkill).DisableAntiforgery();
+        app.MapGet("/admin/apps/{appId}/agentic/catalog", GetCatalog);
+        app.MapGet("/admin/apps/{appId}/skills/{id}", GetSkill);
+        app.MapPost("/admin/apps/{appId}/skills", CreateSkill).DisableAntiforgery();
+        app.MapPut("/admin/apps/{appId}/skills/{id}", UpdateSkill).DisableAntiforgery();
+        app.MapDelete("/admin/apps/{appId}/skills/{id}", DeleteSkill);
+        app.MapGet("/admin/apps/{appId}/skills/{id}/export", ExportSkill);
+        app.MapPost("/admin/apps/{appId}/skills/import", ImportSkill).DisableAntiforgery();
 
-        app.MapGet("/admin/agentic/guardrails/{id}", GetGuardrail);
-        app.MapPost("/admin/agentic/guardrails", CreateGuardrail).DisableAntiforgery();
-        app.MapPut("/admin/agentic/guardrails/{id}", UpdateGuardrail).DisableAntiforgery();
-        app.MapDelete("/admin/agentic/guardrails/{id}", DeleteGuardrail);
-        app.MapGet("/admin/agentic/guardrails/{id}/export", ExportGuardrail);
-        app.MapPost("/admin/agentic/guardrails/import", ImportGuardrail).DisableAntiforgery();
+        app.MapGet("/admin/apps/{appId}/guardrails/{id}", GetGuardrail);
+        app.MapPost("/admin/apps/{appId}/guardrails", CreateGuardrail).DisableAntiforgery();
+        app.MapPut("/admin/apps/{appId}/guardrails/{id}", UpdateGuardrail).DisableAntiforgery();
+        app.MapDelete("/admin/apps/{appId}/guardrails/{id}", DeleteGuardrail);
+        app.MapGet("/admin/apps/{appId}/guardrails/{id}/export", ExportGuardrail);
+        app.MapPost("/admin/apps/{appId}/guardrails/import", ImportGuardrail).DisableAntiforgery();
     }
 
     private static async Task<IResult> GetCatalog(
-        IAgenticPolicyCatalogStore catalog,
+        string appId,
+        IAgenticAppPolicyCatalogStore catalog,
         CancellationToken cancellationToken)
     {
-        var snapshot = await catalog.GetCatalogAsync(cancellationToken).ConfigureAwait(false);
-        return Results.Json(new
-        {
-            skills = snapshot.Skills,
-            guardrails = snapshot.Guardrails
-        });
+        var snapshot = await catalog.GetCatalogAsync(appId, cancellationToken).ConfigureAwait(false);
+        return Results.Json(new { skills = snapshot.Skills, guardrails = snapshot.Guardrails });
     }
 
     private static async Task<IResult> GetSkill(
+        string appId,
         string id,
-        IAgenticPolicyCatalogStore catalog,
+        IAgenticAppPolicyCatalogStore catalog,
         CancellationToken cancellationToken)
     {
-        var skill = await catalog.GetSkillAsync(id, cancellationToken).ConfigureAwait(false);
+        var skill = await catalog.GetSkillAsync(appId, id, cancellationToken).ConfigureAwait(false);
         return skill is null ? Results.NotFound(new { error = "Skill not found." }) : Results.Json(skill);
     }
 
     private static async Task<IResult> CreateSkill(
-        AgenticSkillUpsertRequest body,
-        IAgenticPolicyCatalogStore catalog,
+        string appId,
+        AgenticAppSkillUpsertRequest body,
+        IAgenticAppPolicyCatalogStore catalog,
         CancellationToken cancellationToken)
     {
         var id = string.IsNullOrWhiteSpace(body.Id) ? Slugify(body.Name) : body.Id.Trim();
         if (string.IsNullOrWhiteSpace(id))
             return Results.BadRequest(new { error = "id or name is required." });
 
-        var existing = await catalog.GetSkillAsync(id, cancellationToken).ConfigureAwait(false);
+        var existing = await catalog.GetSkillAsync(appId, id, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
-            return Results.Conflict(new { error = $"Skill '{id}' already exists." });
+            return Results.Conflict(new { error = $"Skill '{id}' already exists for this app." });
 
-        var created = await catalog.UpsertSkillAsync(
-                ToDefinition(id, body, isSystem: false),
-                cancellationToken)
+        var created = await catalog.UpsertSkillAsync(ToSkill(appId, id, body), cancellationToken)
             .ConfigureAwait(false);
         return Results.Json(created);
     }
 
     private static async Task<IResult> UpdateSkill(
+        string appId,
         string id,
-        AgenticSkillUpsertRequest body,
-        IAgenticPolicyCatalogStore catalog,
+        AgenticAppSkillUpsertRequest body,
+        IAgenticAppPolicyCatalogStore catalog,
         CancellationToken cancellationToken)
     {
-        var existing = await catalog.GetSkillAsync(id, cancellationToken).ConfigureAwait(false);
+        var existing = await catalog.GetSkillAsync(appId, id, cancellationToken).ConfigureAwait(false);
         if (existing is null)
             return Results.NotFound(new { error = "Skill not found." });
 
         var updated = await catalog.UpsertSkillAsync(
-                ToDefinition(id, body, existing.IsSystem) with
-                {
-                    CreatedAt = existing.CreatedAt
-                },
+                ToSkill(appId, id, body) with { CreatedAt = existing.CreatedAt },
                 cancellationToken)
             .ConfigureAwait(false);
         return Results.Json(updated);
     }
 
     private static async Task<IResult> DeleteSkill(
+        string appId,
         string id,
-        IAgenticPolicyCatalogStore catalog,
+        IAgenticAppPolicyCatalogStore catalog,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var deleted = await catalog.DeleteSkillAsync(id, cancellationToken).ConfigureAwait(false);
-            return deleted ? Results.NoContent() : Results.NotFound(new { error = "Skill not found." });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Results.BadRequest(new { error = ex.Message });
-        }
+        var deleted = await catalog.DeleteSkillAsync(appId, id, cancellationToken).ConfigureAwait(false);
+        return deleted ? Results.NoContent() : Results.NotFound(new { error = "Skill not found." });
     }
 
     private static async Task<IResult> ExportSkill(
+        string appId,
         string id,
-        IAgenticPolicyCatalogStore catalog,
+        IAgenticAppPolicyCatalogStore catalog,
         CancellationToken cancellationToken)
     {
-        var skill = await catalog.GetSkillAsync(id, cancellationToken).ConfigureAwait(false);
+        var skill = await catalog.GetSkillAsync(appId, id, cancellationToken).ConfigureAwait(false);
         if (skill is null)
             return Results.NotFound(new { error = "Skill not found." });
 
@@ -120,22 +110,21 @@ public static class AdminAgenticCatalogEndpoint
             Category = skill.Category,
             PromptMarkdown = skill.PromptMarkdown,
             LinkedGuardrailIds = skill.LinkedGuardrailIds.ToList(),
-            IsDefaultEnabled = skill.IsDefaultEnabled,
+            IsDefaultEnabled = skill.IsEnabled,
             SortOrder = skill.SortOrder
         };
-
         var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
-        var bytes = Encoding.UTF8.GetBytes(json);
-        return Results.File(bytes, "application/json", $"{skill.Id}.skill.json");
+        return Results.File(Encoding.UTF8.GetBytes(json), "application/json", $"{skill.Id}.skill.json");
     }
 
     private static async Task<IResult> ImportSkill(
+        string appId,
         HttpRequest request,
-        IAgenticPolicyCatalogStore catalog,
+        IAgenticAppPolicyCatalogStore catalog,
         CancellationToken cancellationToken)
     {
-        AgenticSkillExportDto? dto = null;
         var replace = string.Equals(request.Query["replace"], "true", StringComparison.OrdinalIgnoreCase);
+        AgenticSkillExportDto? dto = null;
 
         if (request.HasFormContentType)
         {
@@ -148,7 +137,7 @@ public static class AdminAgenticCatalogEndpoint
             await using var stream = file.OpenReadStream();
             using var reader = new StreamReader(stream, Encoding.UTF8);
             var text = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-            dto = ParseImport(text);
+            dto = ParseSkillImport(text);
         }
         else
         {
@@ -163,22 +152,22 @@ public static class AdminAgenticCatalogEndpoint
             return Results.BadRequest(new { error = "Invalid skill payload." });
 
         var id = string.IsNullOrWhiteSpace(dto.Id) ? Slugify(dto.Name) : dto.Id.Trim();
-        var existing = await catalog.GetSkillAsync(id, cancellationToken).ConfigureAwait(false);
+        var existing = await catalog.GetSkillAsync(appId, id, cancellationToken).ConfigureAwait(false);
         if (existing is not null && !replace)
             return Results.Conflict(new { error = $"Skill '{id}' already exists. Pass replace=true to overwrite." });
 
         var upserted = await catalog.UpsertSkillAsync(
-                new AgenticSkillDefinition
+                new AgenticAppSkillDefinition
                 {
+                    AppId = appId,
                     Id = id,
                     Name = string.IsNullOrWhiteSpace(dto.Name) ? id : dto.Name,
                     Description = dto.Description ?? string.Empty,
                     Category = string.IsNullOrWhiteSpace(dto.Category) ? "general" : dto.Category,
                     PromptMarkdown = dto.PromptMarkdown ?? string.Empty,
                     LinkedGuardrailIds = dto.LinkedGuardrailIds ?? [],
-                    IsDefaultEnabled = dto.IsDefaultEnabled,
+                    IsEnabled = dto.IsDefaultEnabled,
                     SortOrder = dto.SortOrder,
-                    IsSystem = existing?.IsSystem ?? false,
                     CreatedAt = existing?.CreatedAt ?? DateTimeOffset.UtcNow,
                     UpdatedAt = DateTimeOffset.UtcNow
                 },
@@ -189,19 +178,21 @@ public static class AdminAgenticCatalogEndpoint
     }
 
     private static async Task<IResult> GetGuardrail(
+        string appId,
         string id,
-        IAgenticPolicyCatalogStore catalog,
+        IAgenticAppPolicyCatalogStore catalog,
         CancellationToken cancellationToken)
     {
-        var guardrail = await catalog.GetGuardrailAsync(id, cancellationToken).ConfigureAwait(false);
+        var guardrail = await catalog.GetGuardrailAsync(appId, id, cancellationToken).ConfigureAwait(false);
         return guardrail is null
             ? Results.NotFound(new { error = "Guardrail not found." })
             : Results.Json(guardrail);
     }
 
     private static async Task<IResult> CreateGuardrail(
-        AgenticGuardrailUpsertRequest body,
-        IAgenticPolicyCatalogStore catalog,
+        string appId,
+        AgenticAppGuardrailUpsertRequest body,
+        IAgenticAppPolicyCatalogStore catalog,
         CancellationToken cancellationToken)
     {
         var id = string.IsNullOrWhiteSpace(body.Id) ? Slugify(body.Name) : body.Id.Trim();
@@ -210,60 +201,50 @@ public static class AdminAgenticCatalogEndpoint
         if (string.IsNullOrWhiteSpace(body.Kind))
             return Results.BadRequest(new { error = "kind is required." });
 
-        var existing = await catalog.GetGuardrailAsync(id, cancellationToken).ConfigureAwait(false);
+        var existing = await catalog.GetGuardrailAsync(appId, id, cancellationToken).ConfigureAwait(false);
         if (existing is not null)
-            return Results.Conflict(new { error = $"Guardrail '{id}' already exists." });
+            return Results.Conflict(new { error = $"Guardrail '{id}' already exists for this app." });
 
-        var created = await catalog.UpsertGuardrailAsync(
-                ToGuardrailDefinition(id, body, isSystem: false),
-                cancellationToken)
+        var created = await catalog.UpsertGuardrailAsync(ToGuardrail(appId, id, body), cancellationToken)
             .ConfigureAwait(false);
         return Results.Json(created);
     }
 
     private static async Task<IResult> UpdateGuardrail(
+        string appId,
         string id,
-        AgenticGuardrailUpsertRequest body,
-        IAgenticPolicyCatalogStore catalog,
+        AgenticAppGuardrailUpsertRequest body,
+        IAgenticAppPolicyCatalogStore catalog,
         CancellationToken cancellationToken)
     {
-        var existing = await catalog.GetGuardrailAsync(id, cancellationToken).ConfigureAwait(false);
+        var existing = await catalog.GetGuardrailAsync(appId, id, cancellationToken).ConfigureAwait(false);
         if (existing is null)
             return Results.NotFound(new { error = "Guardrail not found." });
         if (string.IsNullOrWhiteSpace(body.Kind))
             return Results.BadRequest(new { error = "kind is required." });
 
-        var updated = await catalog.UpsertGuardrailAsync(
-                ToGuardrailDefinition(id, body, existing.IsSystem),
-                cancellationToken)
+        var updated = await catalog.UpsertGuardrailAsync(ToGuardrail(appId, id, body), cancellationToken)
             .ConfigureAwait(false);
         return Results.Json(updated);
     }
 
     private static async Task<IResult> DeleteGuardrail(
+        string appId,
         string id,
-        IAgenticPolicyCatalogStore catalog,
+        IAgenticAppPolicyCatalogStore catalog,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var deleted = await catalog.DeleteGuardrailAsync(id, cancellationToken).ConfigureAwait(false);
-            return deleted
-                ? Results.NoContent()
-                : Results.NotFound(new { error = "Guardrail not found." });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Results.BadRequest(new { error = ex.Message });
-        }
+        var deleted = await catalog.DeleteGuardrailAsync(appId, id, cancellationToken).ConfigureAwait(false);
+        return deleted ? Results.NoContent() : Results.NotFound(new { error = "Guardrail not found." });
     }
 
     private static async Task<IResult> ExportGuardrail(
+        string appId,
         string id,
-        IAgenticPolicyCatalogStore catalog,
+        IAgenticAppPolicyCatalogStore catalog,
         CancellationToken cancellationToken)
     {
-        var guardrail = await catalog.GetGuardrailAsync(id, cancellationToken).ConfigureAwait(false);
+        var guardrail = await catalog.GetGuardrailAsync(appId, id, cancellationToken).ConfigureAwait(false);
         if (guardrail is null)
             return Results.NotFound(new { error = "Guardrail not found." });
 
@@ -274,7 +255,7 @@ public static class AdminAgenticCatalogEndpoint
             Description = guardrail.Description,
             Kind = guardrail.Kind,
             ConfigJson = guardrail.ConfigJson,
-            IsDefaultEnabled = guardrail.IsDefaultEnabled,
+            IsDefaultEnabled = guardrail.IsEnabled,
             SortOrder = guardrail.SortOrder
         };
         var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
@@ -282,8 +263,9 @@ public static class AdminAgenticCatalogEndpoint
     }
 
     private static async Task<IResult> ImportGuardrail(
+        string appId,
         HttpRequest request,
-        IAgenticPolicyCatalogStore catalog,
+        IAgenticAppPolicyCatalogStore catalog,
         CancellationToken cancellationToken)
     {
         var replace = string.Equals(request.Query["replace"], "true", StringComparison.OrdinalIgnoreCase);
@@ -319,21 +301,21 @@ public static class AdminAgenticCatalogEndpoint
             return Results.BadRequest(new { error = "kind is required." });
 
         var id = string.IsNullOrWhiteSpace(dto.Id) ? Slugify(dto.Name) : dto.Id.Trim();
-        var existing = await catalog.GetGuardrailAsync(id, cancellationToken).ConfigureAwait(false);
+        var existing = await catalog.GetGuardrailAsync(appId, id, cancellationToken).ConfigureAwait(false);
         if (existing is not null && !replace)
             return Results.Conflict(new { error = $"Guardrail '{id}' already exists. Pass replace=true to overwrite." });
 
         var upserted = await catalog.UpsertGuardrailAsync(
-                new AgenticGuardrailDefinition
+                new AgenticAppGuardrailDefinition
                 {
+                    AppId = appId,
                     Id = id,
                     Name = string.IsNullOrWhiteSpace(dto.Name) ? id : dto.Name,
                     Description = dto.Description ?? string.Empty,
                     Kind = dto.Kind.Trim(),
                     ConfigJson = string.IsNullOrWhiteSpace(dto.ConfigJson) ? "{}" : dto.ConfigJson,
-                    IsDefaultEnabled = dto.IsDefaultEnabled,
+                    IsEnabled = dto.IsDefaultEnabled,
                     SortOrder = dto.SortOrder,
-                    IsSystem = existing?.IsSystem ?? false,
                     UpdatedAt = DateTimeOffset.UtcNow
                 },
                 cancellationToken)
@@ -342,13 +324,45 @@ public static class AdminAgenticCatalogEndpoint
         return Results.Json(upserted);
     }
 
-    private static AgenticSkillExportDto? ParseImport(string text)
+    private static AgenticAppSkillDefinition ToSkill(string appId, string id, AgenticAppSkillUpsertRequest body) =>
+        new()
+        {
+            AppId = appId,
+            Id = id,
+            Name = string.IsNullOrWhiteSpace(body.Name) ? id : body.Name.Trim(),
+            Description = body.Description?.Trim() ?? string.Empty,
+            PromptMarkdown = body.PromptMarkdown ?? string.Empty,
+            Category = string.IsNullOrWhiteSpace(body.Category) ? "general" : body.Category.Trim(),
+            IsEnabled = body.IsEnabled,
+            SortOrder = body.SortOrder,
+            LinkedGuardrailIds = body.LinkedGuardrailIds ?? [],
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
+    private static AgenticAppGuardrailDefinition ToGuardrail(
+        string appId,
+        string id,
+        AgenticAppGuardrailUpsertRequest body) =>
+        new()
+        {
+            AppId = appId,
+            Id = id,
+            Name = string.IsNullOrWhiteSpace(body.Name) ? id : body.Name.Trim(),
+            Description = body.Description?.Trim() ?? string.Empty,
+            Kind = body.Kind.Trim(),
+            ConfigJson = string.IsNullOrWhiteSpace(body.ConfigJson) ? "{}" : body.ConfigJson,
+            IsEnabled = body.IsEnabled,
+            SortOrder = body.SortOrder,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
+    private static AgenticSkillExportDto? ParseSkillImport(string text)
     {
         text = text.Trim();
         if (text.StartsWith('{'))
             return JsonSerializer.Deserialize<AgenticSkillExportDto>(text, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
-        // Markdown with optional YAML-like frontmatter between ---
         string? id = null, name = null, description = null, category = null;
         var markdown = text;
         if (text.StartsWith("---"))
@@ -382,43 +396,10 @@ public static class AdminAgenticCatalogEndpoint
             Description = description ?? string.Empty,
             Category = category ?? "general",
             PromptMarkdown = markdown,
-            IsDefaultEnabled = false,
+            IsDefaultEnabled = true,
             SortOrder = 500
         };
     }
-
-    private static AgenticSkillDefinition ToDefinition(string id, AgenticSkillUpsertRequest body, bool isSystem) =>
-        new()
-        {
-            Id = id,
-            Name = string.IsNullOrWhiteSpace(body.Name) ? id : body.Name.Trim(),
-            Description = body.Description?.Trim() ?? string.Empty,
-            PromptMarkdown = body.PromptMarkdown ?? string.Empty,
-            Category = string.IsNullOrWhiteSpace(body.Category) ? "general" : body.Category.Trim(),
-            IsSystem = isSystem,
-            IsDefaultEnabled = body.IsDefaultEnabled,
-            SortOrder = body.SortOrder,
-            LinkedGuardrailIds = body.LinkedGuardrailIds ?? [],
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
-        };
-
-    private static AgenticGuardrailDefinition ToGuardrailDefinition(
-        string id,
-        AgenticGuardrailUpsertRequest body,
-        bool isSystem) =>
-        new()
-        {
-            Id = id,
-            Name = string.IsNullOrWhiteSpace(body.Name) ? id : body.Name.Trim(),
-            Description = body.Description?.Trim() ?? string.Empty,
-            Kind = body.Kind.Trim(),
-            ConfigJson = string.IsNullOrWhiteSpace(body.ConfigJson) ? "{}" : body.ConfigJson,
-            IsSystem = isSystem,
-            IsDefaultEnabled = body.IsDefaultEnabled,
-            SortOrder = body.SortOrder,
-            UpdatedAt = DateTimeOffset.UtcNow
-        };
 
     private static string Slugify(string? name)
     {
@@ -429,48 +410,25 @@ public static class AdminAgenticCatalogEndpoint
     }
 }
 
-public sealed class AgenticSkillUpsertRequest
+public sealed class AgenticAppSkillUpsertRequest
 {
     public string? Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string? PromptMarkdown { get; set; }
     public string? Category { get; set; }
-    public bool IsDefaultEnabled { get; set; }
+    public bool IsEnabled { get; set; } = true;
     public int SortOrder { get; set; } = 500;
     public List<string>? LinkedGuardrailIds { get; set; }
 }
 
-public sealed class AgenticSkillExportDto
-{
-    public string Id { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public string? Description { get; set; }
-    public string? Category { get; set; }
-    public string? PromptMarkdown { get; set; }
-    public List<string>? LinkedGuardrailIds { get; set; }
-    public bool IsDefaultEnabled { get; set; }
-    public int SortOrder { get; set; }
-}
-
-public sealed class AgenticGuardrailUpsertRequest
+public sealed class AgenticAppGuardrailUpsertRequest
 {
     public string? Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string Kind { get; set; } = string.Empty;
     public string? ConfigJson { get; set; }
-    public bool IsDefaultEnabled { get; set; }
+    public bool IsEnabled { get; set; } = true;
     public int SortOrder { get; set; } = 500;
-}
-
-public sealed class AgenticGuardrailExportDto
-{
-    public string Id { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public string? Description { get; set; }
-    public string Kind { get; set; } = string.Empty;
-    public string? ConfigJson { get; set; }
-    public bool IsDefaultEnabled { get; set; }
-    public int SortOrder { get; set; }
 }

@@ -1,4 +1,4 @@
-﻿> Part of the ContextMemory docs. [Back to README](../README.md).
+> Part of the ContextMemory docs. [Back to README](../README.md).
 
 ## Admin UI guide
 
@@ -129,15 +129,21 @@ Markdown fields: base persona, business rules, format rules, wiki schema.
 
 ### Skills catalog
 
-**Skills** (`/skills`) manages the **shared** catalog (all apps). Enabling packs for a tenant is done on that app’s **Config → Agentic → Skills & guardrail packs**.
+Two levels:
+
+| Level | Where | Behaviour |
+|---|---|---|
+| **Platform** | `/skills` | Seeded defaults shared by all apps. `IsDefaultEnabled` = always active for every tenant. Full CRUD for skills and guardrails (system items: edit OK, delete blocked). |
+| **Per app** | `/apps/{id}/policies` | App-owned inventory only. Full CRUD + enable toggles. Additive to platform defaults (cannot disable platform packs from the app). |
 
 | Action | Notes |
 |---|---|
-| New skill / Edit | Id (slug, create-only), name, category, description, prompt markdown, sort order, default-enabled |
-| System skills | Prompt editable; cannot delete |
-| Download | Export `.skill.json` |
-| Import | `.json` / `.md` / `.skill.json`; optional replace-if-exists |
-| Guardrail packs table | Read-only list (`id`, `kind`, default); toggle per app in Config |
+| New / Edit skill | Id (slug, create-only), name, category, description, **markdown editor** (Write/Preview), sort order, default-on (platform) or enabled (app) |
+| System skills / guardrails | Prompt/config editable; cannot delete |
+| Download / Import | `.skill.json` / `.guardrail.json` (optional replace) |
+| Runtime | Union of platform default-on + app enabled packs |
+
+Legacy `agentic.policyPacks` selection is ignored.
 
 ### Chat Lab
 
