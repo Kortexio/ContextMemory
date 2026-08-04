@@ -2,15 +2,44 @@
 
 <div class="kx-md-editor">
     <div class="kx-md-toolbar">
-        <button type="button" class="btn btn-sm btn-outline-secondary" title="Bold" @onclick='() => Wrap("**", "**")'><strong>B</strong></button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" title="Italic" @onclick='() => Wrap("*", "*")'><em>I</em></button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" title="Heading" @onclick='() => Prefix("## ")'>H2</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" title="List" @onclick='() => Prefix("- ")'>List</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" title="Code" @onclick='() => Wrap("`", "`")'>Code</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" title="Link" @onclick="InsertLink">Link</button>
-        <div class="kx-md-tabs">
-            <button type="button" class="btn btn-sm @(_tab == "write" ? "btn-primary" : "btn-outline-secondary")" @onclick='() => _tab = "write"'>Write</button>
-            <button type="button" class="btn btn-sm @(_tab == "preview" ? "btn-primary" : "btn-outline-secondary")" @onclick='() => _tab = "preview"'>Preview</button>
+        <div class="kx-md-tools" role="toolbar" aria-label="Markdown formatting">
+            <div class="kx-md-group">
+                <button type="button" class="kx-md-btn" title="Bold" aria-label="Bold" @onclick='() => Wrap("**", "**")'>
+                    <i class="fas fa-bold" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="kx-md-btn" title="Italic" aria-label="Italic" @onclick='() => Wrap("*", "*")'>
+                    <i class="fas fa-italic" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="kx-md-group">
+                <button type="button" class="kx-md-btn" title="Heading" aria-label="Heading" @onclick='() => Prefix("## ")'>
+                    <i class="fas fa-heading" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="kx-md-btn" title="Bullet list" aria-label="Bullet list" @onclick='() => Prefix("- ")'>
+                    <i class="fas fa-list-ul" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="kx-md-group">
+                <button type="button" class="kx-md-btn" title="Inline code" aria-label="Inline code" @onclick='() => Wrap("`", "`")'>
+                    <i class="fas fa-code" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="kx-md-btn" title="Link" aria-label="Link" @onclick="InsertLink">
+                    <i class="fas fa-link" aria-hidden="true"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="kx-md-tabs" role="tablist" aria-label="Editor mode">
+            <button type="button"
+                    role="tab"
+                    class="kx-md-tab @(_tab == "write" ? "is-active" : null)"
+                    aria-selected="@(_tab == "write")"
+                    @onclick='() => _tab = "write"'>Write</button>
+            <button type="button"
+                    role="tab"
+                    class="kx-md-tab @(_tab == "preview" ? "is-active" : null)"
+                    aria-selected="@(_tab == "preview")"
+                    @onclick='() => _tab = "preview"'>Preview</button>
         </div>
     </div>
 

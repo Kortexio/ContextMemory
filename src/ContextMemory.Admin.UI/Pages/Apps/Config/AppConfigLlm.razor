@@ -65,6 +65,14 @@ else
                     <InputCheckbox class="form-check-input" id="streamingEnabled" @bind-Value="_form.StreamingEnabled" />
                     <label class="form-check-label" for="streamingEnabled">Streaming enabled</label>
                 </div>
+                <div class="form-check mb-3">
+                    <InputCheckbox class="form-check-input" id="llmThinkEnabled" @bind-Value="_form.LlmThinkEnabled" />
+                    <label class="form-check-label" for="llmThinkEnabled">Enable model thinking</label>
+                    <FieldHelp>
+                        Off by default. When on, thinking-capable models (e.g. Qwen3) may spend many tokens before the answer.
+                        Requires <code>reasoning_effort</code> on OpenAI <code>/v1</code> or <code>think</code> on Ollama native.
+                    </FieldHelp>
+                </div>
 
                 @if (Message is not null) { <div class="alert alert-success">@Message</div> }
                 @if (Error is not null) { <div class="alert alert-danger">@Error</div> }
@@ -89,6 +97,7 @@ else
         _form.LlmApiKey = config.LlmApiKey ?? string.Empty;
         _form.MaxHistoryMessages = config.MaxHistoryMessages;
         _form.StreamingEnabled = config.StreamingEnabled;
+        _form.LlmThinkEnabled = config.LlmThinkEnabled;
     }
 
     protected override AppConfigPatchRequest BuildPatch() => new()
@@ -99,7 +108,8 @@ else
         LlmEndpoint = _form.LlmEndpoint ?? string.Empty,
         LlmApiKey = _form.LlmApiKey ?? string.Empty,
         MaxHistoryMessages = _form.MaxHistoryMessages,
-        StreamingEnabled = _form.StreamingEnabled
+        StreamingEnabled = _form.StreamingEnabled,
+        LlmThinkEnabled = _form.LlmThinkEnabled
     };
 
     private sealed class LlmForm
@@ -111,5 +121,6 @@ else
         public string LlmApiKey { get; set; } = string.Empty;
         public int MaxHistoryMessages { get; set; } = 20;
         public bool StreamingEnabled { get; set; } = true;
+        public bool LlmThinkEnabled { get; set; }
     }
 }

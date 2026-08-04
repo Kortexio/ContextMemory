@@ -37,6 +37,10 @@ public record AppConfigFile
     [JsonPropertyName("streamingEnabled")]
     public bool StreamingEnabled { get; init; } = true;
 
+    /// <summary>Allow LLM thinking/reasoning tokens. Default off for latency.</summary>
+    [JsonPropertyName("llmThinkEnabled")]
+    public bool LlmThinkEnabled { get; init; }
+
     [JsonPropertyName("rateLimits")]
     public RateLimitConfig? RateLimits { get; init; }
 
@@ -84,6 +88,9 @@ public record AppConfigPatchRequest
 
     [JsonPropertyName("streamingEnabled")]
     public bool? StreamingEnabled { get; init; }
+
+    [JsonPropertyName("llmThinkEnabled")]
+    public bool? LlmThinkEnabled { get; init; }
 
     [JsonPropertyName("basePersona")]
     public string? BasePersona { get; init; }

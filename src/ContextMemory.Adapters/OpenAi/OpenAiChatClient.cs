@@ -258,7 +258,9 @@ internal sealed class OpenAiChatClient
             TopP = request.Options?.TopP,
             MaxTokens = request.Options?.NumPredict,
             Stop = request.Options?.Stop,
-            Seed = request.Options?.Seed
+            Seed = request.Options?.Seed,
+            // Native `think` is ignored on /v1; this is the supported switch.
+            ReasoningEffort = request.Think == false ? "none" : null
         };
     }
 

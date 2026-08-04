@@ -87,4 +87,32 @@ public class OpenAiCompatibleContractTests : IClassFixture<StubOllamaWebApplicat
         Assert.Single(mapped.Tools!);
         Assert.Equal("wiki_search", mapped.Tools![0].Function.Name);
     }
+
+    [Fact]
+    public void MapRequest_ThinkFalse_SetsReasoningEffortNone()
+    {
+        var request = new OllamaRequest
+        {
+            Model = "qwen3.5:9b",
+            Messages = [new OllamaMessage { Role = "user", Content = "hi" }],
+            Think = false
+        };
+
+        var mapped = OpenAiChatClient.MapRequest(request, stream: false);
+        Assert.Equal("none", mapped.ReasoningEffort);
+    }
+
+    [Fact]
+    public void MapRequest_ThinkTrue_OmitsReasoningEffort()
+    {
+        var request = new OllamaRequest
+        {
+            Model = "qwen3.5:9b",
+            Messages = [new OllamaMessage { Role = "user", Content = "hi" }],
+            Think = true
+        };
+
+        var mapped = OpenAiChatClient.MapRequest(request, stream: false);
+        Assert.Null(mapped.ReasoningEffort);
+    }
 }
