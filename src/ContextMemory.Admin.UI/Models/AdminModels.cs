@@ -111,6 +111,37 @@ public sealed class AgenticGuardrailAdminDto
     public int SortOrder { get; set; }
 }
 
+public sealed class AgenticAppCatalogAdminDto
+{
+    public List<AgenticAppSkillAdminDto> Skills { get; set; } = [];
+    public List<AgenticAppGuardrailAdminDto> Guardrails { get; set; } = [];
+}
+
+public sealed class AgenticAppSkillAdminDto
+{
+    public string AppId { get; set; } = string.Empty;
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string PromptMarkdown { get; set; } = string.Empty;
+    public string Category { get; set; } = "general";
+    public bool IsEnabled { get; set; } = true;
+    public int SortOrder { get; set; }
+    public List<string> LinkedGuardrailIds { get; set; } = [];
+}
+
+public sealed class AgenticAppGuardrailAdminDto
+{
+    public string AppId { get; set; } = string.Empty;
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Kind { get; set; } = string.Empty;
+    public string ConfigJson { get; set; } = "{}";
+    public bool IsEnabled { get; set; } = true;
+    public int SortOrder { get; set; }
+}
+
 public sealed class McpServerAdminDto
 {
     public McpServerInfo? Server { get; set; }

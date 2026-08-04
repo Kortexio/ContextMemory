@@ -2,6 +2,11 @@ using System.Text.Json.Serialization;
 
 namespace ContextMemory.Core.Agentic;
 
+/// <summary>
+/// Legacy per-app selection of platform pack IDs. Ignored by the resolver (platform uses
+/// <see cref="AgenticSkillDefinition.IsDefaultEnabled"/>; apps own a separate inventory).
+/// Kept for JSON backward compatibility.
+/// </summary>
 public record PolicyPacksConfig
 {
     [JsonPropertyName("enabledSkillIds")]
@@ -10,7 +15,6 @@ public record PolicyPacksConfig
     [JsonPropertyName("enabledGuardrailIds")]
     public List<string>? EnabledGuardrailIds { get; init; }
 
-    /// <summary>True when the app explicitly set skill/guardrail lists (even if empty).</summary>
     [JsonIgnore]
     public bool IsExplicit => EnabledSkillIds is not null || EnabledGuardrailIds is not null;
 }
@@ -43,10 +47,74 @@ public sealed record AgenticGuardrailDefinition
     public DateTimeOffset UpdatedAt { get; init; }
 }
 
+public sealed record AgenticAppSkillDefinition
+{
+    public required string AppId { get; init; }
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public string Description { get; init; } = string.Empty;
+    public string PromptMarkdown { get; init; } = string.Empty;
+    public string Category { get; init; } = "general";
+    public bool IsEnabled { get; init; } = true;
+    public int SortOrder { get; init; }
+    public IReadOnlyList<string> LinkedGuardrailIds { get; init; } = [];
+    public DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset UpdatedAt { get; init; }
+
+    public AgenticSkillDefinition ToSkillDefinition() =>
+        new()
+        {
+            Id = Id,
+            Name = Name,
+            Description = Description,
+            PromptMarkdown = PromptMarkdown,
+            Category = Category,
+            IsSystem = false,
+            IsDefaultEnabled = IsEnabled,
+            SortOrder = SortOrder,
+            LinkedGuardrailIds = LinkedGuardrailIds,
+            CreatedAt = CreatedAt,
+            UpdatedAt = UpdatedAt
+        };
+}
+
+public sealed record AgenticAppGuardrailDefinition
+{
+    public required string AppId { get; init; }
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public string Description { get; init; } = string.Empty;
+    public required string Kind { get; init; }
+    public string ConfigJson { get; init; } = "{}";
+    public bool IsEnabled { get; init; } = true;
+    public int SortOrder { get; init; }
+    public DateTimeOffset UpdatedAt { get; init; }
+
+    public AgenticGuardrailDefinition ToGuardrailDefinition() =>
+        new()
+        {
+            Id = Id,
+            Name = Name,
+            Description = Description,
+            Kind = Kind,
+            ConfigJson = ConfigJson,
+            IsSystem = false,
+            IsDefaultEnabled = IsEnabled,
+            SortOrder = SortOrder,
+            UpdatedAt = UpdatedAt
+        };
+}
+
 public sealed record AgenticCatalogSnapshot
 {
     public IReadOnlyList<AgenticSkillDefinition> Skills { get; init; } = [];
     public IReadOnlyList<AgenticGuardrailDefinition> Guardrails { get; init; } = [];
+}
+
+public sealed record AgenticAppCatalogSnapshot
+{
+    public IReadOnlyList<AgenticAppSkillDefinition> Skills { get; init; } = [];
+    public IReadOnlyList<AgenticAppGuardrailDefinition> Guardrails { get; init; } = [];
 }
 
 public sealed record ResolvedAgenticPolicy

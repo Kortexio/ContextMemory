@@ -27,6 +27,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IMcpCredentialStore, FileMcpCredentialStore>();
         services.AddSingleton<IMcpCatalogStore, FileMcpCatalogStore>();
         services.AddSingleton<IAgenticPolicyCatalogStore, FileAgenticPolicyCatalogStore>();
+        services.AddSingleton<IAgenticAppPolicyCatalogStore, FileAgenticAppPolicyCatalogStore>();
         return services;
     }
 
@@ -59,6 +60,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IMcpCredentialStore, PostgresMcpCredentialStore>();
         services.AddSingleton<IMcpCatalogStore, PostgresMcpCatalogStore>();
         services.AddSingleton<IAgenticPolicyCatalogStore, PostgresAgenticPolicyCatalogStore>();
+        services.AddSingleton<IAgenticAppPolicyCatalogStore, PostgresAgenticAppPolicyCatalogStore>();
         services.AddSingleton<IPostgresHealthCheck, PostgresHealthCheck>();
 
         return services;

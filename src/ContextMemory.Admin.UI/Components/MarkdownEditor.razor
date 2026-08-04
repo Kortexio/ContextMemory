@@ -1,0 +1,76 @@
+@using Markdig
+
+<div class="kx-md-editor">
+    <div class="kx-md-toolbar">
+        <button type="button" class="btn btn-sm btn-outline-secondary" title="Bold" @onclick='() => Wrap("**", "**")'><strong>B</strong></button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" title="Italic" @onclick='() => Wrap("*", "*")'><em>I</em></button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" title="Heading" @onclick='() => Prefix("## ")'>H2</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" title="List" @onclick='() => Prefix("- ")'>List</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" title="Code" @onclick='() => Wrap("`", "`")'>Code</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" title="Link" @onclick="InsertLink">Link</button>
+        <div class="kx-md-tabs">
+            <button type="button" class="btn btn-sm @(_tab == "write" ? "btn-primary" : "btn-outline-secondary")" @onclick='() => _tab = "write"'>Write</button>
+            <button type="button" class="btn btn-sm @(_tab == "preview" ? "btn-primary" : "btn-outline-secondary")" @onclick='() => _tab = "preview"'>Preview</button>
+        </div>
+    </div>
+
+    @if (_tab == "write")
+    {
+        <textarea class="form-control kx-md-textarea"
+                  rows="@Rows"
+                  value="@Value"
+                  @oninput="OnInput"
+                  placeholder="@Placeholder"></textarea>
+    }
+    else
+    {
+        <div class="kx-md-preview kx-docs-body">
+            @((MarkupString)ToHtml(Value))
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .UseBootstrap()
+        .Build();
+
+    [Parameter] public string Value { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public int Rows { get; set; } = 12;
+    [Parameter] public string Placeholder { get; set; } = "Write markdown…";
+
+    private string _tab = "write";
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        Value = e.Value?.ToString() ?? string.Empty;
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private async Task Wrap(string before, string after)
+    {
+        Value = $"{Value}{before}text{after}";
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private async Task Prefix(string prefix)
+    {
+        Value = string.IsNullOrEmpty(Value) ? $"{prefix}" : $"{Value}\n{prefix}";
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private async Task InsertLink()
+    {
+        Value = $"{Value}[label](https://)";
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private static string ToHtml(string? markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown))
+            return "<p class=\"text-muted\">Nothing to preview.</p>";
+        return Markdown.ToHtml(markdown, Pipeline);
+    }
+}

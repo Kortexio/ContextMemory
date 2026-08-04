@@ -17,6 +17,13 @@ public static class AdminAgenticCatalogEndpoint
         app.MapDelete("/admin/agentic/skills/{id}", DeleteSkill);
         app.MapGet("/admin/agentic/skills/{id}/export", ExportSkill);
         app.MapPost("/admin/agentic/skills/import", ImportSkill).DisableAntiforgery();
+
+        app.MapGet("/admin/agentic/guardrails/{id}", GetGuardrail);
+        app.MapPost("/admin/agentic/guardrails", CreateGuardrail).DisableAntiforgery();
+        app.MapPut("/admin/agentic/guardrails/{id}", UpdateGuardrail).DisableAntiforgery();
+        app.MapDelete("/admin/agentic/guardrails/{id}", DeleteGuardrail);
+        app.MapGet("/admin/agentic/guardrails/{id}/export", ExportGuardrail);
+        app.MapPost("/admin/agentic/guardrails/import", ImportGuardrail).DisableAntiforgery();
     }
 
     private static async Task<IResult> GetCatalog(
@@ -181,6 +188,160 @@ public static class AdminAgenticCatalogEndpoint
         return Results.Json(upserted);
     }
 
+    private static async Task<IResult> GetGuardrail(
+        string id,
+        IAgenticPolicyCatalogStore catalog,
+        CancellationToken cancellationToken)
+    {
+        var guardrail = await catalog.GetGuardrailAsync(id, cancellationToken).ConfigureAwait(false);
+        return guardrail is null
+            ? Results.NotFound(new { error = "Guardrail not found." })
+            : Results.Json(guardrail);
+    }
+
+    private static async Task<IResult> CreateGuardrail(
+        AgenticGuardrailUpsertRequest body,
+        IAgenticPolicyCatalogStore catalog,
+        CancellationToken cancellationToken)
+    {
+        var id = string.IsNullOrWhiteSpace(body.Id) ? Slugify(body.Name) : body.Id.Trim();
+        if (string.IsNullOrWhiteSpace(id))
+            return Results.BadRequest(new { error = "id or name is required." });
+        if (string.IsNullOrWhiteSpace(body.Kind))
+            return Results.BadRequest(new { error = "kind is required." });
+
+        var existing = await catalog.GetGuardrailAsync(id, cancellationToken).ConfigureAwait(false);
+        if (existing is not null)
+            return Results.Conflict(new { error = $"Guardrail '{id}' already exists." });
+
+        var created = await catalog.UpsertGuardrailAsync(
+                ToGuardrailDefinition(id, body, isSystem: false),
+                cancellationToken)
+            .ConfigureAwait(false);
+        return Results.Json(created);
+    }
+
+    private static async Task<IResult> UpdateGuardrail(
+        string id,
+        AgenticGuardrailUpsertRequest body,
+        IAgenticPolicyCatalogStore catalog,
+        CancellationToken cancellationToken)
+    {
+        var existing = await catalog.GetGuardrailAsync(id, cancellationToken).ConfigureAwait(false);
+        if (existing is null)
+            return Results.NotFound(new { error = "Guardrail not found." });
+        if (string.IsNullOrWhiteSpace(body.Kind))
+            return Results.BadRequest(new { error = "kind is required." });
+
+        var updated = await catalog.UpsertGuardrailAsync(
+                ToGuardrailDefinition(id, body, existing.IsSystem),
+                cancellationToken)
+            .ConfigureAwait(false);
+        return Results.Json(updated);
+    }
+
+    private static async Task<IResult> DeleteGuardrail(
+        string id,
+        IAgenticPolicyCatalogStore catalog,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var deleted = await catalog.DeleteGuardrailAsync(id, cancellationToken).ConfigureAwait(false);
+            return deleted
+                ? Results.NoContent()
+                : Results.NotFound(new { error = "Guardrail not found." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+    }
+
+    private static async Task<IResult> ExportGuardrail(
+        string id,
+        IAgenticPolicyCatalogStore catalog,
+        CancellationToken cancellationToken)
+    {
+        var guardrail = await catalog.GetGuardrailAsync(id, cancellationToken).ConfigureAwait(false);
+        if (guardrail is null)
+            return Results.NotFound(new { error = "Guardrail not found." });
+
+        var payload = new AgenticGuardrailExportDto
+        {
+            Id = guardrail.Id,
+            Name = guardrail.Name,
+            Description = guardrail.Description,
+            Kind = guardrail.Kind,
+            ConfigJson = guardrail.ConfigJson,
+            IsDefaultEnabled = guardrail.IsDefaultEnabled,
+            SortOrder = guardrail.SortOrder
+        };
+        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
+        return Results.File(Encoding.UTF8.GetBytes(json), "application/json", $"{guardrail.Id}.guardrail.json");
+    }
+
+    private static async Task<IResult> ImportGuardrail(
+        HttpRequest request,
+        IAgenticPolicyCatalogStore catalog,
+        CancellationToken cancellationToken)
+    {
+        var replace = string.Equals(request.Query["replace"], "true", StringComparison.OrdinalIgnoreCase);
+        AgenticGuardrailExportDto? dto;
+
+        if (request.HasFormContentType)
+        {
+            var form = await request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+            replace = replace || string.Equals(form["replace"], "true", StringComparison.OrdinalIgnoreCase);
+            var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
+            if (file is null)
+                return Results.BadRequest(new { error = "file is required." });
+
+            await using var stream = file.OpenReadStream();
+            dto = await JsonSerializer.DeserializeAsync<AgenticGuardrailExportDto>(
+                    stream,
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            dto = await JsonSerializer.DeserializeAsync<AgenticGuardrailExportDto>(
+                    request.Body,
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (dto is null || string.IsNullOrWhiteSpace(dto.Id) && string.IsNullOrWhiteSpace(dto.Name))
+            return Results.BadRequest(new { error = "Invalid guardrail payload." });
+        if (string.IsNullOrWhiteSpace(dto.Kind))
+            return Results.BadRequest(new { error = "kind is required." });
+
+        var id = string.IsNullOrWhiteSpace(dto.Id) ? Slugify(dto.Name) : dto.Id.Trim();
+        var existing = await catalog.GetGuardrailAsync(id, cancellationToken).ConfigureAwait(false);
+        if (existing is not null && !replace)
+            return Results.Conflict(new { error = $"Guardrail '{id}' already exists. Pass replace=true to overwrite." });
+
+        var upserted = await catalog.UpsertGuardrailAsync(
+                new AgenticGuardrailDefinition
+                {
+                    Id = id,
+                    Name = string.IsNullOrWhiteSpace(dto.Name) ? id : dto.Name,
+                    Description = dto.Description ?? string.Empty,
+                    Kind = dto.Kind.Trim(),
+                    ConfigJson = string.IsNullOrWhiteSpace(dto.ConfigJson) ? "{}" : dto.ConfigJson,
+                    IsDefaultEnabled = dto.IsDefaultEnabled,
+                    SortOrder = dto.SortOrder,
+                    IsSystem = existing?.IsSystem ?? false,
+                    UpdatedAt = DateTimeOffset.UtcNow
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.Json(upserted);
+    }
+
     private static AgenticSkillExportDto? ParseImport(string text)
     {
         text = text.Trim();
@@ -242,6 +403,23 @@ public static class AdminAgenticCatalogEndpoint
             UpdatedAt = DateTimeOffset.UtcNow
         };
 
+    private static AgenticGuardrailDefinition ToGuardrailDefinition(
+        string id,
+        AgenticGuardrailUpsertRequest body,
+        bool isSystem) =>
+        new()
+        {
+            Id = id,
+            Name = string.IsNullOrWhiteSpace(body.Name) ? id : body.Name.Trim(),
+            Description = body.Description?.Trim() ?? string.Empty,
+            Kind = body.Kind.Trim(),
+            ConfigJson = string.IsNullOrWhiteSpace(body.ConfigJson) ? "{}" : body.ConfigJson,
+            IsSystem = isSystem,
+            IsDefaultEnabled = body.IsDefaultEnabled,
+            SortOrder = body.SortOrder,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
     private static string Slugify(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -271,6 +449,28 @@ public sealed class AgenticSkillExportDto
     public string? Category { get; set; }
     public string? PromptMarkdown { get; set; }
     public List<string>? LinkedGuardrailIds { get; set; }
+    public bool IsDefaultEnabled { get; set; }
+    public int SortOrder { get; set; }
+}
+
+public sealed class AgenticGuardrailUpsertRequest
+{
+    public string? Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string Kind { get; set; } = string.Empty;
+    public string? ConfigJson { get; set; }
+    public bool IsDefaultEnabled { get; set; }
+    public int SortOrder { get; set; } = 500;
+}
+
+public sealed class AgenticGuardrailExportDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string Kind { get; set; } = string.Empty;
+    public string? ConfigJson { get; set; }
     public bool IsDefaultEnabled { get; set; }
     public int SortOrder { get; set; }
 }

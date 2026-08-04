@@ -1,3 +1,4 @@
+using ContextMemory.Core.Agentic;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -6,14 +7,17 @@ namespace ContextMemory.Core.Agentic;
 
 public sealed class AgenticPolicyPackResolver : IAgenticPolicyPackResolver
 {
-    private readonly IAgenticPolicyCatalogStore _catalog;
+    private readonly IAgenticPolicyCatalogStore _platformCatalog;
+    private readonly IAgenticAppPolicyCatalogStore _appCatalog;
     private readonly ILogger<AgenticPolicyPackResolver> _logger;
 
     public AgenticPolicyPackResolver(
-        IAgenticPolicyCatalogStore catalog,
+        IAgenticPolicyCatalogStore platformCatalog,
+        IAgenticAppPolicyCatalogStore appCatalog,
         ILogger<AgenticPolicyPackResolver> logger)
     {
-        _catalog = catalog;
+        _platformCatalog = platformCatalog;
+        _appCatalog = appCatalog;
         _logger = logger;
     }
 
@@ -21,31 +25,49 @@ public sealed class AgenticPolicyPackResolver : IAgenticPolicyPackResolver
         AppRuntimeConfig runtimeConfig,
         CancellationToken cancellationToken = default)
     {
-        await _catalog.EnsureSeededAsync(cancellationToken).ConfigureAwait(false);
-        var snapshot = await _catalog.GetCatalogAsync(cancellationToken).ConfigureAwait(false);
-
-        var packs = runtimeConfig.Agentic.PolicyPacks;
-        var skillIds = ResolveIds(
-            packs.EnabledSkillIds,
-            snapshot.Skills.Where(s => s.IsDefaultEnabled).Select(s => s.Id));
-        var guardrailIds = ResolveIds(
-            packs.EnabledGuardrailIds,
-            snapshot.Guardrails.Where(g => g.IsDefaultEnabled).Select(g => g.Id));
+        await _platformCatalog.EnsureSeededAsync(cancellationToken).ConfigureAwait(false);
+        var platform = await _platformCatalog.GetCatalogAsync(cancellationToken).ConfigureAwait(false);
+        var app = string.IsNullOrWhiteSpace(runtimeConfig.AppId)
+            ? new AgenticAppCatalogSnapshot()
+            : await _appCatalog.GetCatalogAsync(runtimeConfig.AppId, cancellationToken).ConfigureAwait(false);
 
         var hasSelfHosted = runtimeConfig.Agentic.Tools.Execution.Any(e =>
             string.Equals(e.Type, "self-hosted-sandbox", StringComparison.OrdinalIgnoreCase)
             && !string.IsNullOrWhiteSpace(e.SandboxEndpoint));
 
-        var activeSkills = snapshot.Skills
-            .Where(s => skillIds.Contains(s.Id))
+        var platformSkills = platform.Skills
+            .Where(s => s.IsDefaultEnabled)
             .Where(s => hasSelfHosted
                         || !string.Equals(s.Id, "sandbox-facts-selfhosted", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var platformIds = new HashSet<string>(platformSkills.Select(s => s.Id), StringComparer.OrdinalIgnoreCase);
+
+        var appSkills = app.Skills
+            .Where(s => s.IsEnabled)
+            .Where(s => !platformIds.Contains(s.Id))
+            .Select(s => s.ToSkillDefinition())
+            .ToList();
+
+        var activeSkills = platformSkills
+            .Concat(appSkills)
             .OrderBy(s => s.SortOrder)
             .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var activeGuardrails = snapshot.Guardrails
-            .Where(g => guardrailIds.Contains(g.Id))
+        var platformGuardrails = platform.Guardrails.Where(g => g.IsDefaultEnabled).ToList();
+        var platformGuardrailIds = new HashSet<string>(
+            platformGuardrails.Select(g => g.Id),
+            StringComparer.OrdinalIgnoreCase);
+
+        var appGuardrails = app.Guardrails
+            .Where(g => g.IsEnabled)
+            .Where(g => !platformGuardrailIds.Contains(g.Id))
+            .Select(g => g.ToGuardrailDefinition())
+            .ToList();
+
+        var activeGuardrails = platformGuardrails
+            .Concat(appGuardrails)
             .OrderBy(g => g.SortOrder)
             .ThenBy(g => g.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -55,9 +77,11 @@ public sealed class AgenticPolicyPackResolver : IAgenticPolicyPackResolver
             StringComparer.OrdinalIgnoreCase);
 
         _logger.LogDebug(
-            "Resolved agentic policy for {AppId}: {SkillCount} skills, {GuardrailCount} guardrails",
+            "Resolved agentic policy for {AppId}: {SkillCount} skills ({PlatformSkills} platform + {AppSkills} app), {GuardrailCount} guardrails",
             runtimeConfig.AppId,
             activeSkills.Count,
+            platformSkills.Count,
+            appSkills.Count,
             activeGuardrails.Count);
 
         return runtimeConfig with
@@ -69,15 +93,5 @@ public sealed class AgenticPolicyPackResolver : IAgenticPolicyPackResolver
                 ActiveGuardrailKinds = kinds
             }
         };
-    }
-
-    private static HashSet<string> ResolveIds(IReadOnlyList<string>? explicitIds, IEnumerable<string> defaults)
-    {
-        if (explicitIds is null)
-            return new HashSet<string>(defaults, StringComparer.OrdinalIgnoreCase);
-
-        return new HashSet<string>(
-            explicitIds.Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id.Trim()),
-            StringComparer.OrdinalIgnoreCase);
     }
 }

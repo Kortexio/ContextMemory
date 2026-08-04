@@ -19,6 +19,8 @@ public sealed class ContextMemoryDbContext : DbContext
     public DbSet<McpCatalogSyncEntity> McpCatalogSync => Set<McpCatalogSyncEntity>();
     public DbSet<AgenticSkillCatalogEntity> AgenticSkillCatalog => Set<AgenticSkillCatalogEntity>();
     public DbSet<AgenticGuardrailCatalogEntity> AgenticGuardrailCatalog => Set<AgenticGuardrailCatalogEntity>();
+    public DbSet<AgenticAppSkillEntity> AgenticAppSkills => Set<AgenticAppSkillEntity>();
+    public DbSet<AgenticAppGuardrailEntity> AgenticAppGuardrails => Set<AgenticAppGuardrailEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -143,6 +145,36 @@ public sealed class ContextMemoryDbContext : DbContext
             e.HasIndex(x => x.Kind);
             e.HasIndex(x => x.SortOrder);
         });
+
+        modelBuilder.Entity<AgenticAppSkillEntity>(e =>
+        {
+            e.ToTable("agentic_app_skills");
+            e.HasKey(x => new { x.AppId, x.Id });
+            e.Property(x => x.AppId).HasMaxLength(64);
+            e.Property(x => x.Id).HasMaxLength(128);
+            e.Property(x => x.Name).HasMaxLength(256);
+            e.Property(x => x.Description).HasColumnType("text");
+            e.Property(x => x.PromptMarkdown).HasColumnType("text");
+            e.Property(x => x.Category).HasMaxLength(64);
+            e.Property(x => x.LinkedGuardrailIdsJson).HasColumnType("jsonb");
+            e.HasIndex(x => x.AppId);
+            e.HasIndex(x => x.SortOrder);
+        });
+
+        modelBuilder.Entity<AgenticAppGuardrailEntity>(e =>
+        {
+            e.ToTable("agentic_app_guardrails");
+            e.HasKey(x => new { x.AppId, x.Id });
+            e.Property(x => x.AppId).HasMaxLength(64);
+            e.Property(x => x.Id).HasMaxLength(128);
+            e.Property(x => x.Name).HasMaxLength(256);
+            e.Property(x => x.Description).HasColumnType("text");
+            e.Property(x => x.Kind).HasMaxLength(64);
+            e.Property(x => x.ConfigJson).HasColumnType("jsonb");
+            e.HasIndex(x => x.AppId);
+            e.HasIndex(x => x.Kind);
+            e.HasIndex(x => x.SortOrder);
+        });
     }
 }
 
@@ -170,6 +202,34 @@ public sealed class AgenticGuardrailCatalogEntity
     public string ConfigJson { get; set; } = "{}";
     public bool IsSystem { get; set; }
     public bool IsDefaultEnabled { get; set; }
+    public int SortOrder { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class AgenticAppSkillEntity
+{
+    public string AppId { get; set; } = string.Empty;
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string PromptMarkdown { get; set; } = string.Empty;
+    public string Category { get; set; } = "general";
+    public bool IsEnabled { get; set; } = true;
+    public int SortOrder { get; set; }
+    public string LinkedGuardrailIdsJson { get; set; } = "[]";
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class AgenticAppGuardrailEntity
+{
+    public string AppId { get; set; } = string.Empty;
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Kind { get; set; } = string.Empty;
+    public string ConfigJson { get; set; } = "{}";
+    public bool IsEnabled { get; set; } = true;
     public int SortOrder { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

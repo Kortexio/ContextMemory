@@ -1,4 +1,4 @@
-﻿> Part of the ContextMemory docs. [Back to README](../README.md).
+> Part of the ContextMemory docs. [Back to README](../README.md).
 
 ## API — stable contract
 
@@ -24,8 +24,12 @@
 | `POST /apps/{id}/mcp/credentials/{name}` | Upsert MCP credentials |
 | `GET /apps/{id}/config` | Runtime config (auth with app API key) |
 | `PATCH /admin/apps/{id}/config` | Update config (Master Key), including `GlobalWikiEnabled` |
-| `GET /admin/agentic/catalog` | Skills + guardrail packs |
-| `POST/PUT/DELETE /admin/agentic/skills...` | Manage skills (import/export supported) |
+| `GET /admin/agentic/catalog` | Platform skills + guardrail packs |
+| `POST/PUT/DELETE /admin/agentic/skills...` | Platform skills (import/export) |
+| `POST/PUT/DELETE /admin/agentic/guardrails...` | Platform guardrails (import/export) |
+| `GET /admin/apps/{appId}/agentic/catalog` | App-owned skills + guardrails |
+| `POST/PUT/DELETE /admin/apps/{appId}/skills...` | App skills CRUD (import/export) |
+| `POST/PUT/DELETE /admin/apps/{appId}/guardrails...` | App guardrails CRUD (import/export) |
 | `GET /health` | API, Ollama, Postgres health |
 | `GET /admin` | HTML pointer to the Admin UI host |
 

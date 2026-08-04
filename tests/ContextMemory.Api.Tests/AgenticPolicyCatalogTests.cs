@@ -22,10 +22,11 @@ public sealed class AgenticPolicyPackResolverTests
     }
 
     [Fact]
-    public async Task Resolver_AppliesDefaultEnabled_WhenPolicyPacksOmitted()
+    public async Task Resolver_AppliesPlatformDefaultEnabled()
     {
         var resolver = new AgenticPolicyPackResolver(
             new InMemoryAgenticPolicyCatalogStore(),
+            new InMemoryAgenticAppPolicyCatalogStore(),
             NullLogger<AgenticPolicyPackResolver>.Instance);
 
         var resolved = await resolver.ResolveAsync(new AppRuntimeConfig
@@ -60,6 +61,7 @@ public sealed class AgenticPolicyPackResolverTests
     {
         var resolver = new AgenticPolicyPackResolver(
             new InMemoryAgenticPolicyCatalogStore(),
+            new InMemoryAgenticAppPolicyCatalogStore(),
             NullLogger<AgenticPolicyPackResolver>.Instance);
 
         var resolved = await resolver.ResolveAsync(new AppRuntimeConfig
@@ -72,10 +74,22 @@ public sealed class AgenticPolicyPackResolverTests
     }
 
     [Fact]
-    public async Task Resolver_HonorsExplicitEmptySkillList()
+    public async Task Resolver_IgnoresLegacyPolicyPacks_AndUnionsAppSkills()
     {
+        var appStore = new InMemoryAgenticAppPolicyCatalogStore();
+        await appStore.UpsertSkillAsync(new AgenticAppSkillDefinition
+        {
+            AppId = "test",
+            Id = "tenant-only-skill",
+            Name = "Tenant only",
+            PromptMarkdown = "## Tenant",
+            IsEnabled = true,
+            SortOrder = 10
+        });
+
         var resolver = new AgenticPolicyPackResolver(
             new InMemoryAgenticPolicyCatalogStore(),
+            appStore,
             NullLogger<AgenticPolicyPackResolver>.Instance);
 
         var resolved = await resolver.ResolveAsync(new AppRuntimeConfig
@@ -86,14 +100,39 @@ public sealed class AgenticPolicyPackResolverTests
                 PolicyPacks = new PolicyPacksConfig
                 {
                     EnabledSkillIds = [],
-                    EnabledGuardrailIds = ["url-fetch-required"]
+                    EnabledGuardrailIds = []
                 }
             }
         });
 
-        Assert.Empty(resolved.ResolvedPolicy.ActiveSkills);
+        Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "anti-hallucination-web");
+        Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "tenant-only-skill");
         Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.UrlFetch));
-        Assert.False(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.SandboxClaim));
+    }
+
+    [Fact]
+    public async Task Resolver_DoesNotLeakAppSkillsAcrossTenants()
+    {
+        var appStore = new InMemoryAgenticAppPolicyCatalogStore();
+        await appStore.UpsertSkillAsync(new AgenticAppSkillDefinition
+        {
+            AppId = "kyc",
+            Id = "kyc-only",
+            Name = "KYC",
+            PromptMarkdown = "kyc",
+            IsEnabled = true
+        });
+
+        var resolver = new AgenticPolicyPackResolver(
+            new InMemoryAgenticPolicyCatalogStore(),
+            appStore,
+            NullLogger<AgenticPolicyPackResolver>.Instance);
+
+        var other = await resolver.ResolveAsync(new AppRuntimeConfig { AppId = "other" });
+        Assert.DoesNotContain(other.ResolvedPolicy.ActiveSkills, s => s.Id == "kyc-only");
+
+        var kyc = await resolver.ResolveAsync(new AppRuntimeConfig { AppId = "kyc" });
+        Assert.Contains(kyc.ResolvedPolicy.ActiveSkills, s => s.Id == "kyc-only");
     }
 }
 
@@ -169,4 +208,68 @@ file sealed class InMemoryAgenticPolicyCatalogStore : IAgenticPolicyCatalogStore
     public Task<IReadOnlyList<AgenticGuardrailDefinition>> ListGuardrailsAsync(
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<AgenticGuardrailDefinition>>(_guardrails);
+
+    public Task<AgenticGuardrailDefinition?> GetGuardrailAsync(string id, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_guardrails.FirstOrDefault(g => g.Id == id));
+
+    public Task<AgenticGuardrailDefinition> UpsertGuardrailAsync(
+        AgenticGuardrailDefinition guardrail,
+        CancellationToken cancellationToken = default)
+    {
+        _guardrails.RemoveAll(g => g.Id == guardrail.Id);
+        _guardrails.Add(guardrail);
+        return Task.FromResult(guardrail);
+    }
+
+    public Task<bool> DeleteGuardrailAsync(string id, CancellationToken cancellationToken = default)
+    {
+        var n = _guardrails.RemoveAll(g => g.Id == id && !g.IsSystem);
+        return Task.FromResult(n > 0);
+    }
+}
+
+file sealed class InMemoryAgenticAppPolicyCatalogStore : IAgenticAppPolicyCatalogStore
+{
+    private readonly List<AgenticAppSkillDefinition> _skills = [];
+    private readonly List<AgenticAppGuardrailDefinition> _guardrails = [];
+
+    public Task<AgenticAppCatalogSnapshot> GetCatalogAsync(string appId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new AgenticAppCatalogSnapshot
+        {
+            Skills = _skills.Where(s => s.AppId == appId).ToList(),
+            Guardrails = _guardrails.Where(g => g.AppId == appId).ToList()
+        });
+
+    public Task<AgenticAppSkillDefinition?> GetSkillAsync(string appId, string id, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_skills.FirstOrDefault(s => s.AppId == appId && s.Id == id));
+
+    public Task<AgenticAppSkillDefinition> UpsertSkillAsync(
+        AgenticAppSkillDefinition skill,
+        CancellationToken cancellationToken = default)
+    {
+        _skills.RemoveAll(s => s.AppId == skill.AppId && s.Id == skill.Id);
+        _skills.Add(skill);
+        return Task.FromResult(skill);
+    }
+
+    public Task<bool> DeleteSkillAsync(string appId, string id, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_skills.RemoveAll(s => s.AppId == appId && s.Id == id) > 0);
+
+    public Task<AgenticAppGuardrailDefinition?> GetGuardrailAsync(
+        string appId,
+        string id,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(_guardrails.FirstOrDefault(g => g.AppId == appId && g.Id == id));
+
+    public Task<AgenticAppGuardrailDefinition> UpsertGuardrailAsync(
+        AgenticAppGuardrailDefinition guardrail,
+        CancellationToken cancellationToken = default)
+    {
+        _guardrails.RemoveAll(g => g.AppId == guardrail.AppId && g.Id == guardrail.Id);
+        _guardrails.Add(guardrail);
+        return Task.FromResult(guardrail);
+    }
+
+    public Task<bool> DeleteGuardrailAsync(string appId, string id, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_guardrails.RemoveAll(g => g.AppId == appId && g.Id == id) > 0);
 }
