@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -12,6 +13,10 @@ namespace ContextMemory.Infrastructure.Agentic.Mcp;
 
 public sealed class McpJsonRpcClient
 {
+    private const string McpSessionIdHeader = "Mcp-Session-Id";
+    private const string McpProtocolVersionHeader = "MCP-Protocol-Version";
+    private const string McpProtocolVersion = "2024-11-05";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -23,6 +28,7 @@ public sealed class McpJsonRpcClient
     private readonly IMcpCredentialStore _credentialStore;
     private readonly McpOAuthTokenProvider _oauthTokenProvider;
     private readonly McpStdioClient _stdioClient;
+    private readonly ConcurrentDictionary<string, string> _sessionIds = new(StringComparer.Ordinal);
     private int _requestId;
 
     public McpJsonRpcClient(
@@ -170,6 +176,7 @@ public sealed class McpJsonRpcClient
             .ConfigureAwait(false);
 
         var body = await httpResponse.Content.ReadAsStringAsync(requestCts.Token).ConfigureAwait(false);
+        RememberSessionId(server, httpResponse);
 
         if (!httpResponse.IsSuccessStatusCode)
         {
@@ -182,7 +189,8 @@ public sealed class McpJsonRpcClient
             throw new HttpRequestException($"MCP HTTP {(int)httpResponse.StatusCode}: {body}");
         }
 
-        var parsed = JsonSerializer.Deserialize<McpJsonRpcResponse>(body, JsonOptions)
+        var jsonPayload = ExtractJsonRpcPayload(body);
+        var parsed = JsonSerializer.Deserialize<McpJsonRpcResponse>(jsonPayload, JsonOptions)
                      ?? throw new InvalidOperationException("Empty MCP JSON-RPC response.");
 
         return parsed;
@@ -201,6 +209,8 @@ public sealed class McpJsonRpcClient
             requestCts.CancelAfter(TimeSpan.FromSeconds(server.TimeoutSeconds));
         using var httpResponse = await _httpClient.SendAsync(httpRequest, requestCts.Token)
             .ConfigureAwait(false);
+
+        RememberSessionId(server, httpResponse);
 
         if (!httpResponse.IsSuccessStatusCode)
         {
@@ -222,9 +232,89 @@ public sealed class McpJsonRpcClient
 
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+        request.Headers.TryAddWithoutValidation(McpProtocolVersionHeader, McpProtocolVersion);
+
+        if (!string.IsNullOrWhiteSpace(server.Url)
+            && _sessionIds.TryGetValue(server.Url, out var sessionId)
+            && !string.IsNullOrWhiteSpace(sessionId))
+        {
+            request.Headers.TryAddWithoutValidation(McpSessionIdHeader, sessionId);
+        }
 
         await ApplyAuthAsync(server, request, cancellationToken).ConfigureAwait(false);
         return request;
+    }
+
+    private void RememberSessionId(IntegrationToolConfig server, HttpResponseMessage httpResponse)
+    {
+        if (string.IsNullOrWhiteSpace(server.Url))
+            return;
+
+        if (!TryGetHeaderValue(httpResponse.Headers, McpSessionIdHeader, out var sessionId)
+            || string.IsNullOrWhiteSpace(sessionId))
+            return;
+
+        _sessionIds[server.Url] = sessionId;
+    }
+
+    /// <summary>
+    /// Accepts plain JSON-RPC bodies and MCP streamable-HTTP SSE frames
+    /// (<c>event: message</c> / <c>data: {...}</c>), as used by GitHub Copilot MCP.
+    /// </summary>
+    internal static string ExtractJsonRpcPayload(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            throw new InvalidOperationException("Empty MCP HTTP response body.");
+
+        var trimmed = body.TrimStart();
+        if (trimmed.StartsWith('{') || trimmed.StartsWith('['))
+            return trimmed;
+
+        // SSE: collect data: lines until a blank line ends the first event.
+        var dataLines = new List<string>();
+        using var reader = new StringReader(body);
+        while (reader.ReadLine() is { } line)
+        {
+            if (line.Length == 0)
+            {
+                if (dataLines.Count > 0)
+                    break;
+                continue;
+            }
+
+            if (line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            {
+                var data = line.Length > 5 && line[5] == ' '
+                    ? line[6..]
+                    : line[5..];
+                dataLines.Add(data);
+            }
+        }
+
+        if (dataLines.Count == 0)
+            throw new InvalidOperationException("MCP HTTP response was not JSON or SSE data.");
+
+        return string.Join("\n", dataLines);
+    }
+
+    private static bool TryGetHeaderValue(HttpResponseHeaders headers, string name, out string? value)
+    {
+        if (headers.TryGetValues(name, out var values))
+        {
+            value = values.FirstOrDefault();
+            return !string.IsNullOrWhiteSpace(value);
+        }
+
+        foreach (var header in headers)
+        {
+            if (!header.Key.Equals(name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            value = header.Value.FirstOrDefault();
+            return !string.IsNullOrWhiteSpace(value);
+        }
+
+        value = null;
+        return false;
     }
 
     private async Task<IntegrationToolConfig> ResolveServerAsync(
