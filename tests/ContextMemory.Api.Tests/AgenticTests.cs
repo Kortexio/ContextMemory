@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using ContextMemory.Core.Agentic;
 using ContextMemory.Core.Agentic.Mcp;
 using ContextMemory.Core.Contracts;
@@ -448,6 +449,63 @@ public sealed class McpJsonRpcClientTests
         Assert.Contains("zuora-mcp", output.Summary);
     }
 
+    [Theory]
+    [InlineData(
+        """
+        event: message
+        data: {"jsonrpc":"2.0","id":1,"result":{"ok":true}}
+
+        """,
+        """{"jsonrpc":"2.0","id":1,"result":{"ok":true}}""")]
+    [InlineData(
+        """{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}""",
+        """{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}""")]
+    public void ExtractJsonRpcPayload_SupportsSseAndPlainJson(string body, string expectedJson)
+    {
+        var payload = ContextMemory.Infrastructure.Agentic.Mcp.McpJsonRpcClient.ExtractJsonRpcPayload(body);
+        Assert.Equal(expectedJson.Trim(), payload.Trim());
+    }
+
+    [Fact]
+    public async Task ListToolsAsync_HttpSse_ParsesToolsAndSendsSession()
+    {
+        var handler = new SseMcpHandler();
+        var credentials = new StubMcpCredentialStore();
+        var oauth = new ContextMemory.Infrastructure.Agentic.Mcp.McpOAuthTokenProvider(
+            new HttpClient(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpOAuthTokenProvider>.Instance);
+        var stdio = new ContextMemory.Infrastructure.Agentic.Mcp.McpStdioClient(
+            credentials,
+            new SingleHttpClientFactory(),
+            Microsoft.Extensions.Options.Options.Create(new ContextMemory.Core.Configuration.ContextMemoryOptions()),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpStdioClient>.Instance);
+        var client = new ContextMemory.Infrastructure.Agentic.Mcp.McpJsonRpcClient(
+            new HttpClient(handler),
+            credentials,
+            oauth,
+            stdio,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ContextMemory.Infrastructure.Agentic.Mcp.McpJsonRpcClient>.Instance);
+
+        var server = new IntegrationToolConfig
+        {
+            Name = "github",
+            Url = "https://mcp.example.test/",
+            Transport = "http",
+            AuthMode = "bearer",
+            AuthToken = "test-token",
+            Type = "mcp",
+            TimeoutSeconds = 30
+        };
+
+        var tools = await client.ListToolsAsync("demo-app", server);
+
+        Assert.Equal(3, handler.RequestCount);
+        Assert.Contains(handler.SessionIdsSeen, id => id == "session-abc");
+        Assert.Single(tools);
+        Assert.Equal("list_repos", tools[0].Name);
+        Assert.Equal("github__list_repos", tools[0].QualifiedName);
+    }
+
     [Fact]
     public async Task ListToolsAsync_MockStdio_ReturnsTools()
     {
@@ -551,6 +609,49 @@ public sealed class McpJsonRpcClientTests
     private sealed class SingleHttpClientFactory : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new();
+    }
+
+    private sealed class SseMcpHandler : HttpMessageHandler
+    {
+        public int RequestCount { get; private set; }
+        public List<string?> SessionIdsSeen { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            SessionIdsSeen.Add(
+                request.Headers.TryGetValues("Mcp-Session-Id", out var values)
+                    ? values.FirstOrDefault()
+                    : null);
+
+            var body = request.Content is null
+                ? string.Empty
+                : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+            string sse;
+            if (body.Contains("\"initialize\"", StringComparison.Ordinal))
+            {
+                sse = "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{},\"protocolVersion\":\"2024-11-05\"}}\n\n";
+            }
+            else if (body.Contains("notifications/initialized", StringComparison.Ordinal))
+            {
+                sse = "event: message\ndata: {}\n\n";
+            }
+            else
+            {
+                sse =
+                    "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[{\"name\":\"list_repos\",\"description\":\"List repositories\",\"inputSchema\":{\"type\":\"object\"}}]}}\n\n";
+            }
+
+            var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(sse, Encoding.UTF8, "text/event-stream")
+            };
+            response.Headers.TryAddWithoutValidation("Mcp-Session-Id", "session-abc");
+            return response;
+        }
     }
 }
 
