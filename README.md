@@ -5,52 +5,57 @@
 </p>
 
 <p align="center">
-  <a href="https://kortexio.io">Website</a>
+  <a href="https://kortexio.io"><strong>Get Cloud key</strong></a>
+  ·
+  <a href="#quickstart-5-minutes">Self-host</a>
   ·
   <a href="docs/README.md">Docs</a>
   ·
   <a href="docs/aha-demo.html">Demo</a>
-  ·
-  <a href="https://kortexio.io">Cloud</a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%203.0-blue.svg" alt="License: AGPL-3.0"></a>
   <a href="https://dotnet.microsoft.com/"><img src="https://img.shields.io/badge/.NET-9.0-512BD4" alt=".NET 9"></a>
   <a href="https://github.com/users/Kortexio/packages/container/package/contextmemory"><img src="https://img.shields.io/badge/ghcr.io-contextmemory-blue?logo=docker" alt="Docker GHCR"></a>
-  <a href="https://github.com/Kortexio/ContextMemory/actions/workflows/docker-publish.yml"><img src="https://github.com/Kortexio/ContextMemory/actions/workflows/docker-publish.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Kortexio/ContextMemory/actions/workflows/docker-publish.yml"><img src="https://github.com/Kortexio/ContextMemory/actions/workflows/docker-publish.yml/badge.svg" alt="Docker CI"></a>
+  <a href="https://github.com/Kortexio/ContextMemory/actions/workflows/dotnet-tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/Kortexio/ContextMemory/dotnet-tests.yml?branch=main&label=tests" alt="Tests"></a>
   <a href="https://github.com/Kortexio/ContextMemory/commits/main"><img src="https://img.shields.io/github/commit-activity/m/Kortexio/ContextMemory?style=flat-square" alt="GitHub commit activity"></a>
 </p>
 
 <p align="center">
-  <strong>The only agent memory you can read, edit, and version like a wiki.</strong>
+  <strong>Your agent forgets. Fix that with memory you can open like a wiki.</strong>
 </p>
 
 <p align="center">
-  Give Cursor and Claude permanent memory with one MCP config — or point any OpenAI-compatible client at the same gateway for chat + tools (sandbox, MCP, HITL).
+  Not a vector black box. Not classic RAG inject. One OpenAI-compatible URL for markdown memory, tools, and HITL — or wire Cursor/Claude in minutes via MCP.
 </p>
 
 ---
 
 ## Introduction
 
-[ContextMemory](https://github.com/Kortexio/ContextMemory) is the open-source **agentic memory gateway** behind [Kortexio](https://kortexio.io). It sits between your app and your LLM as an OpenAI-compatible endpoint: session markdown wiki, Global Wiki retrieval (`wiki_search`), and optional tools — without rewriting your client.
+[ContextMemory](https://github.com/Kortexio/ContextMemory) is the open-source **agentic memory gateway** behind [Kortexio](https://kortexio.io). Drop it in as `POST /v1/chat/completions`: session markdown wiki, Global Wiki (`wiki_search` in the agentic loop — **not** classic RAG inject), sandbox/MCP/HITL when you need action.
 
 ### Key features
 
-- **Wiki memory** — per-session markdown you can open, edit, and version (`asOf` / supersede), not an opaque vector blob
-- **Drop-in chat URL** — `POST /v1/chat/completions` with the SDKs you already use
+- **Wiki memory** — read, edit, version (`asOf` / supersede). Lexical/FTS on markdown — not an opaque embedding store
+- **Drop-in chat URL** — OpenAI `/v1` with the SDKs you already use
+- **Any OpenAI-compatible LLM** — Ollama, vLLM, LM Studio, OpenAI, or your own `/v1` endpoint (including Azure OpenAI–compatible URLs). Per-tenant, at runtime — not locked to Ollama
 - **MCP wedge** — `memory_save` / `memory_search` / `memory_get` for Cursor & Claude in minutes
-- **Agentic on one URL** — sandbox, MCP integrations, and HITL when you need action, not only recall
-- **Self-host or Cloud** — AGPL core here; zero-ops on [Kortexio Cloud](https://kortexio.io) (EU)
+- **Agentic on one URL** — sandbox, MCP integrations, skills/guardrails, HITL
+- **Admin console** — configure backends, MCP, sandbox, and prove it in Playground (timeline + HITL)
+- **Self-host or Cloud** — AGPL core here; zero-ops on [Kortexio Cloud](https://kortexio.io) (EU, BYOK)
 
-How we compare to Mem0, Zep, and Letta: [`docs/compare.md`](docs/compare.md).
+How we compare (Mem0 / Zep / Letta / why we are **not** RAG): [`docs/compare.md`](docs/compare.md). Messaging source: [`blueprint/MESSAGING.md`](blueprint/MESSAGING.md).
 
 ---
 
 ## Quickstart (5 minutes)
 
 ### 1. Start the gateway
+
+Default demo points at Ollama on the host. Swap the backend anytime in **Admin → Config → LLM** (`openai`, `openai-compatible`, `vllm`, `lmstudio`, …) or via `PATCH /admin/apps/{id}/config`.
 
 ```bash
 docker run --rm -p 5100:8080 \
@@ -62,6 +67,8 @@ docker run --rm -p 5100:8080 \
   --add-host=host.docker.internal:host-gateway \
   ghcr.io/kortexio/contextmemory:latest
 ```
+
+Admin UI (Compose / `ghcr.io/kortexio/contextmemory-admin`): typically `http://localhost:5200` — see [`docs/admin-ui.md`](docs/admin-ui.md).
 
 No Docker? Use **[Kortexio Cloud](https://kortexio.io)** (`cmk_live_…`) and set `CONTEXTMEMORY_BASE_URL` to the cloud API.
 
@@ -83,6 +90,28 @@ Paste the JSON into **Cursor → Settings → MCP** (or `~/.cursor/mcp.json`). S
 
 CLI proof: `./scripts/aha-demo.sh` or `.\scripts\aha-demo.ps1` · GIF storyboard: [`docs/aha-demo.html`](docs/aha-demo.html)
 
+### What the Admin gives you
+
+| Need | Where |
+|---|---|
+| Point a tenant at OpenAI / vLLM / LM Studio / custom `/v1` | Config → LLM |
+| Sandbox shell/python/node or ACA sessions | Config → Agentic |
+| MCP servers (HTTP/stdio, OAuth, allow/deny) | Config → Agentic |
+| Skills & guardrail packs | Skills + per-app policies |
+| Prove memory + tools + HITL without a client | Playground |
+
+<p align="center">
+  <img src="docs/images/admin-dashboard.png" width="800" alt="ContextMemory Admin dashboard">
+</p>
+
+<p align="center">
+  <img src="docs/images/admin-llm-backend.png" width="390" alt="LLM backend picker">
+  &nbsp;
+  <img src="docs/images/admin-agentic.png" width="390" alt="Agentic gateway config">
+</p>
+
+More: [`docs/admin-ui.md`](docs/admin-ui.md) · Playground / Skills: [`admin-playground.png`](docs/images/admin-playground.png) · [`admin-skills.png`](docs/images/admin-skills.png)
+
 ### Cloud vs self-host
 
 | | **[Kortexio Cloud](https://kortexio.io)** | **Self-host (this repo)** |
@@ -103,7 +132,7 @@ curl -X POST http://localhost:5100/v1/chat/completions \
   -d '{"model":"qwen3.5:9b","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-Thin helpers: [sdk/python](sdk/python) · [sdk/typescript](sdk/typescript)
+Thin header helpers (not full SDKs): [sdk/python](sdk/python) · [sdk/typescript](sdk/typescript)
 
 ---
 
@@ -111,7 +140,7 @@ Thin helpers: [sdk/python](sdk/python) · [sdk/typescript](sdk/typescript)
 
 | Doc | Topic |
 |---|---|
-| [docs/compare.md](docs/compare.md) | Why it exists · vs Mem0 / Zep / Letta |
+| [docs/compare.md](docs/compare.md) | Why it exists · vs Mem0 / Zep / Letta · **why we are not RAG** |
 | [docs/cloud.md](docs/cloud.md) | Kortexio Cloud |
 | [docs/self-host.md](docs/self-host.md) | Docker / GHCR / Compose |
 | [docs/architecture-and-features.md](docs/architecture-and-features.md) | Wiki, temporal facts, agentic, skills |

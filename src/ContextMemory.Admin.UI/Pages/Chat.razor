@@ -29,24 +29,14 @@
             <div class="kx-panel-head"><h3>Session</h3></div>
             <div class="kx-panel-body">
                 <div class="form-group">
-                    <label>App ID</label>
-                    <InputText class="form-control form-control-sm" @bind-Value="_settings.AppId" disabled="@_boundToApp" />
-                    <FieldHelp>Sent as <code>X-App-Id</code>.</FieldHelp>
-                </div>
-                <div class="form-group">
                     <label>User ID</label>
                     <InputText class="form-control form-control-sm" @bind-Value="_settings.UserId" />
-                    <FieldHelp>Sent as <code>X-User-Id</code> — scopes session memory per user.</FieldHelp>
+                    <FieldHelp>Sent as <code>X-User-Id</code>.</FieldHelp>
                 </div>
                 <div class="form-group">
                     <label>Session ID</label>
                     <InputText class="form-control form-control-sm" @bind-Value="_settings.SessionId" placeholder="empty = API generates" />
-                    <FieldHelp>Optional <code>X-Session-Id</code>. Same id = same session wiki.</FieldHelp>
-                </div>
-                <div class="form-group">
-                    <label>App API key</label>
-                    <InputText class="form-control form-control-sm" type="password" @bind-Value="_settings.ApiKey" disabled="@_boundToApp" />
-                    <FieldHelp>App Bearer token (loaded from credentials@( _boundToApp ? ", read-only" : "" )).</FieldHelp>
+                    <FieldHelp>Same id keeps the same session wiki.</FieldHelp>
                 </div>
                 <ModelPicker @bind-Value="_settings.Model"
                              Label="Model"
@@ -54,106 +44,119 @@
                              AllowEmpty="true"
                              EmptyLabel="(app default)"
                              InputId="playgroundModel">
-                    <FieldHelp>Body <code>model</code>. Should match the app config / pulled Ollama tag.</FieldHelp>
+                    <FieldHelp>Should match the app config / pulled model tag.</FieldHelp>
                 </ModelPicker>
 
-                <div class="kx-segment">
-                    <button type="button" class="@ModeBtnClass(ChatEndpointMode.Chat)" @onclick="() => SetMode(ChatEndpointMode.Chat)">Chat</button>
-                    <button type="button" class="@ModeBtnClass(ChatEndpointMode.Generate)" @onclick="() => SetMode(ChatEndpointMode.Generate)">Generate</button>
-                </div>
+                @if (_appDetail is not null)
+                {
+                    <div class="kx-chat-app-meta">
+                        <div><span>Backend</span> @_appDetail.LlmBackend / @_appDetail.LlmModel</div>
+                        <div><span>Memory</span> session wiki · @_appDetail.MaxHistoryMessages msgs</div>
+                    </div>
+                }
 
-                <label class="kx-switch">
-                    <InputCheckbox id="streamSwitch" @bind-Value="_settings.Stream" disabled="@_busy" />
-                    Streaming (NDJSON)
-                </label>
-                <label class="kx-switch">
-                    <InputCheckbox id="rawSwitch" @bind-Value="_settings.ShowRawJson" />
-                    Show raw JSON panel
-                </label>
-
-                <div class="d-flex flex-column" style="gap:0.35rem">
-                    <button class="btn btn-outline-primary btn-sm" type="button" @onclick="SaveSettingsAsync" disabled="@_busy">Save locally</button>
-                    <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="LoadAppAsync" disabled="@_busy">Load app</button>
+                <div class="d-flex flex-column" style="gap:0.35rem;margin-top:0.75rem">
                     <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="NewSessionAsync" disabled="@_busy">New session</button>
+                    <button class="btn btn-link btn-sm px-0 text-left" type="button" @onclick="ToggleAdvanced">
+                        @(_showAdvanced ? "Hide advanced" : "Show advanced")
+                    </button>
                 </div>
-            </div>
-        </div>
 
-        @if (_appDetail is not null)
-        {
-            <div class="kx-panel">
-                <div class="kx-panel-head"><h3>@_appDetail.AppId</h3></div>
-                <div class="kx-panel-body small">
-                    <div><strong>Backend:</strong> @_appDetail.LlmBackend / @_appDetail.LlmModel</div>
-                    <div><strong>Language:</strong> @_appDetail.DefaultLanguage</div>
-                    <div><strong>History:</strong> @_appDetail.MaxHistoryMessages msgs</div>
-                    <div><strong>Memory:</strong> per-session wiki</div>
-                    <div><strong>Active users:</strong> @_appDetail.ActiveUsers</div>
-                </div>
-            </div>
-        }
+                @if (_showAdvanced)
+                {
+                    <div class="kx-chat-advanced">
+                        <div class="form-group">
+                            <label>App ID</label>
+                            <InputText class="form-control form-control-sm" @bind-Value="_settings.AppId" disabled="@_boundToApp" />
+                        </div>
+                        <div class="form-group">
+                            <label>App API key</label>
+                            <InputText class="form-control form-control-sm" type="password" @bind-Value="_settings.ApiKey" disabled="@_boundToApp" />
+                            <FieldHelp>Loaded from credentials@(_boundToApp ? ", read-only" : "").</FieldHelp>
+                        </div>
 
-        <div class="kx-panel">
-            <div class="kx-panel-head"><h3>Ollama options</h3></div>
-            <div class="kx-panel-body">
-                <div class="form-group">
-                    <label>System prompt (chat)</label>
-                    <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_settings.SystemPrompt" />
-                    <FieldHelp>Optional per-request system message (in addition to app persona).</FieldHelp>
-                </div>
-                <div class="form-row">
-                    <div class="col-6 form-group">
-                        <label>temperature</label>
-                        <InputNumber class="form-control form-control-sm" @bind-Value="_settings.Temperature" />
+                        <div class="kx-segment">
+                            <button type="button" class="@ModeBtnClass(ChatEndpointMode.Chat)" @onclick="() => SetMode(ChatEndpointMode.Chat)">Chat</button>
+                            <button type="button" class="@ModeBtnClass(ChatEndpointMode.Generate)" @onclick="() => SetMode(ChatEndpointMode.Generate)">Generate</button>
+                        </div>
+
+                        <label class="kx-switch">
+                            <InputCheckbox id="streamSwitch" @bind-Value="_settings.Stream" disabled="@_busy" />
+                            Streaming (NDJSON)
+                        </label>
+                        <label class="kx-switch">
+                            <InputCheckbox id="rawSwitch" @bind-Value="_settings.ShowRawJson" />
+                            Show raw JSON panel
+                        </label>
+
+                        <div class="d-flex flex-column" style="gap:0.35rem;margin:0.5rem 0 0.75rem">
+                            <button class="btn btn-outline-primary btn-sm" type="button" @onclick="SaveSettingsAsync" disabled="@_busy">Save locally</button>
+                            <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="LoadAppAsync" disabled="@_busy">Reload app</button>
+                        </div>
+
+                        <h4 class="kx-chat-advanced-title">Sampling</h4>
+                        <div class="form-group">
+                            <label>System prompt</label>
+                            <InputTextArea class="form-control form-control-sm" rows="2" @bind-Value="_settings.SystemPrompt" />
+                        </div>
+                        <div class="form-row">
+                            <div class="col-6 form-group">
+                                <label>temperature</label>
+                                <InputNumber class="form-control form-control-sm" @bind-Value="_settings.Temperature" />
+                            </div>
+                            <div class="col-6 form-group">
+                                <label>top_p</label>
+                                <InputNumber class="form-control form-control-sm" @bind-Value="_settings.TopP" />
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="col-6 form-group">
+                                <label>top_k</label>
+                                <InputNumber class="form-control form-control-sm" @bind-Value="_settings.TopK" />
+                            </div>
+                            <div class="col-6 form-group">
+                                <label>num_ctx</label>
+                                <InputNumber class="form-control form-control-sm" @bind-Value="_settings.NumCtx" />
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="col-6 form-group">
+                                <label>repeat_penalty</label>
+                                <InputNumber class="form-control form-control-sm" @bind-Value="_settings.RepeatPenalty" />
+                            </div>
+                            <div class="col-6 form-group">
+                                <label>num_predict</label>
+                                <InputNumber class="form-control form-control-sm" @bind-Value="_settings.NumPredict" />
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>keep_alive</label>
+                            <InputText class="form-control form-control-sm" @bind-Value="_settings.KeepAlive" />
+                        </div>
+                        <div class="form-group mb-0">
+                            <label>format (e.g. json)</label>
+                            <InputText class="form-control form-control-sm" @bind-Value="_settings.Format" />
+                        </div>
                     </div>
-                    <div class="col-6 form-group">
-                        <label>top_p</label>
-                        <InputNumber class="form-control form-control-sm" @bind-Value="_settings.TopP" />
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="col-6 form-group">
-                        <label>top_k</label>
-                        <InputNumber class="form-control form-control-sm" @bind-Value="_settings.TopK" />
-                    </div>
-                    <div class="col-6 form-group">
-                        <label>num_ctx</label>
-                        <InputNumber class="form-control form-control-sm" @bind-Value="_settings.NumCtx" />
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="col-6 form-group">
-                        <label>repeat_penalty</label>
-                        <InputNumber class="form-control form-control-sm" @bind-Value="_settings.RepeatPenalty" />
-                    </div>
-                    <div class="col-6 form-group">
-                        <label>num_predict</label>
-                        <InputNumber class="form-control form-control-sm" @bind-Value="_settings.NumPredict" />
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>keep_alive</label>
-                    <InputText class="form-control form-control-sm" @bind-Value="_settings.KeepAlive" />
-                </div>
-                <div class="form-group mb-0">
-                    <label>format (e.g. json)</label>
-                    <InputText class="form-control form-control-sm" @bind-Value="_settings.Format" />
-                </div>
+                }
             </div>
         </div>
     </aside>
 
     <section class="kx-chat-main">
-        <div class="kx-panel">
+        <div class="kx-panel kx-chat-panel">
             <div class="kx-panel-head">
-                <h3>@(_settings.Mode == ChatEndpointMode.Chat ? "POST /api/chat" : "POST /api/generate")</h3>
+                <div>
+                    <h3>@(_settings.Mode == ChatEndpointMode.Chat ? "Chat" : "Generate")</h3>
+                    <p class="kx-chat-endpoint-hint">@(_settings.Mode == ChatEndpointMode.Chat ? "POST /v1/chat/completions · legacy /api/chat" : "POST /api/generate")</p>
+                </div>
                 <div class="kx-actions">
                     @if (_busy)
                     {
                         <button class="btn btn-sm btn-warning" type="button" @onclick="CancelRequest">Stop</button>
                     }
                     <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="RegenerateAsync" disabled="@(_busy || !CanRegenerate)">Regenerate</button>
-                    <button class="btn btn-sm btn-outline-danger" type="button" @onclick="ClearUi" disabled="@(_busy && _messages.Count == 0)">Clear UI</button>
+                    <button class="btn btn-sm btn-outline-danger" type="button" @onclick="ClearUi" disabled="@(_busy && _messages.Count == 0)">Clear</button>
                 </div>
             </div>
 
@@ -162,9 +165,9 @@
                 <div class="chat-messages" @ref="_messagesContainer">
                     @if (_messages.Count == 0)
                     {
-                        <div class="kx-empty" style="border:0;box-shadow:none;max-width:none;padding:2rem 1rem">
+                        <div class="kx-empty kx-chat-empty">
                             <h2>Start a conversation</h2>
-                            <p>Per-session memory: recent history + compiled wiki. Send only the new message; middleware enriches the prompt.</p>
+                            <p>Session memory (history + wiki) is applied automatically. Send only the new message.</p>
                         </div>
                     }
                     @foreach (var msg in _messages)
@@ -173,9 +176,9 @@
                             <div class="chat-meta">
                                 <span class="badge badge-@(msg.Role == "user" ? "primary" : msg.IsError ? "danger" : "secondary")">@msg.Role</span>
                                 @msg.Timestamp.LocalDateTime.ToString("HH:mm:ss")
-                                @if (msg.ElapsedMs is not null) { <span> Â· @msg.ElapsedMs ms</span> }
-                                @if (msg.IsStreaming) { <span> Â· streamingâ€¦</span> }
-                                @if (!string.IsNullOrEmpty(msg.MessageId)) { <span> Â· @msg.MessageId</span> }
+                                @if (msg.ElapsedMs is not null) { <span> · @msg.ElapsedMs ms</span> }
+                                @if (msg.IsStreaming) { <span> · streaming…</span> }
+                                @if (!string.IsNullOrEmpty(msg.MessageId)) { <span> · @msg.MessageId</span> }
                             </div>
                             <div class="chat-bubble @(msg.IsError ? "chat-bubble-error" : "")">
                                 @if (msg.HasAgenticProgress)
@@ -241,11 +244,9 @@
                 </div>
                 <div class="kx-panel-foot">
                     <EditForm Model="_chatInput" OnValidSubmit="SendChatAsync">
-                        <div class="input-group">
-                            <InputTextArea class="form-control" rows="2" @bind-Value="_chatInput.Text" placeholder="Messageâ€¦" disabled="@_busy" />
-                            <div class="input-group-append">
-                                <button class="btn btn-primary" type="submit" disabled="@(_busy || string.IsNullOrWhiteSpace(_chatInput.Text))">Send</button>
-                            </div>
+                        <div class="kx-chat-composer">
+                            <InputTextArea class="form-control" rows="2" @bind-Value="_chatInput.Text" placeholder="Message…" disabled="@_busy" />
+                            <button class="btn btn-primary" type="submit" disabled="@(_busy || string.IsNullOrWhiteSpace(_chatInput.Text))">Send</button>
                         </div>
                     </EditForm>
                 </div>
@@ -279,9 +280,9 @@
                 <div class="kx-panel-head"><h3>Inspector</h3></div>
                 <div class="kx-panel-body p-2">
                     <label class="small font-weight-bold">Last request</label>
-                    <pre class="chat-raw">@(_lastRequestJson ?? "â€”")</pre>
+                    <pre class="chat-raw">@FormatRawJson(_lastRequestJson)</pre>
                     <label class="small font-weight-bold">Last response</label>
-                    <pre class="chat-raw">@(_lastResponseJson ?? "â€”")</pre>
+                    <pre class="chat-raw">@FormatRawJson(_lastResponseJson)</pre>
                     @if (_lastMeta is not null)
                     {
                         <div class="small text-muted mt-2">
@@ -306,12 +307,6 @@
                             }
                         </div>
                     }
-                </div>
-                <div class="kx-panel-foot">
-                    <button class="btn btn-sm btn-outline-secondary btn-block" type="button" @onclick="NewSessionAsync" disabled="@_busy">
-                        New session
-                    </button>
-                    <small class="text-muted">Clears local sessionId and UI history. Wiki data remains on the API.</small>
                 </div>
             </div>
         </aside>
@@ -346,6 +341,7 @@
     private bool _busy;
     private bool _boundToApp;
     private bool _prefilled;
+    private bool _showAdvanced;
     private string? _error;
     private string? _info;
 
@@ -367,6 +363,8 @@
         if (!_adminSession.IsConfigured)
             await _adminSession.InitializeAsync();
         _settings = await ChatSettingsStorage.LoadAsync() ?? new ChatTestSettings();
+        // Prefer a clean two-column Playground; power users can re-enable Inspector.
+        _settings.ShowRawJson = false;
         await PrefillFromAppAsync();
     }
 
@@ -422,6 +420,11 @@
         _settings.Mode == mode ? "active" : "";
 
     private void SetMode(ChatEndpointMode mode) => _settings.Mode = mode;
+
+    private void ToggleAdvanced() => _showAdvanced = !_showAdvanced;
+
+    private static string FormatRawJson(string? json) =>
+        string.IsNullOrWhiteSpace(json) ? "—" : json;
 
     private async Task SaveSettingsAsync()
     {
@@ -490,8 +493,8 @@
 
             _info = $"Completed in {result.ElapsedMs} ms" +
                     (result.ResponseTimeHeaderMs is not null ? $" (gateway: {result.ResponseTimeHeaderMs} ms)" : "") +
-                    (result.MessageId is not null ? $" Â· msg {result.MessageId}" : "") +
-                    (result.SessionId is not null ? $" Â· session {result.SessionId}" : "");
+                    (result.MessageId is not null ? $" · msg {result.MessageId}" : "") +
+                    (result.SessionId is not null ? $" · session {result.SessionId}" : "");
         }
         catch (OperationCanceledException)
         {
@@ -601,7 +604,7 @@
         _lastResponseJson = null;
         _lastMeta = null;
         _error = null;
-        _info = "New session â€” the next request will make the API generate a new X-Session-Id.";
+        _info = "New session — the next request will make the API generate a new X-Session-Id.";
         await ChatSettingsStorage.SaveAsync(_settings);
     }
 
@@ -614,7 +617,7 @@
     private void CancelRequest()
     {
         _cts?.Cancel();
-        _info = "Cancellingâ€¦";
+        _info = "Cancelling…";
     }
 
     private void ClearUi()
@@ -694,11 +697,11 @@
     private static string StepIcon(string status) =>
         status switch
         {
-            "done" => "âœ“",
-            "error" => "âœ—",
-            "warning" => "âš ",
-            "pending" => "â¸",
-            _ => "â€¦"
+            "done" => "\u2713",
+            "error" => "\u2717",
+            "warning" => "\u26A0",
+            "pending" => "\u23F8",
+            _ => "\u2026"
         };
 
     private async Task ScrollToBottomAsync()

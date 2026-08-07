@@ -1,0 +1,39 @@
+name: content-cadence
+
+# Suggests a short post from blueprint/MESSAGING.md hooks (manual approve via issue).
+# Does not auto-publish to social — safer for brand voice.
+
+on:
+  schedule:
+    - cron: "0 14 * * 2" # Tuesday 14:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  suggest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Open hook suggestion issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Pick a hook line from MESSAGING.md weekly hooks table (H0x rows).
+          HOOK=$(awk -F'|' '/^\| H0/{gsub(/^ +| +$/,"",$2); print $2" — "$3}' blueprint/MESSAGING.md | shuf -n 1)
+          if [ -z "$HOOK" ]; then
+            HOOK="Your agent forgets. Fix that with memory you can open like a wiki. — https://github.com/Kortexio/ContextMemory"
+          fi
+          BODY=$(printf '%s\n\n%s\n\n%s\n' \
+            "## Suggested post (from MESSAGING.md)" \
+            "$HOOK" \
+            "Copy to LinkedIn/X after editing. Voice rules: blueprint/MESSAGING.md. Do **not** call this RAG.")
+          gh issue create \
+            --title "Content cadence: social hook suggestion" \
+            --label "content-hook" \
+            --body "$BODY" || \
+          gh issue create \
+            --title "Content cadence: social hook suggestion" \
+            --body "$BODY"

@@ -1,0 +1,120 @@
+name: announce-release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print posts without publishing"
+        required: false
+        default: "true"
+      release_tag:
+        description: "Tag for manual dispatch (optional)"
+        required: false
+        default: ""
+      release_body:
+        description: "Body for manual dispatch (optional)"
+        required: false
+        default: ""
+
+jobs:
+  discord:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "DISCORD_WEBHOOK_URL not set — skipping Discord."
+            exit 0
+          fi
+          VERSION="${{ github.event.release.tag_name || github.event.inputs.release_tag }}"
+          NAME="${{ github.event.release.name || github.event.inputs.release_tag }}"
+          URL="${{ github.event.release.html_url || format('{0}/releases/tag/{1}', github.event.repository.html_url, github.event.inputs.release_tag) }}"
+          BODY=$(printf '%s' "${{ github.event.release.body || github.event.inputs.release_body }}" | head -c 3800)
+          jq -n \
+            --arg title "ContextMemory $NAME — memory you can open like a wiki" \
+            --arg desc "$BODY" \
+            --arg url "$URL" \
+            '{
+              username: "ContextMemory",
+              embeds: [{
+                title: $title,
+                description: $desc,
+                url: $url,
+                color: 5814783
+              }]
+            }' > payload.json
+          curl -sf -X POST -H "Content-Type: application/json" -d @payload.json "$WEBHOOK"
+
+  linkedin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Publish LinkedIn
+        env:
+          LINKEDIN_CLIENT_ID: ${{ secrets.LINKEDIN_CLIENT_ID }}
+          LINKEDIN_CLIENT_SECRET: ${{ secrets.LINKEDIN_CLIENT_SECRET }}
+          LINKEDIN_REFRESH_TOKEN: ${{ secrets.LINKEDIN_REFRESH_TOKEN }}
+          LINKEDIN_PERSON_URN: ${{ secrets.LINKEDIN_PERSON_URN }}
+          LINKEDIN_ORG_URN: ${{ secrets.LINKEDIN_ORG_URN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.release_tag }}
+          RELEASE_BODY: ${{ github.event.release.body || github.event.inputs.release_body }}
+          REPO_URL: ${{ github.event.repository.html_url }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          if [ -z "$LINKEDIN_CLIENT_ID" ] || [ -z "$RELEASE_TAG" ]; then
+            echo "LinkedIn secrets or RELEASE_TAG missing — skipping."
+            exit 0
+          fi
+          dotnet run --project tools/linkedin-announcer -- post
+
+  x:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Publish X
+        env:
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.release_tag }}
+          RELEASE_BODY: ${{ github.event.release.body || github.event.inputs.release_body }}
+          REPO_URL: ${{ github.event.repository.html_url }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          if [ -z "$X_API_KEY" ] || [ -z "$RELEASE_TAG" ]; then
+            echo "X secrets or RELEASE_TAG missing — skipping."
+            exit 0
+          fi
+          dotnet run --project tools/x-announcer -- post
+
+  devto:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Publish dev.to
+        env:
+          DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.release_tag }}
+          RELEASE_BODY: ${{ github.event.release.body || github.event.inputs.release_body }}
+          REPO_URL: ${{ github.event.repository.html_url }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          if [ -z "$DEVTO_API_KEY" ] || [ -z "$RELEASE_TAG" ]; then
+            echo "DEVTO_API_KEY or RELEASE_TAG missing — skipping."
+            exit 0
+          fi
+          dotnet run --project tools/devto-announcer -- post

@@ -25,6 +25,19 @@
 **vs Letta:** any OpenAI/MCP client; you do not adopt their agent OS.  
 **LiteLLM** is a router (complementary). **LangChain** is a client — point `base_url` here.
 
+## Why we are not RAG
+
+We are an **alternative** when people search for RAG — not a RAG product.
+
+| Classic RAG inject | ContextMemory |
+|---|---|
+| Chunks stuffed into the prompt every turn | Session wiki is budgeted memory; Global Wiki is **on demand** via tool `wiki_search` |
+| Usually embeddings / vector DB | Lexical / Postgres FTS on **markdown you can open** — deliberate, not a vector blob |
+| Retrieval product bolted onto chat | **One agentic pipeline**: wiki ± sandbox ± MCP ± HITL on the same `/v1/chat/completions` |
+| Client often owns orchestration | Client sends a normal chat body; the gateway runs the loop |
+
+From the architecture docs: *"`wiki_search` is a loop tool, not a parallel RAG path"* — and classic RAG inject is explicitly **N/A (we don't do this)**. Details: [architecture-and-features.md](architecture-and-features.md).
+
 ## Cloud vs self-host
 
 | | **[Kortexio Cloud](https://kortexio.io)** | **Self-host (this repo)** |
