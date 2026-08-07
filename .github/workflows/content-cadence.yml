@@ -34,7 +34,7 @@ jobs:
           BODY=$(printf '%s\n\n%s\n\n%s\n' \
             "## Suggested post" \
             "$HOOK" \
-            "Copy to LinkedIn/X after editing. Do **not** call this RAG. CTA: https://github.com/Kortexio/ContextMemory")
+            "Copy to LinkedIn/dev.to after editing. Do **not** call this RAG. CTA: https://github.com/Kortexio/ContextMemory")
           gh issue create \
             --repo "$GITHUB_REPOSITORY" \
             --title "Content cadence: social hook suggestion" \
