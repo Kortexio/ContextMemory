@@ -1,6 +1,6 @@
 [project]
 name = "kortexio-contextmemory"
-version = "0.0.1b0"
+version = "0.0.1b1"
 description = "Thin headers helper for the ContextMemory OpenAI-compatible gateway"
 readme = "README.md"
 requires-python = ">=3.10"
