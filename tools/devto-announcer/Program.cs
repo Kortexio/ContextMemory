@@ -92,7 +92,8 @@ public static class DevToClient
         };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://dev.to/api/articles");
-        request.Headers.Add("api-key", apiKey);
+        request.Headers.TryAddWithoutValidation("api-key", apiKey);
+        request.Headers.TryAddWithoutValidation("User-Agent", "ContextMemory-devto-announcer/1.0 (+https://github.com/Kortexio/ContextMemory)");
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.forem.api-v1+json"));
         request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
