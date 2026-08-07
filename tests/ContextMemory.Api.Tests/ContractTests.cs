@@ -8,7 +8,7 @@ using Xunit;
 
 namespace ContextMemory.Api.Tests;
 
-public class ContractTests : IClassFixture<StubOllamaWebApplicationFactory>
+public class ContractTests : IClassFixture<StubOllamaWebApplicationFactory>, IAsyncLifetime
 {
     private const string AppId = "demo-app";
     private const string ApiKey = "test-api-key";
@@ -20,6 +20,21 @@ public class ContractTests : IClassFixture<StubOllamaWebApplicationFactory>
         _factory = factory;
         _client = factory.CreateClient();
     }
+
+    public async Task InitializeAsync()
+    {
+        // Passthrough contract covers native Ollama /api/* fields. Default "ollama" is /v1,
+        // and GlobalWikiEnabled forces the agentic path which rebuilds the response.
+        using var scope = _factory.Services.CreateScope();
+        var configStore = scope.ServiceProvider.GetRequiredService<IAppConfigStore>();
+        await configStore.UpdateAsync(AppId, new AppConfigPatchRequest
+        {
+            LlmBackend = "ollama-native",
+            GlobalWikiEnabled = false
+        });
+    }
+
+    public Task DisposeAsync() => Task.CompletedTask;
 
     private HttpRequestMessage CreateAuthedRequest(HttpMethod method, string path, HttpContent? content = null)
     {
@@ -124,7 +139,7 @@ public class ContractTests : IClassFixture<StubOllamaWebApplicationFactory>
 
         Assert.Equal(AppId, root.GetProperty("AppId").GetString());
         Assert.Equal("seed", root.GetProperty("Source").GetString());
-        Assert.Equal("ollama", root.GetProperty("LlmBackend").GetString());
+        Assert.Equal("ollama-native", root.GetProperty("LlmBackend").GetString());
         Assert.True(root.TryGetProperty("ActiveUsers", out _));
     }
 
