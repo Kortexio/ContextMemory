@@ -69,15 +69,14 @@ static async Task<int> RunGetTokenAsync(HttpClient http)
 
 static async Task<int> RunPostAsync(HttpClient http)
 {
-    var clientId = RequireEnv("LINKEDIN_CLIENT_ID");
-    var clientSecret = RequireEnv("LINKEDIN_CLIENT_SECRET");
-    var refreshToken = RequireEnv("LINKEDIN_REFRESH_TOKEN");
     var tag = RequireEnv("RELEASE_TAG");
     var body = Environment.GetEnvironmentVariable("RELEASE_BODY") ?? "";
     var repoUrl = RequireEnv("REPO_URL");
     var dryRun = string.Equals(Environment.GetEnvironmentVariable("DRY_RUN"), "true", StringComparison.OrdinalIgnoreCase);
     var orgUrn = Environment.GetEnvironmentVariable("LINKEDIN_ORG_URN");
     var author = !string.IsNullOrWhiteSpace(orgUrn) ? orgUrn! : RequireEnv("LINKEDIN_PERSON_URN");
+    var refreshToken = Environment.GetEnvironmentVariable("LINKEDIN_REFRESH_TOKEN");
+    var accessTokenOverride = Environment.GetEnvironmentVariable("LINKEDIN_ACCESS_TOKEN");
 
     var commentary = PostFormatter.FormatReleasePost(tag, body, repoUrl);
     Console.WriteLine(commentary);
@@ -88,8 +87,26 @@ static async Task<int> RunPostAsync(HttpClient http)
         return 0;
     }
 
-    var token = await OAuthHelper.RefreshToken(http, refreshToken, clientId, clientSecret);
-    await LinkedInClient.PublishPost(http, token.AccessToken, author!, commentary);
+    string accessToken;
+    if (!string.IsNullOrWhiteSpace(refreshToken))
+    {
+        var clientId = RequireEnv("LINKEDIN_CLIENT_ID");
+        var clientSecret = RequireEnv("LINKEDIN_CLIENT_SECRET");
+        var token = await OAuthHelper.RefreshToken(http, refreshToken, clientId, clientSecret);
+        accessToken = token.AccessToken;
+    }
+    else if (!string.IsNullOrWhiteSpace(accessTokenOverride))
+    {
+        // Temporary path for portal-generated tokens until get-token / refresh is configured.
+        Console.WriteLine("Using LINKEDIN_ACCESS_TOKEN (no refresh) — rotate to refresh token when possible.");
+        accessToken = accessTokenOverride;
+    }
+    else
+    {
+        return Fail("Set LINKEDIN_REFRESH_TOKEN (preferred) or LINKEDIN_ACCESS_TOKEN.");
+    }
+
+    await LinkedInClient.PublishPost(http, accessToken, author!, commentary);
     return 0;
 }
 
