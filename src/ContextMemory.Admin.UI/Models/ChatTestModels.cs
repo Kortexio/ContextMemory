@@ -24,7 +24,7 @@ public sealed class ChatTestSettings
     public int? NumCtx { get; set; } = 4096;
     public float? RepeatPenalty { get; set; } = 1.1f;
     public int? NumPredict { get; set; }
-    public bool ShowRawJson { get; set; } = true;
+    public bool ShowRawJson { get; set; } = false;
 }
 
 public sealed class ChatUiMessage

@@ -1,11 +1,11 @@
 .chat-lab .chat-messages,
 .chat-messages {
-    min-height: 380px;
-    max-height: 560px;
+    min-height: 420px;
+    max-height: none;
+    flex: 1 1 auto;
     overflow-y: auto;
     background: #f7f8fa;
     padding: 1rem 1.1rem;
-    flex: 1;
 }
 
 .chat-row {

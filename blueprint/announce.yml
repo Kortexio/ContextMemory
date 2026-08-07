@@ -1,0 +1,62 @@
+name: announce-release
+
+# Fires when a GitHub Release is published (either by release-please
+# or manually). Posts to Discord and drafts a LinkedIn post as a job summary.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  discord:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          NAME="${{ github.event.release.name }}"
+          URL="${{ github.event.release.html_url }}"
+          # Discord embeds cap description at 4096 chars; truncate release body.
+          BODY=$(printf '%s' "${{ github.event.release.body }}" | head -c 3800)
+
+          jq -n \
+            --arg title "🚀 ContextMemory $NAME released" \
+            --arg desc "$BODY" \
+            --arg url "$URL" \
+            '{
+              username: "ContextMemory",
+              embeds: [{
+                title: $title,
+                description: $desc,
+                url: $url,
+                color: 5814783
+              }]
+            }' > payload.json
+
+          curl -sf -X POST -H "Content-Type: application/json" \
+            -d @payload.json "$WEBHOOK"
+
+  linkedin-draft:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Draft LinkedIn post
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          URL="${{ github.event.release.html_url }}"
+          {
+            echo "## LinkedIn draft for $VERSION"
+            echo ""
+            echo "\`\`\`"
+            echo "ContextMemory $VERSION is out."
+            echo ""
+            echo "What changed & why it matters:"
+            echo ""
+            printf '%s\n' "${{ github.event.release.body }}"
+            echo ""
+            echo "Full notes: $URL"
+            echo ""
+            echo "#dotnet #opensource #AI #LLM #agents"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"

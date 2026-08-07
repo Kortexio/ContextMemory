@@ -1,0 +1,40 @@
+# ContextMemory
+
+> Agentic memory gateway — markdown wiki you can read, edit, and version. Open-source core of Kortexio.
+
+## What it is
+
+ContextMemory sits between your app and an LLM as an **OpenAI-compatible** endpoint (`POST /v1/chat/completions`). It adds:
+
+- Per-session markdown wiki + Global Wiki (`wiki_search` in the agentic loop)
+- Optional sandbox (shell/python/node), MCP integrations, skills/guardrails, HITL
+- MCP server for Cursor / Claude: `memory_save`, `memory_search`, `memory_get`, …
+
+## What it is not
+
+- **Not classic RAG.** No "inject chunks every turn" path. Global Wiki retrieval is a tool inside the agentic loop.
+- **Not a vector / embedding memory store.** Search is lexical / Postgres FTS on markdown (deliberate product choice).
+- **Not an agent OS.** Keep your OpenAI SDK / LangChain / Cursor — point `base_url` here.
+
+## Alternative to
+
+- Opaque agent-memory blobs (e.g. library-only memory APIs)
+- Classic RAG pipelines when you need **memory + action** on one URL
+- Adopting a full agent runtime just to get durable context
+
+## Quick start
+
+- Self-host: https://github.com/Kortexio/ContextMemory (Docker GHCR `ghcr.io/kortexio/contextmemory`)
+- Cloud (BYOK, EU): https://kortexio.io
+- Compare: https://github.com/Kortexio/ContextMemory/blob/main/docs/compare.md
+- Architecture: https://github.com/Kortexio/ContextMemory/blob/main/docs/architecture-and-features.md
+- MCP wedge: https://github.com/Kortexio/ContextMemory/tree/main/mcp-server
+- Admin UI: https://github.com/Kortexio/ContextMemory/blob/main/docs/admin-ui.md
+
+## LLM backends
+
+Any **OpenAI-compatible** `/v1` backend per tenant at runtime: Ollama, vLLM, LM Studio, OpenAI, custom endpoints (including Azure OpenAI–compatible URLs). Wire protocol is OpenAI-shaped; Claude/Anthropic may be used via a compatible gateway (prompt profiles adjust agentic text — not a native Anthropic Messages adapter).
+
+## License
+
+AGPL-3.0 (full open-source core). Commercial / hosted: https://kortexio.io

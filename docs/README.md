@@ -4,7 +4,7 @@ Short entry point. Start at the [README](../README.md) for the 5-minute Cursor w
 
 | Doc | Topic |
 |---|---|
-| [compare.md](compare.md) | Why it exists · vs Mem0 / Zep / Letta · cloud vs self-host |
+| [compare.md](compare.md) | Why it exists · vs Mem0 / Zep / Letta · **why we are not RAG** |
 | [cloud.md](cloud.md) | Kortexio Cloud quick start |
 | [self-host.md](self-host.md) | Docker / GHCR / Compose |
 | [admin-ui.md](admin-ui.md) | Admin UI |

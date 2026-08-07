@@ -4,6 +4,16 @@
 
 The Admin console (`ContextMemory.Admin.Web`, default **http://localhost:5200**) is a Blazor Server app that talks to the ContextMemory API over HTTP. UI copy is English; field help sits under each control.
 
+**Screenshots** (from a live Admin at `:5200`):
+
+| | |
+|---|---|
+| Dashboard | ![Admin dashboard](images/admin-dashboard.png) |
+| LLM backends (per tenant) | ![LLM config with pluggable backends](images/admin-llm-backend.png) |
+| Agentic (sandbox / MCP / HITL knobs) | ![Agentic gateway config](images/admin-agentic.png) |
+| Playground | ![Chat Playground](images/admin-playground.png) |
+| Skills & guardrails | ![Skills and guardrails](images/admin-skills.png) |
+
 | | |
 |---|---|
 | **Who uses it** | Operators configuring tenants (LLM, memory, agentic, MCP, keys) |
