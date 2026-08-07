@@ -87,7 +87,7 @@ public static class DevToClient
                 title,
                 published = true,
                 body_markdown = markdownBody,
-                tags = new[] { "dotnet", "ai", "opensource", "llm" }
+                tags = new[] { "dotnet", "ai", "opensource", "productivity" }
             }
         };
 
@@ -99,7 +99,10 @@ public static class DevToClient
         using var response = await http.SendAsync(request, ct);
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"dev.to failed ({(int)response.StatusCode}): {body}");
+        {
+            var detail = string.IsNullOrWhiteSpace(body) ? "(empty body)" : body;
+            throw new InvalidOperationException($"dev.to failed ({(int)response.StatusCode}): {detail}");
+        }
 
         using var doc = JsonDocument.Parse(body);
         return doc.RootElement.GetProperty("url").GetString()

@@ -26,9 +26,14 @@ public static class LinkedInClient
             IsReshareDisabledByAuthor = false
         };
 
+        // Pin a known-active monthly version. Auto "yyyyMM" can request a month LinkedIn has not opened yet.
+        var apiVersion = Environment.GetEnvironmentVariable("LINKEDIN_API_VERSION");
+        if (string.IsNullOrWhiteSpace(apiVersion))
+            apiVersion = "202607";
+
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.linkedin.com/rest/posts");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        request.Headers.TryAddWithoutValidation("LinkedIn-Version", DateTime.UtcNow.ToString("yyyyMM"));
+        request.Headers.TryAddWithoutValidation("LinkedIn-Version", apiVersion);
         request.Headers.TryAddWithoutValidation("X-Restli-Protocol-Version", "2.0.0");
         request.Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
 
