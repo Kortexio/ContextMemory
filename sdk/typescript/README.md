@@ -1,14 +1,14 @@
-# contextmemory (TypeScript)
+# @kortexio/contextmemory (TypeScript)
 
-Thin helper for gateway headers.
+Thin header helper for the ContextMemory gateway (not a full SDK).
 
 ```bash
-npm i ./sdk/typescript
+npm i @kortexio/contextmemory
 ```
 
 ```ts
 import OpenAI from "openai";
-import { openAIClientOptions } from "contextmemory";
+import { openAIClientOptions } from "@kortexio/contextmemory";
 
 const client = new OpenAI(
   openAIClientOptions({
