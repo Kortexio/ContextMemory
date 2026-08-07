@@ -1,10 +1,11 @@
 [project]
-name = "contextmemory"
-version = "0.1.0"
+name = "kortexio-contextmemory"
+version = "0.0.1b0"
 description = "Thin headers helper for the ContextMemory OpenAI-compatible gateway"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "AGPL-3.0-or-later" }
+urls = { Homepage = "https://github.com/Kortexio/ContextMemory", Repository = "https://github.com/Kortexio/ContextMemory" }
 
 [build-system]
 requires = ["setuptools>=61"]

@@ -1,9 +1,9 @@
-# contextmemory (Python)
+# kortexio-contextmemory (Python)
 
-Thin helper so you do not hand-roll `X-App-Id` / `X-Session-Id` headers.
+Thin header helper so you do not hand-roll `X-App-Id` / `X-Session-Id` headers.
 
 ```bash
-pip install -e ./sdk/python
+pip install kortexio-contextmemory
 ```
 
 ```python

@@ -132,7 +132,7 @@ curl -X POST http://localhost:5100/v1/chat/completions \
   -d '{"model":"qwen3.5:9b","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-Thin header helpers (not full SDKs): [sdk/python](sdk/python) · [sdk/typescript](sdk/typescript)
+Thin header helpers (not full SDKs): [`@kortexio/contextmemory`](sdk/typescript) · [`kortexio-contextmemory`](sdk/python)
 
 ---
 
