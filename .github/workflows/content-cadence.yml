@@ -1,6 +1,6 @@
 name: content-cadence
 
-# Suggests a short post from blueprint/MESSAGING.md hooks (manual approve via issue).
+# Suggests a short social hook (manual approve via issue).
 # Does not auto-publish to social — safer for brand voice.
 
 on:
@@ -16,24 +16,31 @@ jobs:
   suggest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - name: Open hook suggestion issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Pick a hook line from MESSAGING.md weekly hooks table (H0x rows).
-          HOOK=$(awk -F'|' '/^\| H0/{gsub(/^ +| +$/,"",$2); print $2" — "$3}' blueprint/MESSAGING.md | shuf -n 1)
-          if [ -z "$HOOK" ]; then
-            HOOK="Your agent forgets. Fix that with memory you can open like a wiki. — https://github.com/Kortexio/ContextMemory"
-          fi
+          HOOKS=(
+            "Your coding agent forgets staging DB names. Fix that in five minutes."
+            "What was true last March? — bi-temporal wiki, not a vector blob."
+            "Same chat URL for memory and shell/python/node."
+            "Destructive tool? HITL pauses until you confirm."
+            "Not RAG. On-demand wiki_search inside the agent loop."
+            "Skills and guardrails as editable packs — not prompt spaghetti."
+            "Ollama today, vLLM tomorrow — same gateway, per-app config."
+            "Admin Playground: watch tool steps and HITL without a client."
+          )
+          HOOK="${HOOKS[$RANDOM % ${#HOOKS[@]}]}"
           BODY=$(printf '%s\n\n%s\n\n%s\n' \
-            "## Suggested post (from MESSAGING.md)" \
+            "## Suggested post" \
             "$HOOK" \
-            "Copy to LinkedIn/X after editing. Voice rules: blueprint/MESSAGING.md. Do **not** call this RAG.")
+            "Copy to LinkedIn/X after editing. Do **not** call this RAG. CTA: https://github.com/Kortexio/ContextMemory")
           gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
             --title "Content cadence: social hook suggestion" \
             --label "content-hook" \
             --body "$BODY" || \
           gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
             --title "Content cadence: social hook suggestion" \
             --body "$BODY"

@@ -19,4 +19,4 @@ export REPO_URL=https://github.com/Kortexio/ContextMemory
 dotnet run --project tools/linkedin-announcer -- post
 ```
 
-Post format follows `blueprint/MESSAGING.md` (short hook + summary + CTA). Optional `LINKEDIN_ORG_URN` posts as the company page.
+Post format: short hook + summary + CTA. Optional `LINKEDIN_ORG_URN` posts as the company page.

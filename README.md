@@ -47,7 +47,7 @@
 - **Admin console** — configure backends, MCP, sandbox, and prove it in Playground (timeline + HITL)
 - **Self-host or Cloud** — AGPL core here; zero-ops on [Kortexio Cloud](https://kortexio.io) (EU, BYOK)
 
-How we compare (Mem0 / Zep / Letta / why we are **not** RAG): [`docs/compare.md`](docs/compare.md). Messaging source: [`blueprint/MESSAGING.md`](blueprint/MESSAGING.md).
+How we compare (Mem0 / Zep / Letta / why we are **not** RAG): [`docs/compare.md`](docs/compare.md).
 
 ---
 

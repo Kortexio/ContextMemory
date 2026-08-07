@@ -70,3 +70,6 @@ docker-compose.override.yml
 ## Node
 node_modules/
 
+## Local marketing / ops drafts (not required to run the app)
+blueprint/
+
