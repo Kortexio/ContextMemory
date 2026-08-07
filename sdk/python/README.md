@@ -1,8 +1,22 @@
 # kortexio-contextmemory
 
-Thin **header helper** for [ContextMemory](https://github.com/Kortexio/ContextMemory) — the OpenAI-compatible agentic memory gateway behind [Kortexio](https://kortexio.io).
+## What is ContextMemory?
 
-This is **not** a full SDK. It only builds the auth / tenant headers (`Authorization`, `X-App-Id`, `X-User-Id`, `X-Session-Id`) so you can keep using the official OpenAI Python client (or `httpx` / `requests`).
+[ContextMemory](https://github.com/Kortexio/ContextMemory) is an **agentic memory gateway**. Your coding agent or chat app talks to a normal OpenAI-compatible URL (`POST /v1/chat/completions`), and the gateway keeps **markdown memory you can open like a wiki** — plus tools, sandbox, MCP, and human-in-the-loop when you need action.
+
+It is **not** classic RAG (no “inject N chunks into the prompt”). Memory is retrieved on demand inside the agent loop (`wiki_search` and related tools). It is also **not** a vector black box: facts live as files you can read, edit, and version.
+
+Use it when:
+
+- Cursor / Claude / your agent **forgets** staging names, decisions, and project context between sessions  
+- You want **auditable** memory (markdown) instead of opaque embeddings  
+- You want **one `/v1` URL** for chat + memory + tools, self-hosted or on [Kortexio Cloud](https://kortexio.io)
+
+## What is this package?
+
+A **thin header helper** for Python — **not** a full SDK.
+
+ContextMemory needs a few HTTP headers on every call (`Authorization`, and usually `X-App-Id` / `X-User-Id` / `X-Session-Id`). This package builds those headers (and kwargs for the official OpenAI client) so you do not hand-roll them.
 
 > Beta (`0.0.1b*`). APIs may still change.  
 > **PyPI name:** `kortexio-contextmemory` · **Import name:** `contextmemory`
@@ -28,7 +42,7 @@ client = OpenAI(
         api_key=os.environ["CONTEXTMEMORY_API_KEY"],  # cm_live_… or self-host key
         app_id="demo-dev",
         user_id="user-42",
-        session_id="sess-abc",
+        session_id="sess-abc",  # same session → same wiki memory
     )
 )
 
@@ -38,6 +52,8 @@ completion = client.chat.completions.create(
 )
 print(completion.choices[0].message.content)
 ```
+
+Reuse the same `session_id` across turns so the gateway attaches the right session wiki.
 
 ## Headers only (`httpx`, `requests`)
 
@@ -80,7 +96,7 @@ print(r.json())
 | **Self-host** | `http://localhost:5100/v1` (or your host) | App key from Admin / config |
 | **[Kortexio Cloud](https://kortexio.io)** | Cloud API `/v1` | `cmk_live_…` |
 
-Gateway docs: [GitHub README](https://github.com/Kortexio/ContextMemory) · [compare (why not RAG)](https://github.com/Kortexio/ContextMemory/blob/main/docs/compare.md)
+More: [GitHub](https://github.com/Kortexio/ContextMemory) · [why we are not RAG](https://github.com/Kortexio/ContextMemory/blob/main/docs/compare.md) · [MCP aha demo](https://github.com/Kortexio/ContextMemory/blob/main/docs/aha-demo.html)
 
 ## License
 
