@@ -45,6 +45,9 @@ jobs:
             exit 0
           fi
 
+          # checkout persists GITHUB_TOKEN in http.extraheader; clear it so PEER_TOKEN is used
+          git config --local --unset-all http.https://github.com/.extraheader || true
+
           git remote remove peer 2>/dev/null || true
           git remote add peer "https://x-access-token:${PEER_TOKEN}@github.com/${PEER_REPO}.git"
 
