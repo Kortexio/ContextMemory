@@ -20,6 +20,7 @@ on:
 
 jobs:
   linkedin:
+    if: github.repository == 'Kortexio/ContextMemory'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,6 +51,7 @@ jobs:
           dotnet run --project tools/linkedin-announcer -- post
 
   devto:
+    if: github.repository == 'Kortexio/ContextMemory'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -17,6 +17,7 @@ env:
 
 jobs:
   publish:
+    if: github.repository == 'Kortexio/ContextMemory'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

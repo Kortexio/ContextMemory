@@ -1,0 +1,61 @@
+name: Sync mirror
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve peer repository
+        id: peer
+        run: |
+          case "${{ github.repository }}" in
+            Kortexio/ContextMemory)
+              echo "peer=vitorcastro78/ContextMemory" >> "$GITHUB_OUTPUT"
+              ;;
+            vitorcastro78/ContextMemory)
+              echo "peer=Kortexio/ContextMemory" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unknown repository ${{ github.repository }}; skipping."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Checkout
+        if: steps.peer.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Mirror to peer
+        if: steps.peer.outputs.skip != 'true'
+        env:
+          PEER_TOKEN: ${{ secrets.PEER_SYNC_TOKEN }}
+          PEER_REPO: ${{ steps.peer.outputs.peer }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PEER_TOKEN:-}" ]; then
+            echo "PEER_SYNC_TOKEN is not set; skipping mirror."
+            exit 0
+          fi
+
+          git remote remove peer 2>/dev/null || true
+          git remote add peer "https://x-access-token:${PEER_TOKEN}@github.com/${PEER_REPO}.git"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            git push peer --all
+            git push peer --tags
+            exit 0
+          fi
+
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            git push peer "${{ github.ref }}"
+          else
+            git push peer "HEAD:${{ github.ref_name }}"
+          fi
