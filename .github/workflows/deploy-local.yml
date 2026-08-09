@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   deploy:
+    if: github.repository == 'Kortexio/ContextMemory'
     runs-on: [self-hosted, Windows, network-local]
     timeout-minutes: 45
     steps:

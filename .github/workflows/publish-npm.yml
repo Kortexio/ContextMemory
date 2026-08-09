@@ -7,6 +7,7 @@ on:
 
 jobs:
   publish:
+    if: github.repository == 'Kortexio/ContextMemory'
     runs-on: ubuntu-latest
     defaults:
       run:
