@@ -87,6 +87,80 @@ public sealed class HybridAgentValidatorTests
         var result = await _deterministic.ValidateAsync(request);
         Assert.False(result.IsValid);
     }
+
+    [Fact]
+    public async Task Deterministic_IgnoresFailedDiscoveryTools_ForRequireZeroExitCode()
+    {
+        var request = new AgentValidationRequest
+        {
+            FinalAnswer = "Found one active account: ACC-1.",
+            Steps =
+            [
+                new AgentExecutionStep
+                {
+                    Iteration = 1,
+                    ToolName = "tool_describe",
+                    Arguments = "{}",
+                    Success = false,
+                    ExitCode = 1,
+                    Output = "Unknown tool: foo"
+                },
+                new AgentExecutionStep
+                {
+                    Iteration = 2,
+                    ToolName = "zuora__query_objects",
+                    Arguments = "{}",
+                    Success = true,
+                    ExitCode = 0,
+                    Output = "[{id:ACC-1}]"
+                }
+            ],
+            RuntimeConfig = new AppRuntimeConfig
+            {
+                AppId = "test",
+                Agentic = new AgenticConfig
+                {
+                    Guardrails = new AgenticGuardrailsConfig { RequireZeroExitCode = true }
+                }
+            }
+        };
+
+        var result = await _deterministic.ValidateAsync(request);
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Deterministic_StillRejectsFailedNonDiscoveryTools_ForRequireZeroExitCode()
+    {
+        var request = new AgentValidationRequest
+        {
+            FinalAnswer = "Here is the result.",
+            Steps =
+            [
+                new AgentExecutionStep
+                {
+                    Iteration = 1,
+                    ToolName = "zuora__query_objects",
+                    Arguments = "{}",
+                    Success = false,
+                    ExitCode = 1,
+                    Output = "missing operation"
+                }
+            ],
+            RuntimeConfig = new AppRuntimeConfig
+            {
+                AppId = "test",
+                Agentic = new AgenticConfig
+                {
+                    Guardrails = new AgenticGuardrailsConfig { RequireZeroExitCode = true }
+                }
+            }
+        };
+
+        var result = await _deterministic.ValidateAsync(request);
+        Assert.False(result.IsValid);
+        Assert.Contains("query_objects", result.FeedbackForModel, StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 public sealed class HybridAgentValidationIntegrationTests : IClassFixture<AgenticStubWebApplicationFactory>

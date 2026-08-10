@@ -79,7 +79,12 @@ public sealed class DeterministicAgentValidator
             }
         }
 
-        var failedSteps = steps.Where(s => !s.Success).ToList();
+        // Discovery harness tools (tool_describe, skill_*, etc.) must not poison the turn:
+        // a failed describe + successful MCP call would otherwise loop forever on RequireZeroExitCode.
+        var failedSteps = steps
+            .Where(s => !s.Success)
+            .Where(s => !SessionDiscoveryTools.IsDiscoveryTool(s.ToolName))
+            .ToList();
         if (guardrails.RequireZeroExitCode && failedSteps.Count > 0)
         {
             var toolList = string.Join(", ", failedSteps.Select(s => s.ToolName).Distinct());
