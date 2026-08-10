@@ -34,6 +34,14 @@ public sealed class McpToolCatalog : IMcpToolCatalog
         IReadOnlyList<string>? recentToolNames = null,
         CancellationToken cancellationToken = default)
     {
+        var allTools = await GetAllToolsAsync(runtimeConfig, cancellationToken).ConfigureAwait(false);
+        return _selector.SelectTools(runtimeConfig, allTools, userQuery, recentToolNames);
+    }
+
+    public async Task<IReadOnlyList<McpToolDefinition>> GetAllToolsAsync(
+        AppRuntimeConfig runtimeConfig,
+        CancellationToken cancellationToken = default)
+    {
         var integrations = runtimeConfig.Agentic.Tools.Integrations
             .Where(i => string.Equals(i.Type, "mcp", StringComparison.OrdinalIgnoreCase))
             .Where(i => i.Enabled)
@@ -44,21 +52,21 @@ public sealed class McpToolCatalog : IMcpToolCatalog
             return [];
 
         if (_cache.TryGetValue(runtimeConfig.AppId, out var cached) && cached.ExpiresAt > DateTimeOffset.UtcNow)
-            return _selector.SelectTools(runtimeConfig, cached.Tools, userQuery, recentToolNames);
+            return cached.Tools;
 
         var integrationNames = integrations.Select(i => i.Name).ToList();
         var storedTools = await _store.GetToolsAsync(runtimeConfig.AppId, integrationNames, cancellationToken).ConfigureAwait(false);
         if (storedTools.Count > 0)
         {
             _cache[runtimeConfig.AppId] = new CacheEntry(storedTools, DateTimeOffset.UtcNow.Add(CacheTtl));
-            return _selector.SelectTools(runtimeConfig, storedTools, userQuery, recentToolNames);
+            return storedTools;
         }
 
         var synced = await SyncAsync(runtimeConfig, cancellationToken).ConfigureAwait(false);
         var allTools = await _store.GetToolsAsync(runtimeConfig.AppId, integrationNames, cancellationToken).ConfigureAwait(false);
         _cache[runtimeConfig.AppId] = new CacheEntry(allTools, DateTimeOffset.UtcNow.Add(CacheTtl));
         _ = synced;
-        return _selector.SelectTools(runtimeConfig, allTools, userQuery, recentToolNames);
+        return allTools;
     }
 
     public async Task<IReadOnlyList<McpCatalogSyncResult>> SyncAsync(

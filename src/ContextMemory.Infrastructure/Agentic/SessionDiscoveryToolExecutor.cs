@@ -135,11 +135,14 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
 
         if (string.Equals(name, SessionDiscoveryTools.ToolDescribe, StringComparison.OrdinalIgnoreCase))
         {
-            var toolName = GetString(root, "toolName");
+            // Models often use name/tool instead of toolName with open schemas.
+            var toolName = GetString(root, "toolName")
+                ?? GetString(root, "name")
+                ?? GetString(root, "tool");
             if (string.IsNullOrWhiteSpace(toolName))
-                return Fail("tool_describe requires toolName.");
+                return Fail("tool_describe requires toolName (or name/tool).");
 
-            var described = await DescribeToolAsync(toolName, runtimeConfig, cancellationToken)
+            var described = await DescribeToolAsync(toolName.Trim(), runtimeConfig, cancellationToken)
                 .ConfigureAwait(false);
             return described is null
                 ? Fail($"Unknown tool: {toolName}")
@@ -201,8 +204,9 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
         if (built is not null)
             return FormatTool(built);
 
+        // Full catalog — do not use the turn selector top-K (would miss most MCP tools).
         var mcp = await _mcpCatalog
-            .GetToolsAsync(runtimeConfig, userQuery: toolName, recentToolNames: [toolName], cancellationToken)
+            .GetAllToolsAsync(runtimeConfig, cancellationToken)
             .ConfigureAwait(false);
         var match = mcp.FirstOrDefault(t =>
             string.Equals(t.QualifiedName, toolName, StringComparison.OrdinalIgnoreCase)
