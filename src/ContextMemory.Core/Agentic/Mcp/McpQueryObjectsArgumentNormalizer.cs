@@ -57,7 +57,19 @@ public static class McpQueryObjectsArgumentNormalizer
             obj["objectType"] = objectType.Trim().ToLowerInvariant();
         }
 
-        if (obj["filter"] is JsonArray filterArr)
+        if (obj["filter"] is JsonObject filterObj)
+        {
+            var clause = NormalizeFilterItem(filterObj);
+            if (!string.IsNullOrWhiteSpace(clause))
+                obj["filter"] = new JsonArray(clause!);
+        }
+        else if (obj["filter"] is JsonValue filterScalar
+                 && filterScalar.TryGetValue<string>(out var filterText)
+                 && !string.IsNullOrWhiteSpace(filterText))
+        {
+            obj["filter"] = new JsonArray(filterText.Trim());
+        }
+        else if (obj["filter"] is JsonArray filterArr)
         {
             var normalized = new JsonArray();
             foreach (var item in filterArr)
