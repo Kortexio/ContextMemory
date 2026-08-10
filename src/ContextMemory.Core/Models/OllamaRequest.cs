@@ -28,6 +28,13 @@ public record OllamaRequest
     [JsonPropertyName("think")]
     public bool? Think { get; init; }
 
+    /// <summary>
+    /// OpenAI-compat tool choice: <c>auto</c>, <c>required</c>, <c>none</c>, or omit.
+    /// Ignored by native Ollama <c>/api/chat</c> unless the server supports it.
+    /// </summary>
+    [JsonPropertyName("tool_choice")]
+    public string? ToolChoice { get; init; }
+
     [JsonPropertyName("mcp_servers")]
     public List<OllamaMcpServer>? McpServers { get; init; }
 }
