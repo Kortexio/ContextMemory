@@ -239,7 +239,11 @@ public sealed class AgenticIntegrationTests : IClassFixture<AgenticStubWebApplic
         Assert.Contains("agentic-ok", body, StringComparison.OrdinalIgnoreCase);
 
         Assert.Equal(2, _factory.AgenticHandler.ChatRequests.Count);
-        Assert.Contains("\"tools\"", _factory.AgenticHandler.ChatRequestBodies[0], StringComparison.Ordinal);
+        // demo-app resolves to Qwen profile on backend "ollama" → client-side tool parsing
+        // (ClientSideToolCalling) is used instead of native tools[] to avoid Ollama's Qwen
+        // chat-template XML tool-parser 500s (see LlmCapabilities.PreferClientSideToolParsing).
+        Assert.Contains("## Tool catalog", _factory.AgenticHandler.ChatRequestBodies[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("\"tools\"", _factory.AgenticHandler.ChatRequestBodies[0], StringComparison.Ordinal);
     }
 }
 
@@ -385,6 +389,21 @@ public sealed class McpToolNamingTests
         Assert.True(ok);
         Assert.Equal("zuora-mcp", server);
         Assert.Equal("get_account", tool);
+    }
+
+    [Theory]
+    [InlineData("zuora-developer-mcp-PACCAR-ACCP", "zuora-developer-mcp-PACCAR-ACCP", true)]
+    // Gemma (native Ollama function-calling grammar) rewrites '-' as '_' in generated
+    // identifiers; dispatch must still match the configured integration.
+    [InlineData("zuora-developer-mcp-PACCAR-ACCP", "zuora_developer_mcp-PACCAR-ACCP", true)]
+    [InlineData("zuora-developer-mcp-PACCAR-ACCP", "ZUORA-DEVELOPER-MCP-PACCAR-ACCP", true)]
+    [InlineData("zuora-developer-mcp-PACCAR-ACCP", "other-mcp-server", false)]
+    public void ServerNamesMatch_TreatsHyphenAndUnderscoreAsEquivalent(
+        string configured, string parsed, bool expected)
+    {
+        Assert.Equal(
+            expected,
+            ContextMemory.Core.Agentic.Mcp.McpToolNaming.ServerNamesMatch(configured, parsed));
     }
 }
 

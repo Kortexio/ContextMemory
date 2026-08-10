@@ -17,6 +17,7 @@ public enum ModelHarnessMode
 public sealed record LlmCapabilities(
     ModelHarnessMode HarnessMode,
     bool PreferNativeToolCalls,
+    bool PreferClientSideToolParsing,
     bool EnableProseToolCallPromotion,
     bool SanitizeSchemasAggressively,
     bool SupportsOpenAiJsonFormat,
@@ -27,8 +28,6 @@ public sealed record LlmCapabilities(
 
 public static partial class LlmCapabilitiesResolver
 {
-    public const int WeakMaxMcpToolsDefault = 24;
-
     public static LlmCapabilities From(AppRuntimeConfig config)
     {
         var profile = AgenticPromptProfileResolver.Resolve(config);
@@ -37,23 +36,32 @@ public static partial class LlmCapabilitiesResolver
         var mode = ResolveHarnessMode(config, profile);
 
         var weak = mode == ModelHarnessMode.Weak;
+        // Ollama's native /api/chat Qwen chat-template XML tool parser 500s on format drift
+        // (e.g. "element <function> closed by </parameter>") even when tools[] is small/well-formed.
+        // Scope client-side tool parsing narrowly to that exact combo — other Weak/local models
+        // (llama3.2, mistral, granite, ...) still use native tool_calls and must not regress.
+        var isOllamaChatApi = backend is "ollama" or "ollama-native";
+        var clientSideTools = isOllamaChatApi && profile == AgenticPromptProfile.Qwen;
+
         return new LlmCapabilities(
             HarnessMode: mode,
             PreferNativeToolCalls: !weak && profile is AgenticPromptProfile.OpenAi
                 or AgenticPromptProfile.Claude
                 or AgenticPromptProfile.ComposerLike,
+            PreferClientSideToolParsing: clientSideTools,
             EnableProseToolCallPromotion: true,
             SanitizeSchemasAggressively: weak,
             SupportsOpenAiJsonFormat: openAiCompat
                 || profile is AgenticPromptProfile.OpenAi or AgenticPromptProfile.ComposerLike,
             InlineEvidenceRules: weak,
             PreferSkillDiscovery: !weak,
-            MaxMcpToolsHint: weak ? WeakMaxMcpToolsDefault : int.MaxValue,
+            // Catalog size is owned by tenant maxMcpToolsPerTurn — never silently cap Weak models.
+            MaxMcpToolsHint: int.MaxValue,
             DefaultToolChoice: "auto");
     }
 
     /// <summary>
-    /// Effective max MCP tools: min(tenant config, harness hint).
+    /// Effective max MCP tools from tenant config (<c>maxMcpToolsPerTurn</c>). Default 12 when unset.
     /// </summary>
     public static int ResolveMaxMcpTools(AppRuntimeConfig config)
     {

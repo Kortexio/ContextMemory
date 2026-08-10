@@ -135,18 +135,33 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 schemaRepairLevel = MaxRepairLevel(schemaRepairLevel, "sanitize");
             }
 
-            var toolChoice = ResolveToolChoice(capabilities, requireToolChoice, toolsForRequest, request.RuntimeConfig);
+            var useClientSideTools = capabilities.PreferClientSideToolParsing && toolsForRequest is { Count: > 0 };
+            if (useClientSideTools)
+            {
+                ClientSideToolCalling.EnsureCatalogInSystemPrompt(messages, toolsForRequest!);
+            }
+
+            var toolChoice = useClientSideTools
+                ? null
+                : ResolveToolChoice(capabilities, requireToolChoice, toolsForRequest, request.RuntimeConfig);
 
             // format=json fights native tool_calls — clear on agentic iterations with tools.
             var format = toolsForRequest is { Count: > 0 }
                 ? null
                 : request.EnrichedRequest.Format;
 
+            var wireMessages = useClientSideTools
+                ? ClientSideToolCalling.FlattenForClientSideWire(messages)
+                : messages;
+
             var llmRequest = request.EnrichedRequest with
             {
-                Messages = messages,
-                Tools = toolsForRequest,
-                McpServers = request.McpServers.Count > 0 ? request.McpServers.ToList() : null,
+                Messages = wireMessages,
+                // Omit native tools for Qwen/Weak — Ollama XML parser 500s on format drift.
+                Tools = useClientSideTools ? null : toolsForRequest,
+                McpServers = useClientSideTools
+                    ? null
+                    : (request.McpServers.Count > 0 ? request.McpServers.ToList() : null),
                 Stream = false,
                 ToolChoice = toolChoice,
                 Format = format
@@ -157,6 +172,25 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             {
                 response = await adapter.ChatAsync(llmRequest, cancellationToken).ConfigureAwait(false);
                 llmCalls++;
+            }
+            catch (HttpRequestException ex) when (IsOllamaToolXmlParseError(ex) && toolsForRequest is { Count: > 0 })
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Ollama XML tool parse failed for {AppId}; falling back to client-side tool parsing",
+                    request.AppId);
+
+                ClientSideToolCalling.EnsureCatalogInSystemPrompt(messages, toolsForRequest);
+                var fallbackRequest = llmRequest with
+                {
+                    Messages = ClientSideToolCalling.FlattenForClientSideWire(messages),
+                    Tools = null,
+                    McpServers = null,
+                    ToolChoice = null
+                };
+                response = await adapter.ChatAsync(fallbackRequest, cancellationToken).ConfigureAwait(false);
+                llmCalls++;
+                useClientSideTools = true;
             }
             catch (HttpRequestException ex) when (IsStrictChatTemplateError(ex))
             {
@@ -188,7 +222,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
             var assistantMessage = response.Message;
 
-            if (capabilities.EnableProseToolCallPromotion
+            if ((capabilities.EnableProseToolCallPromotion || useClientSideTools)
                 && assistantMessage is not null
                 && (assistantMessage.ToolCalls is null || assistantMessage.ToolCalls.Count == 0))
             {
@@ -209,10 +243,21 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 }
             }
 
+            // When client-side, keep history as flat chat (avoid feeding tool_calls back to Ollama).
             if (assistantMessage?.ToolCalls is { Count: > 0 } toolCalls)
             {
                 requireToolChoice = false;
-                messages.Add(assistantMessage);
+                if (useClientSideTools)
+                {
+                    messages.Add(ClientSideToolCalling.FlattenForClientSideWire(
+                    [
+                        assistantMessage with { Content = string.Empty, ToolCalls = toolCalls.ToList() }
+                    ])[0]);
+                }
+                else
+                {
+                    messages.Add(assistantMessage);
+                }
 
                 foreach (var toolCall in toolCalls)
                 {
@@ -498,6 +543,14 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             AgentPartialResponseFormatter.FormatTimeoutResponse(lastAnswer, steps, language),
             steps,
             iterations);
+
+    private static bool IsOllamaToolXmlParseError(HttpRequestException ex)
+    {
+        var msg = ex.Message ?? string.Empty;
+        return msg.Contains("XML syntax error", StringComparison.OrdinalIgnoreCase)
+               || msg.Contains("element <function> closed by", StringComparison.OrdinalIgnoreCase)
+               || msg.Contains("qwen tool call parsing failed", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool IsLlmGrammarError(HttpRequestException ex)
     {

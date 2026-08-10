@@ -256,7 +256,7 @@ Clients keep sending a normal chat body; they do not implement retrieval or orch
 
 | Profile / signal | Default harness | Sanitize schemas | Inline evidence | MCP tools cap hint |
 |---|---|---|---|---|
-| Qwen / Ollama / `bonsai*` | Weak | aggressive | yes | min(config, 24) |
+| Qwen / Ollama / `bonsai*` | Weak | aggressive | yes | tenant `maxMcpToolsPerTurn` |
 | OpenAI / Claude / Composer | Strong | minimal | no (lazy skills) | config |
 | Override `harnessMode` | wins | follows mode | follows mode | follows mode |
 

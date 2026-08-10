@@ -198,6 +198,10 @@
         <div class="form-group mb-3" style="max-width: 12rem;">
             <label>Max MCP tools / turn</label>
             <InputNumber class="form-control form-control-sm" @bind-Value="Model.Tools.MaxMcpToolsPerTurn" />
+            <FieldHelp>
+                Hard ceiling for how many MCP tools are offered to the model each turn (top-K by query relevance).
+                Applies to Weak and Strong harness alike. Set ≥ catalog size (e.g. <code>100</code>) to expose all tools.
+            </FieldHelp>
         </div>
         @for (var i = 0; i < Model.Tools.Integrations.Count; i++)
         {

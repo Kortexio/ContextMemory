@@ -23,4 +23,21 @@ public static class McpToolNaming
 
     public static string SanitizeForCompare(string value) =>
         new(value.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_').ToArray());
+
+    /// <summary>
+    /// Compares a configured integration name against a server name parsed from a model-issued
+    /// tool call. Some models (notably Gemma via Ollama's native function-calling grammar) rewrite
+    /// '-' as '_' in generated identifiers; treat them as equivalent here so dispatch still
+    /// succeeds instead of silently failing every iteration until the agentic loop times out.
+    /// The canonical qualified name exposed to the model (<see cref="ToQualifiedName"/>) is
+    /// unaffected — this only relaxes matching on the receiving end.
+    /// </summary>
+    public static bool ServerNamesMatch(string configuredName, string parsedServerName) =>
+        string.Equals(
+            NormalizeForFuzzyMatch(configuredName),
+            NormalizeForFuzzyMatch(parsedServerName),
+            StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeForFuzzyMatch(string value) =>
+        SanitizeForCompare(value).Replace('_', '-');
 }
