@@ -61,6 +61,9 @@ public record AppRuntimeConfig
     /// </summary>
     public bool LlmThinkEnabled { get; init; }
 
+    /// <summary>Tenant defaults for generation payload (temperature, num_ctx, num_predict, …).</summary>
+    public LlmGenerationConfig LlmOptions { get; init; } = new();
+
     public RateLimitConfig RateLimits { get; init; } = new();
     public WebSearchConfig WebSearch { get; init; } = WebSearchConfig.Disabled;
     public AgenticConfig Agentic { get; init; } = AgenticConfig.Disabled;

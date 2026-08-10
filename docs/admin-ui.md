@@ -98,12 +98,21 @@ Use the app key in Chat Lab and client apps — never the Master Key.
 | Endpoint / API key | Optional per-app overrides; empty = host defaults |
 | Max history messages | Recent turns kept in the prompt (wiki is separate) |
 | Streaming enabled | Allow streaming on legacy `/api/chat` |
+| Enable model thinking | `llmThinkEnabled` → `reasoning_effort` / `think` (off by default) |
+| **Generation defaults** (`llmOptions`) | Tenant defaults merged into chat/generate unless the client overrides |
+| → temperature / top_p / top_k | Sampling |
+| → num_ctx | Ollama context window (raise for MCP/agentic) |
+| → num_predict | Max tokens to generate (`max_tokens` on OpenAI `/v1`) |
+| → repeat_penalty / seed / stop / tfs_z / mirostat | Advanced Ollama options |
+| → keep_alive / format | Ollama top-level fields |
+
+Persisted in `app_profiles.ConfigJson` as `llmOptions`. Request body wins over tenant defaults for any field set.
 
 Prefer clients calling **`POST /v1/chat/completions`**.
 
 #### Session wiki
 
-Max wiki context chars, compaction threshold (bytes), compaction min pages.
+Max wiki context chars, max context tokens (agent compaction), compaction threshold (bytes), compaction min pages.
 
 #### Global Wiki
 

@@ -33,12 +33,22 @@ else
                     <FieldHelp>Budget for compiled per-session wiki text. <code>0</code> = API default.</FieldHelp>
                 </div>
                 <div class="form-group">
+                    <label>Max context tokens (agent compaction)</label>
+                    <InputNumber class="form-control" @bind-Value="_form.MaxContextTokens" />
+                    <FieldHelp>
+                        Estimated token budget that triggers mid-turn agent context compaction.
+                        <code>0</code> = host default. Separate from model <code>num_ctx</code> (set under LLM).
+                    </FieldHelp>
+                </div>
+                <div class="form-group">
                     <label>Compaction threshold (bytes)</label>
                     <InputNumber class="form-control" @bind-Value="_form.WikiCompactionThresholdBytes" />
+                    <FieldHelp>When session wiki on disk exceeds this size, compaction may run.</FieldHelp>
                 </div>
                 <div class="form-group">
                     <label>Compaction min pages</label>
                     <InputNumber class="form-control" @bind-Value="_form.WikiCompactionMinPages" />
+                    <FieldHelp>Minimum wiki pages before compaction is considered.</FieldHelp>
                 </div>
                 <ModelPicker @bind-Value="_form.WikiLlmModel"
                              Label="Wiki maintainer model"
@@ -66,6 +76,7 @@ else
                 <div class="form-group">
                     <label>Max Global Wiki tool chars</label>
                     <InputNumber class="form-control" @bind-Value="_form.MaxGlobalWikiToolChars" />
+                    <FieldHelp>Max chars returned by <code>wiki_search</code> full-body hydrate. <code>0</code> = service default.</FieldHelp>
                 </div>
 
                 @if (Message is not null) { <div class="alert alert-success">@Message</div> }
@@ -85,6 +96,7 @@ else
     protected override void OnConfigLoaded(AppRuntimeConfigDto config)
     {
         _form.MaxWikiContextChars = config.MaxWikiContextChars;
+        _form.MaxContextTokens = config.MaxContextTokens;
         _form.WikiCompactionThresholdBytes = config.WikiCompactionThresholdBytes;
         _form.WikiCompactionMinPages = config.WikiCompactionMinPages;
         _form.WikiLlmModel = config.WikiLlmModel ?? string.Empty;
@@ -96,6 +108,7 @@ else
     protected override AppConfigPatchRequest BuildPatch() => new()
     {
         MaxWikiContextChars = _form.MaxWikiContextChars > 0 ? _form.MaxWikiContextChars : null,
+        MaxContextTokens = _form.MaxContextTokens > 0 ? _form.MaxContextTokens : null,
         WikiCompactionThresholdBytes = _form.WikiCompactionThresholdBytes > 0 ? _form.WikiCompactionThresholdBytes : null,
         WikiCompactionMinPages = _form.WikiCompactionMinPages > 0 ? _form.WikiCompactionMinPages : null,
         WikiLlmModel = _form.WikiLlmModel?.Trim() ?? string.Empty,
@@ -107,6 +120,7 @@ else
     private sealed class MemoryForm
     {
         public int MaxWikiContextChars { get; set; }
+        public int MaxContextTokens { get; set; }
         public long WikiCompactionThresholdBytes { get; set; }
         public int WikiCompactionMinPages { get; set; }
         public string WikiLlmModel { get; set; } = string.Empty;

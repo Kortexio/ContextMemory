@@ -95,10 +95,14 @@ public sealed class ChatRequestEnricher : IChatRequestEnricher
             messages.Add(lastUser);
 
         var model = string.IsNullOrWhiteSpace(request.Model) ? runtimeConfig.LlmModel : request.Model;
+        var mergedOptions = LlmGenerationConfig.MergeOptions(runtimeConfig.LlmOptions, request.Options);
         var enriched = request with
         {
             Model = model,
             Messages = messages,
+            Options = mergedOptions,
+            KeepAlive = LlmGenerationConfig.MergeKeepAlive(runtimeConfig.LlmOptions, request.KeepAlive),
+            Format = LlmGenerationConfig.MergeFormat(runtimeConfig.LlmOptions, request.Format),
             // Tenant policy wins: off by default; /v1 maps false → reasoning_effort=none.
             Think = runtimeConfig.LlmThinkEnabled
         };

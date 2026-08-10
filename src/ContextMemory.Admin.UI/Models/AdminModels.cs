@@ -76,6 +76,8 @@ public sealed class AppRuntimeConfigDto
     public int WikiUpdateEveryNTurns { get; set; } = 3;
     public bool StreamingEnabled { get; set; }
     public bool LlmThinkEnabled { get; set; }
+    public LlmGenerationConfig? LlmOptions { get; set; }
+    public int MaxContextTokens { get; set; }
     public bool GlobalWikiEnabled { get; set; } = true;
     public int MaxGlobalWikiToolChars { get; set; }
     public RateLimitConfig? RateLimits { get; set; }

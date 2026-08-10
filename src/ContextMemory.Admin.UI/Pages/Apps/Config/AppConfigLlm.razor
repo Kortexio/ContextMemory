@@ -3,13 +3,14 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @layout MainLayout
 @inherits AppConfigSectionBase
+@using ContextMemory.Core.Models
 
 <PageTitle>LLM · @AppId</PageTitle>
 
 <div class="kx-page-header">
     <div>
         <h1 class="kx-page-title">LLM</h1>
-        <p class="kx-page-lead">Model, backend, and chat history for this tenant.</p>
+        <p class="kx-page-lead">Model, backend, sampling defaults, and chat history for this tenant.</p>
     </div>
     <button type="button" class="btn btn-outline-secondary" @onclick="LoadAsync" disabled="@(Saving || Loading)">Reload</button>
 </div>
@@ -27,6 +28,7 @@ else
     <div class="kx-panel">
         <div class="kx-panel-body">
             <EditForm Model="_form" OnValidSubmit="SaveAsync">
+                <div class="kx-section-title">Connection</div>
                 <div class="form-group">
                     <label>Default language</label>
                     <InputText class="form-control" @bind-Value="_form.DefaultLanguage" />
@@ -58,6 +60,7 @@ else
                 <div class="form-group">
                     <label>Max history messages</label>
                     <InputNumber class="form-control" @bind-Value="_form.MaxHistoryMessages" />
+                    <FieldHelp>How many prior chat messages are kept in the request (plus system prompt).</FieldHelp>
                 </div>
                 <div class="form-check mb-3">
                     <InputCheckbox class="form-check-input" id="streamingEnabled" @bind-Value="_form.StreamingEnabled" />
@@ -69,7 +72,88 @@ else
                     <FieldHelp>
                         Off by default. When on, thinking-capable models (e.g. Qwen3) may spend many tokens before the answer.
                         Requires <code>reasoning_effort</code> on OpenAI <code>/v1</code> or <code>think</code> on Ollama native.
+                        Leave off to avoid empty/truncated finals when the model only fills the thinking channel.
                     </FieldHelp>
+                </div>
+
+                <div class="kx-section-title">Generation defaults</div>
+                <p class="text-muted small mb-3">
+                    Values sent on every chat/generate for this app unless the client overrides them in the request body.
+                    Leave blank to use the model/server default.
+                </p>
+                <div class="form-row">
+                    <div class="col-md-6 form-group">
+                        <label>temperature</label>
+                        <InputNumber class="form-control" @bind-Value="_form.Temperature" step="0.05" />
+                        <FieldHelp>Sampling temperature (e.g. <code>0.2</code> focused, <code>0.7</code> creative). Maps to OpenAI <code>temperature</code>.</FieldHelp>
+                    </div>
+                    <div class="col-md-6 form-group">
+                        <label>top_p</label>
+                        <InputNumber class="form-control" @bind-Value="_form.TopP" step="0.05" />
+                        <FieldHelp>Nucleus sampling. OpenAI <code>top_p</code> / Ollama <code>top_p</code>.</FieldHelp>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="col-md-6 form-group">
+                        <label>top_k</label>
+                        <InputNumber class="form-control" @bind-Value="_form.TopK" />
+                        <FieldHelp>Ollama <code>top_k</code> (also forwarded via <code>options</code> on Ollama <code>/v1</code>).</FieldHelp>
+                    </div>
+                    <div class="col-md-6 form-group">
+                        <label>num_ctx</label>
+                        <InputNumber class="form-control" @bind-Value="_form.NumCtx" />
+                        <FieldHelp>
+                            Context window size (Ollama <code>num_ctx</code>). Raise for agentic/MCP turns (e.g. <code>32768</code>)
+                            so tool schemas + wiki do not starve generation tokens.
+                        </FieldHelp>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="col-md-6 form-group">
+                        <label>num_predict / max_tokens</label>
+                        <InputNumber class="form-control" @bind-Value="_form.NumPredict" />
+                        <FieldHelp>
+                            Max tokens to generate. Ollama <code>num_predict</code> → OpenAI <code>max_tokens</code>.
+                            Too low causes mid-sentence cutoffs.
+                        </FieldHelp>
+                    </div>
+                    <div class="col-md-6 form-group">
+                        <label>repeat_penalty</label>
+                        <InputNumber class="form-control" @bind-Value="_form.RepeatPenalty" step="0.05" />
+                        <FieldHelp>Ollama <code>repeat_penalty</code> (e.g. <code>1.1</code>). Native / <code>options</code> on Ollama <code>/v1</code>.</FieldHelp>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="col-md-6 form-group">
+                        <label>seed</label>
+                        <InputNumber class="form-control" @bind-Value="_form.Seed" />
+                        <FieldHelp>Optional deterministic seed (OpenAI <code>seed</code> / Ollama <code>seed</code>).</FieldHelp>
+                    </div>
+                    <div class="col-md-6 form-group">
+                        <label>mirostat</label>
+                        <InputNumber class="form-control" @bind-Value="_form.Mirostat" />
+                        <FieldHelp>Ollama Mirostat mode (<code>0</code> off, <code>1</code>/<code>2</code>). Leave blank for default.</FieldHelp>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>tfs_z</label>
+                    <InputNumber class="form-control" @bind-Value="_form.TfsZ" step="0.05" />
+                    <FieldHelp>Ollama Tail Free Sampling (<code>tfs_z</code>). Rarely needed.</FieldHelp>
+                </div>
+                <div class="form-group">
+                    <label>stop (comma-separated)</label>
+                    <InputText class="form-control" @bind-Value="_form.StopCsv" placeholder="e.g. ###,END" />
+                    <FieldHelp>Exact stop strings sent as <code>stop</code> / Ollama <code>options.stop</code>.</FieldHelp>
+                </div>
+                <div class="form-group">
+                    <label>keep_alive</label>
+                    <InputText class="form-control" @bind-Value="_form.KeepAlive" placeholder="e.g. 5m or -1" />
+                    <FieldHelp>How long Ollama keeps the model loaded (<code>keep_alive</code>). Empty = server default.</FieldHelp>
+                </div>
+                <div class="form-group">
+                    <label>format</label>
+                    <InputText class="form-control" @bind-Value="_form.Format" placeholder="e.g. json" />
+                    <FieldHelp>Ollama response <code>format</code> (e.g. <code>json</code>). Empty = free text.</FieldHelp>
                 </div>
 
                 @if (Message is not null) { <div class="alert alert-success">@Message</div> }
@@ -96,6 +180,20 @@ else
         _form.MaxHistoryMessages = config.MaxHistoryMessages;
         _form.StreamingEnabled = config.StreamingEnabled;
         _form.LlmThinkEnabled = config.LlmThinkEnabled;
+
+        var o = config.LlmOptions;
+        _form.Temperature = o?.Temperature;
+        _form.TopP = o?.TopP;
+        _form.TopK = o?.TopK;
+        _form.NumCtx = o?.NumCtx;
+        _form.NumPredict = o?.NumPredict;
+        _form.RepeatPenalty = o?.RepeatPenalty;
+        _form.Seed = o?.Seed;
+        _form.Mirostat = o?.Mirostat;
+        _form.TfsZ = o?.TfsZ;
+        _form.StopCsv = o?.Stop is { Count: > 0 } ? string.Join(", ", o.Stop) : string.Empty;
+        _form.KeepAlive = o?.KeepAlive ?? string.Empty;
+        _form.Format = o?.Format ?? string.Empty;
     }
 
     protected override AppConfigPatchRequest BuildPatch() => new()
@@ -107,8 +205,39 @@ else
         LlmApiKey = _form.LlmApiKey ?? string.Empty,
         MaxHistoryMessages = _form.MaxHistoryMessages,
         StreamingEnabled = _form.StreamingEnabled,
-        LlmThinkEnabled = _form.LlmThinkEnabled
+        LlmThinkEnabled = _form.LlmThinkEnabled,
+        LlmOptions = BuildLlmOptions()
     };
+
+    private LlmGenerationConfig BuildLlmOptions()
+    {
+        var stop = ParseStop(_form.StopCsv);
+        return new LlmGenerationConfig
+        {
+            Temperature = _form.Temperature,
+            TopP = _form.TopP,
+            TopK = _form.TopK,
+            NumCtx = _form.NumCtx,
+            NumPredict = _form.NumPredict,
+            RepeatPenalty = _form.RepeatPenalty,
+            Seed = _form.Seed,
+            Mirostat = _form.Mirostat,
+            TfsZ = _form.TfsZ,
+            Stop = stop,
+            KeepAlive = string.IsNullOrWhiteSpace(_form.KeepAlive) ? null : _form.KeepAlive.Trim(),
+            Format = string.IsNullOrWhiteSpace(_form.Format) ? null : _form.Format.Trim()
+        };
+    }
+
+    private static List<string>? ParseStop(string? csv)
+    {
+        if (string.IsNullOrWhiteSpace(csv))
+            return null;
+        var list = csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(s => s.Length > 0)
+            .ToList();
+        return list.Count == 0 ? null : list;
+    }
 
     private sealed class LlmForm
     {
@@ -120,5 +249,17 @@ else
         public int MaxHistoryMessages { get; set; } = 20;
         public bool StreamingEnabled { get; set; } = true;
         public bool LlmThinkEnabled { get; set; }
+        public float? Temperature { get; set; }
+        public float? TopP { get; set; }
+        public int? TopK { get; set; }
+        public int? NumCtx { get; set; }
+        public int? NumPredict { get; set; }
+        public float? RepeatPenalty { get; set; }
+        public int? Seed { get; set; }
+        public int? Mirostat { get; set; }
+        public float? TfsZ { get; set; }
+        public string StopCsv { get; set; } = string.Empty;
+        public string KeepAlive { get; set; } = string.Empty;
+        public string Format { get; set; } = string.Empty;
     }
 }
