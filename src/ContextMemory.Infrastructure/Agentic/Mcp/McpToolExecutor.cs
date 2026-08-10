@@ -1,4 +1,5 @@
 using ContextMemory.Core.Agentic;
+using ContextMemory.Core.Agentic.Mcp;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
@@ -96,8 +97,9 @@ public sealed class McpToolExecutor : IToolExecutor
 
         try
         {
+            var argumentsJson = McpQueryObjectsArgumentNormalizer.Normalize(mcpToolName, toolCall.Function.Arguments);
             var output = await _client
-                .CallToolAsync(appId, server, mcpToolName, toolCall.Function.Arguments, cancellationToken)
+                .CallToolAsync(appId, server, mcpToolName, argumentsJson, cancellationToken)
                 .ConfigureAwait(false);
 
             return new ToolExecutionResult
