@@ -53,6 +53,8 @@ public static class AgenticJudgePromptBuilder
             - feedback curto e accionável (só quando valid=false).
             """);
 
+        var extra = BuildSoftCriteria(request.RuntimeConfig.ResolvedPolicy, lang);
+
         return $"""
             {header}
 
@@ -68,7 +70,58 @@ public static class AgenticJudgePromptBuilder
             {answer}
 
             {criteria}
+            {extra}
             """;
+    }
+
+    private static string BuildSoftCriteria(ResolvedAgenticPolicy policy, string? lang)
+    {
+        var lines = new List<string>();
+        var pt = lang is not null && lang.StartsWith("pt", StringComparison.OrdinalIgnoreCase);
+
+        void Add(string kind, string en, string ptText)
+        {
+            if (!policy.HasKind(kind))
+                return;
+            lines.Add("- " + (pt ? ptText : en));
+            if (string.Equals(kind, AgenticGuardrailKinds.Readability, StringComparison.OrdinalIgnoreCase))
+            {
+                var target = AgenticGuardrailConfigReader.GetString(
+                    policy.FindByKind(kind)?.ConfigJson ?? "{}",
+                    "targetLevel") ?? "clear";
+                lines.Add(pt
+                    ? $"  (nível alvo de legibilidade: {target})"
+                    : $"  (target readability level: {target})");
+            }
+        }
+
+        Add(AgenticGuardrailKinds.LogicalFlow,
+            "valid=false if reasoning is contradictory, jumps steps illogically, or conclusions do not follow from tool evidence.",
+            "valid=false se o raciocínio for contraditório, saltar passos ou as conclusões não seguirem da evidência das tools.");
+        Add(AgenticGuardrailKinds.ResponseQuality,
+            "valid=false if the answer is low quality: vague, unhelpful, padded, or poorly structured for the objective.",
+            "valid=false se a qualidade for baixa: vaga, pouco útil, com enchimento ou mal estruturada para o objetivo.");
+        Add(AgenticGuardrailKinds.TranslationAccuracy,
+            "If the objective asks for a translation, valid=false when the translation is inaccurate, incomplete, or wrong language.",
+            "Se o objetivo pedir tradução, valid=false quando a tradução for imprecisa, incompleta ou no idioma errado.");
+        Add(AgenticGuardrailKinds.Readability,
+            "valid=false if the answer's complexity/tone does not match the configured readability target.",
+            "valid=false se a complexidade/tom não corresponder ao nível de legibilidade configurado.");
+        Add(AgenticGuardrailKinds.FactCheck,
+            "valid=false if factual claims (statuses, amounts, IDs) are not supported by tool steps or contradict them.",
+            "valid=false se claims factuais (estados, montantes, IDs) não forem suportados pelos passos de tools ou os contradisserem.");
+        Add(AgenticGuardrailKinds.Relevance,
+            "valid=false if the answer does not address the user objective.",
+            "valid=false se a resposta não abordar o objetivo do utilizador.");
+        Add(AgenticGuardrailKinds.PromptAddress,
+            "valid=false if required items/keys from the user prompt are missing from the answer.",
+            "valid=false se itens/chaves obrigatórios do pedido do utilizador faltarem na resposta.");
+
+        if (lines.Count == 0)
+            return string.Empty;
+
+        var header = pt ? "## Critérios adicionais do tenant" : "## Additional tenant criteria";
+        return header + Environment.NewLine + string.Join(Environment.NewLine, lines);
     }
 
     private static string FormatSteps(IReadOnlyList<AgentExecutionStep> steps, string? language)

@@ -61,11 +61,53 @@ public sealed class AgenticLiveDataEvidenceGuardrailTests
         Assert.False(ok);
     }
 
+    [Fact]
+    public void Rejects_JiraTicketLookup_WithoutWikiEvidence()
+    {
+        var config = ConfigWithWiki();
+        var ok = AgenticLiveDataEvidenceGuardrail.TryGetRejectionFeedback(
+            "busque os tickets PAC-759, PAC-762 e PAC-769",
+            "Vou buscar os tickets na wiki.",
+            [],
+            config,
+            out var feedback);
+
+        Assert.True(ok);
+        Assert.Contains("wiki_search", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Accepts_JiraTicketLookup_WithSuccessfulWikiSearch()
+    {
+        var config = ConfigWithWiki();
+        var steps = new List<AgentExecutionStep>
+        {
+            new()
+            {
+                Iteration = 1,
+                ToolName = "wiki_search",
+                Arguments = """{"query":"PAC-759"}""",
+                Output = "PAC-759 body…",
+                Success = true
+            }
+        };
+
+        var ok = AgenticLiveDataEvidenceGuardrail.TryGetRejectionFeedback(
+            "busque os tickets PAC-759",
+            "PAC-759: billing fix.",
+            steps,
+            config,
+            out _);
+
+        Assert.False(ok);
+    }
+
     private static AppRuntimeConfig ConfigWithMcp() =>
         new()
         {
             AppId = "test",
             DefaultLanguage = "en",
+            GlobalWikiEnabled = false,
             Agentic = new AgenticConfig
             {
                 Enabled = true,
@@ -83,5 +125,14 @@ public sealed class AgenticLiveDataEvidenceGuardrailTests
                     ]
                 }
             }
+        };
+
+    private static AppRuntimeConfig ConfigWithWiki() =>
+        new()
+        {
+            AppId = "test",
+            DefaultLanguage = "pt",
+            GlobalWikiEnabled = true,
+            Agentic = new AgenticConfig { Enabled = true }
         };
 }
