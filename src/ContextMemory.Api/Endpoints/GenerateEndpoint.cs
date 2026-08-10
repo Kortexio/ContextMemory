@@ -41,6 +41,15 @@ public static class GenerateEndpoint
         var adapter = adapterResolver.Resolve(runtimeConfig);
         var isStreaming = request.Stream ?? false;
 
+        request = request with
+        {
+            Model = string.IsNullOrWhiteSpace(request.Model) ? runtimeConfig.LlmModel : request.Model,
+            Options = LlmGenerationConfig.MergeOptions(runtimeConfig.LlmOptions, request.Options),
+            KeepAlive = LlmGenerationConfig.MergeKeepAlive(runtimeConfig.LlmOptions, request.KeepAlive),
+            Format = LlmGenerationConfig.MergeFormat(runtimeConfig.LlmOptions, request.Format),
+            Think = request.Think ?? runtimeConfig.LlmThinkEnabled
+        };
+
         try
         {
             if (!isStreaming)

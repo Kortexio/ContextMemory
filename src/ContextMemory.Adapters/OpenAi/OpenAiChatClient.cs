@@ -259,9 +259,22 @@ internal sealed class OpenAiChatClient
             Stop = request.Options?.Stop,
             Seed = request.Options?.Seed,
             // Native `think` is ignored on /v1; this is the supported switch.
-            ReasoningEffort = request.Think == false ? "none" : null
+            ReasoningEffort = request.Think == false ? "none" : null,
+            // Forward Ollama-native options (num_ctx, top_k, …) for Ollama /v1 servers.
+            Options = HasOllamaNativeOptions(request.Options) ? request.Options : null
         };
     }
+
+    private static bool HasOllamaNativeOptions(OllamaOptions? o) =>
+        o is not null
+        && (o.NumCtx is not null
+            || o.TopK is not null
+            || o.RepeatPenalty is not null
+            || o.TfsZ is not null
+            || o.Mirostat is not null
+            || o.NumPredict is not null
+            || o.Temperature is not null
+            || o.TopP is not null);
 
     private static OllamaResponse MapResponse(string model, OpenAiChatResponse? response)
     {

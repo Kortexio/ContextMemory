@@ -50,6 +50,10 @@ public record AppConfigFile
     [JsonPropertyName("llmThinkEnabled")]
     public bool LlmThinkEnabled { get; init; }
 
+    /// <summary>Per-app defaults for sampling / generation payload fields.</summary>
+    [JsonPropertyName("llmOptions")]
+    public LlmGenerationConfig? LlmOptions { get; init; }
+
     [JsonPropertyName("rateLimits")]
     public RateLimitConfig? RateLimits { get; init; }
 
@@ -109,6 +113,9 @@ public record AppConfigPatchRequest
 
     [JsonPropertyName("llmThinkEnabled")]
     public bool? LlmThinkEnabled { get; init; }
+
+    [JsonPropertyName("llmOptions")]
+    public LlmGenerationConfig? LlmOptions { get; init; }
 
     [JsonPropertyName("basePersona")]
     public string? BasePersona { get; init; }

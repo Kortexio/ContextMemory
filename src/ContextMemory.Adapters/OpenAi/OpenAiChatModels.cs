@@ -39,6 +39,12 @@ internal sealed class OpenAiChatRequest
     /// </summary>
     [JsonPropertyName("reasoning_effort")]
     public string? ReasoningEffort { get; init; }
+
+    /// <summary>
+    /// Ollama OpenAI-compat extension: native <c>options</c> (num_ctx, top_k, repeat_penalty, …).
+    /// </summary>
+    [JsonPropertyName("options")]
+    public OllamaOptions? Options { get; init; }
 }
 
 internal sealed class OpenAiChatMessage

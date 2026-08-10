@@ -104,6 +104,7 @@ public sealed class AppConfigStore : IAppConfigStore
                 WikiCompactionMinPages = patch.WikiCompactionMinPages ?? current.WikiCompactionMinPages,
                 StreamingEnabled = patch.StreamingEnabled ?? current.StreamingEnabled,
                 LlmThinkEnabled = patch.LlmThinkEnabled ?? current.LlmThinkEnabled,
+                LlmOptions = patch.LlmOptions ?? current.LlmOptions,
                 WebSearch = WebSearchConfigMerge.ApplyPatch(
                     WebSearchConfigMerge.FromFile(current.WebSearch),
                     patch.WebSearch),
@@ -162,6 +163,7 @@ public sealed class AppConfigStore : IAppConfigStore
                 : _defaults.WikiCompactionMinPages,
             StreamingEnabled = seed.StreamingEnabled,
             LlmThinkEnabled = seed.LlmThinkEnabled,
+            LlmOptions = seed.LlmOptions.HasAnyValue ? seed.LlmOptions : null,
             WebSearch = seed.WebSearch,
             Agentic = seed.Agentic,
             GlobalWikiEnabled = seed.GlobalWikiEnabled,
@@ -219,6 +221,7 @@ public sealed class AppConfigStore : IAppConfigStore
                 : _defaults.WikiCompactionMinPages,
             StreamingEnabled = configFile.StreamingEnabled,
             LlmThinkEnabled = configFile.LlmThinkEnabled,
+            LlmOptions = configFile.LlmOptions ?? new LlmGenerationConfig(),
             RateLimits = configFile.RateLimits ?? new RateLimitConfig
             {
                 RequestsPerMinute = _defaults.DefaultRateLimitRpm,
