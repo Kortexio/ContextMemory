@@ -33,13 +33,6 @@ internal sealed class OpenAiChatRequest
     [JsonPropertyName("tools")]
     public List<OpenAiTool>? Tools { get; init; }
 
-    /// <summary>OpenAI tool_choice: auto | required | none (string form).</summary>
-    [JsonPropertyName("tool_choice")]
-    public string? ToolChoice { get; init; }
-
-    [JsonPropertyName("response_format")]
-    public OpenAiResponseFormat? ResponseFormat { get; init; }
-
     /// <summary>
     /// Ollama OpenAI-compat thinking control. Use <c>none</c> to disable;
     /// omit (null) to leave the server default (often ON for thinking models).
@@ -52,12 +45,6 @@ internal sealed class OpenAiChatRequest
     /// </summary>
     [JsonPropertyName("options")]
     public OllamaOptions? Options { get; init; }
-}
-
-internal sealed class OpenAiResponseFormat
-{
-    [JsonPropertyName("type")]
-    public string Type { get; init; } = "json_object";
 }
 
 internal sealed class OpenAiChatMessage

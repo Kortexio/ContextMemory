@@ -28,10 +28,6 @@ public record AgenticConfig
 
     public bool HasAnyTools => HasExecutionTools || HasIntegrationTools;
 
-    /// <summary>
-    /// Effective max iterations when no runtime config is available for profile resolution.
-    /// Prefer <see cref="Prompts.LlmCapabilitiesResolver.ResolveMaxIterations"/> in the agent loop.
-    /// </summary>
     public int MaxIterations =>
         Guardrails.MaxIterations > 0 ? Guardrails.MaxIterations : 15;
 }
@@ -182,12 +178,8 @@ public record McpOAuthConfig
 
 public record AgenticGuardrailsConfig
 {
-    /// <summary>
-    /// Max agentic iterations. <c>0</c> means use the prompt-profile default
-    /// (see <see cref="Prompts.LlmCapabilitiesResolver.ResolveMaxIterations"/>).
-    /// </summary>
     [JsonPropertyName("maxIterations")]
-    public int MaxIterations { get; init; } = 0;
+    public int MaxIterations { get; init; } = 15;
 
     [JsonPropertyName("requireConfirmationFor")]
     public List<string> RequireConfirmationFor { get; init; } = [];

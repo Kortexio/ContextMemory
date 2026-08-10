@@ -134,43 +134,5 @@ public class OpenAiCompatibleContractTests : IClassFixture<StubOllamaWebApplicat
 
         var mapped = OpenAiChatClient.MapRequest(chat, stream: false);
         Assert.Equal("none", mapped.ReasoningEffort);
-        Assert.NotNull(mapped.ResponseFormat);
-        Assert.Equal("json_object", mapped.ResponseFormat!.Type);
-    }
-
-    [Fact]
-    public void MapRequest_ForwardsToolChoiceAndJsonFormat()
-    {
-        var request = new OllamaRequest
-        {
-            Model = "gpt-4o",
-            Messages = [new OllamaMessage { Role = "user", Content = "hi" }],
-            Tools =
-            [
-                new OllamaTool("function", new OllamaFunction("wiki_search", "Search", new { type = "object" }))
-            ],
-            ToolChoice = "required",
-            Format = "json"
-        };
-
-        var mapped = OpenAiChatClient.MapRequest(request, stream: false);
-        Assert.Equal("required", mapped.ToolChoice);
-        Assert.NotNull(mapped.ResponseFormat);
-        Assert.Equal("json_object", mapped.ResponseFormat!.Type);
-    }
-
-    [Fact]
-    public void MapRequest_OmitsToolChoice_WhenNoTools()
-    {
-        var request = new OllamaRequest
-        {
-            Model = "gpt-4o",
-            Messages = [new OllamaMessage { Role = "user", Content = "hi" }],
-            ToolChoice = "required"
-        };
-
-        var mapped = OpenAiChatClient.MapRequest(request, stream: false);
-        Assert.Null(mapped.ToolChoice);
-        Assert.Null(mapped.ResponseFormat);
     }
 }
