@@ -95,4 +95,31 @@ public sealed class ProseToolCallParserTests
         Assert.Contains("accountNumber", normalized, StringComparison.Ordinal);
         Assert.DoesNotContain("fieldsToReturn", normalized, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Normalize_RewritesSqlStyleFilterStrings()
+    {
+        const string raw = """
+            { "objectType": "account", "filter": ["status = 'Canceled'"], "pageSize": 1 }
+            """;
+        var normalized = McpQueryObjectsArgumentNormalizer.Normalize("x__query_objects", raw);
+        Assert.Contains("status.EQ:Canceled", normalized, StringComparison.Ordinal);
+        Assert.DoesNotContain("status =", normalized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Normalize_WrapsObjectOrStringFilterAsStringArray()
+    {
+        const string asObject = """
+            { "objectType": "account", "filter": { "field": "status", "operator": "=", "value": "Canceled" }, "pageSize": 1 }
+            """;
+        var n1 = McpQueryObjectsArgumentNormalizer.Normalize("x__query_objects", asObject);
+        Assert.Contains("status.EQ:Canceled", n1, StringComparison.Ordinal);
+
+        const string asString = """
+            { "objectType": "account", "filter": "status.EQ:Canceled", "pageSize": 1 }
+            """;
+        var n2 = McpQueryObjectsArgumentNormalizer.Normalize("x__query_objects", asString);
+        Assert.Contains("\"filter\":[\"status.EQ:Canceled\"]", n2, StringComparison.Ordinal);
+    }
 }
