@@ -3,6 +3,8 @@ using System.Net.Http;
 using ContextMemory.Core.Localization;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
+using ContextMemory.Core.Agentic.Mcp;
+using ContextMemory.Core.Agentic.Prompts;
 using ContextMemory.Core.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -44,11 +46,13 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
     {
         var messages = request.Messages;
         var steps = request.Steps;
-        var maxIterations = request.RuntimeConfig.Agentic.MaxIterations;
+        var capabilities = LlmCapabilitiesResolver.From(request.RuntimeConfig);
+        var maxIterations = LlmCapabilitiesResolver.ResolveMaxIterations(request.RuntimeConfig);
         var loopTimeout = ResolveLoopTimeout(request.RuntimeConfig);
         var loopSw = Stopwatch.StartNew();
         var adapter = _adapterResolver.Resolve(request.RuntimeConfig);
         string? lastAnswer = null;
+        var requireToolChoice = false;
 
         var staticPromptChars = messages
             .FirstOrDefault(m => string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase))
@@ -108,12 +112,19 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 Iteration = iteration + 1
             });
 
+            var toolsForRequest = request.Tools.Count > 0 ? request.Tools.ToList() : null;
+            if (toolsForRequest is not null && capabilities.SanitizeSchemasAggressively)
+                toolsForRequest = SanitizeToolSchemas(toolsForRequest);
+
+            var toolChoice = ResolveToolChoice(capabilities, requireToolChoice, toolsForRequest);
+
             var llmRequest = request.EnrichedRequest with
             {
                 Messages = messages,
-                Tools = request.Tools.Count > 0 ? request.Tools.ToList() : null,
+                Tools = toolsForRequest,
                 McpServers = request.McpServers.Count > 0 ? request.McpServers.ToList() : null,
-                Stream = false
+                Stream = false,
+                ToolChoice = toolChoice
             };
 
             OllamaResponse response;
@@ -148,7 +159,8 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
             var assistantMessage = response.Message;
 
-            if (assistantMessage is not null
+            if (capabilities.EnableProseToolCallPromotion
+                && assistantMessage is not null
                 && (assistantMessage.ToolCalls is null || assistantMessage.ToolCalls.Count == 0))
             {
                 var promoted = ProseToolCallParser.TryParse(
@@ -169,6 +181,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
             if (assistantMessage?.ToolCalls is { Count: > 0 } toolCalls)
             {
+                requireToolChoice = false;
                 messages.Add(assistantMessage);
 
                 foreach (var toolCall in toolCalls)
@@ -242,6 +255,9 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 });
                 return success;
             }
+
+            // Next turn: prefer forcing a tool call when the model answered without evidence.
+            requireToolChoice = request.Tools.Count > 0;
 
             Report(request.Report, new AgenticProgressEvent
             {
@@ -403,6 +419,32 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
         return msg.Contains("failed to parse grammar", StringComparison.OrdinalIgnoreCase)
                || msg.Contains("Failed to initialize samplers", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string? ResolveToolChoice(
+        LlmCapabilities capabilities,
+        bool requireToolChoice,
+        List<OllamaTool>? tools)
+    {
+        if (tools is null || tools.Count == 0)
+            return null;
+
+        if (requireToolChoice)
+            return "required";
+
+        return string.IsNullOrWhiteSpace(capabilities.DefaultToolChoice)
+            ? null
+            : capabilities.DefaultToolChoice;
+    }
+
+    private static List<OllamaTool> SanitizeToolSchemas(List<OllamaTool> tools) =>
+        tools
+            .Select(t => new OllamaTool(
+                t.Type,
+                new OllamaFunction(
+                    t.Function.Name,
+                    t.Function.Description,
+                    McpInputSchemaSanitizer.Sanitize(t.Function.Parameters))))
+            .ToList();
 
     private static List<OllamaTool>? SimplifyToolSchemas(List<OllamaTool>? tools)
     {
