@@ -33,6 +33,13 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
         // Cursor-style discovery helpers (artifact/skill/log/tool_describe).
         tools.AddRange(SessionDiscoveryTools.BuildTools(runtimeConfig));
 
+        var caps = LlmCapabilitiesResolver.From(runtimeConfig);
+        tools.AddRange(AgenticHttpTools.BuildTools(runtimeConfig));
+        tools.AddRange(AgenticVisionTools.BuildTools(runtimeConfig, caps.SupportsVision));
+        tools.AddRange(AgenticBrowserTools.BuildTools(runtimeConfig));
+        tools.AddRange(AgenticDocumentTools.BuildTools(runtimeConfig));
+        tools.AddRange(AgenticCanvasTools.BuildTools(runtimeConfig));
+
         object openParameters = new Dictionary<string, object?>
         {
             ["type"] = "object",

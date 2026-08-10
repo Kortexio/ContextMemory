@@ -158,15 +158,22 @@ Theory: minimize tokens in the big chat model. Prefer **lazy discovery** over st
 | `session_log_search` | Grep session log when summary misses a detail |
 | `delegate_task` | Spawn isolated subagent (depth 1) |
 | `todo_write` | Session todo list for the Admin timeline |
+| `fetch_url` / `http_request` | Allowlisted HTTP GET/verbs (`agentic.tools.http`, fail-closed allowlist + SSRF checks) |
+| `web_search` | On-demand web search tool (Tavily/Brave; independent of pre-chat WebSearch enrichment) |
+| `read_image` / `screenshot_describe` | Vision attach (only when model `SupportsVision` + `tools.vision.enabled`) |
+| `browser_*` | Playwright navigate/snapshot/click/type/screenshot via sandbox `/browser` |
+| `parse_pdf` / `read_document` | PDF text extract from session artifacts (`tools.documents`) |
+| `canvas_write` / `canvas_read` | Session Canvas JSON for Admin Chat Lab panel |
 
 **When the agentic loop runs**
 
 ```text
 AgenticEnabled =
-    agentic.enabled && has execution/MCP tools
+    agentic.enabled && HasAnyTools
+    (execution | MCP | http | vision | browser | documents | canvas)
 ```
 
-Global Wiki **does not** force the agentic loop. Digests are injected in the enrich step; enable agentic when you need tools (sandbox/MCP/`wiki_search` hydrate / discovery helpers).
+Global Wiki **does not** force the agentic loop. Digests are injected in the enrich step; enable agentic when you need tools (sandbox/MCP/`wiki_search` hydrate / discovery helpers / HTTP).
 
 **End-to-end flow**
 

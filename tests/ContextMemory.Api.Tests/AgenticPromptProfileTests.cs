@@ -194,6 +194,7 @@ public sealed class LlmCapabilitiesResolverTests
             SupportsOpenAiJsonFormat: true,
             InlineEvidenceRules: false,
             PreferSkillDiscovery: true,
+            SupportsVision: false,
             MaxMcpToolsHint: int.MaxValue,
             DefaultToolChoice: "auto");
 

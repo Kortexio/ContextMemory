@@ -17,6 +17,107 @@ const DEFAULT_TIMEOUT_MS = Number(process.env.SANDBOX_TIMEOUT_MS || 60_000);
 const MAX_OUTPUT_CHARS = Number(process.env.SANDBOX_MAX_OUTPUT_CHARS || 32_000);
 const ALLOW_EGRESS = String(process.env.SANDBOX_ALLOW_EGRESS || "true").toLowerCase() !== "false";
 
+/** @type {Map<string, import('playwright').BrowserContext>} */
+const browserSessions = new Map();
+/** @type {import('playwright').Browser | null} */
+let sharedBrowser = null;
+
+async function getBrowser(headless = true) {
+  if (sharedBrowser) return sharedBrowser;
+  const { chromium } = await import("playwright");
+  sharedBrowser = await chromium.launch({ headless: headless !== false });
+  return sharedBrowser;
+}
+
+/**
+ * @param {{ action?: string, sessionKey?: string, headless?: boolean, args?: any }} body
+ */
+async function runBrowser(body) {
+  const action = String(body.action || "").toLowerCase();
+  const sessionKey = String(body.sessionKey || "default");
+  const args = body.args || {};
+  const browser = await getBrowser(body.headless !== false);
+  let context = browserSessions.get(sessionKey);
+  if (!context) {
+    context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    browserSessions.set(sessionKey, context);
+  }
+  const pages = context.pages();
+  let page = pages.length > 0 ? pages[0] : await context.newPage();
+
+  if (action === "navigate") {
+    const target = String(args.url || "").trim();
+    if (!target) {
+      const err = new Error("url is required");
+      err.statusCode = 400;
+      throw err;
+    }
+    await page.goto(target, { waitUntil: "domcontentloaded", timeout: DEFAULT_TIMEOUT_MS });
+    return { exitCode: 0, output: `Navigated to ${page.url()}\ntitle: ${await page.title()}` };
+  }
+
+  if (action === "snapshot") {
+    const links = await page.$$eval("a[href], button, input, textarea, [role='button']", (els) =>
+      els.slice(0, 80).map((el, i) => {
+        const tag = el.tagName.toLowerCase();
+        const text = (el.innerText || el.value || el.getAttribute("aria-label") || "").trim().slice(0, 80);
+        const href = el.getAttribute("href") || "";
+        return `ref=${i} <${tag}> ${text}${href ? ` href=${href}` : ""}`;
+      })
+    );
+    // stash refs on page for click/type
+    await page.evaluate((count) => {
+      window.__cmRefs = Array.from(
+        document.querySelectorAll("a[href], button, input, textarea, [role='button']")
+      ).slice(0, count);
+    }, 80);
+    return {
+      exitCode: 0,
+      output: [`url: ${page.url()}`, `title: ${await page.title()}`, "", ...links].join("\n"),
+    };
+  }
+
+  if (action === "click") {
+    const ref = Number(args.ref ?? args.Ref);
+    const handle = await page.evaluateHandle((i) => (window.__cmRefs || [])[i], ref);
+    const el = handle.asElement();
+    if (!el) {
+      return { exitCode: 1, output: `No element for ref=${ref}. Call browser_snapshot first.` };
+    }
+    await el.click({ timeout: 10_000 });
+    return { exitCode: 0, output: `Clicked ref=${ref}. url=${page.url()}` };
+  }
+
+  if (action === "type") {
+    const ref = Number(args.ref ?? args.Ref);
+    const text = String(args.text ?? "");
+    const handle = await page.evaluateHandle((i) => (window.__cmRefs || [])[i], ref);
+    const el = handle.asElement();
+    if (!el) {
+      return { exitCode: 1, output: `No element for ref=${ref}. Call browser_snapshot first.` };
+    }
+    await el.fill(text, { timeout: 10_000 }).catch(async () => {
+      await el.click();
+      await page.keyboard.type(text, { delay: 10 });
+    });
+    return { exitCode: 0, output: `Typed into ref=${ref} (${text.length} chars).` };
+  }
+
+  if (action === "screenshot") {
+    const fullPage = Boolean(args.fullPage);
+    const buf = await page.screenshot({ fullPage, type: "png" });
+    return {
+      exitCode: 0,
+      output: `Screenshot captured (${buf.length} bytes) of ${page.url()}`,
+      screenshotBase64: buf.toString("base64"),
+    };
+  }
+
+  const err = new Error(`unsupported browser action '${action}'`);
+  err.statusCode = 400;
+  throw err;
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -180,7 +281,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/health") {
       return sendJson(res, 200, {
         status: "healthy",
-        platforms: ["shell", "python", "node"],
+        platforms: ["shell", "python", "node", "browser"],
         allowEgress: ALLOW_EGRESS,
         timeoutMs: DEFAULT_TIMEOUT_MS,
         note: "local-dev sandbox (not full gVisor isolation)",
@@ -194,6 +295,12 @@ const server = http.createServer(async (req, res) => {
         output: result.output,
         exitCode: result.exitCode,
       });
+    }
+
+    if (req.method === "POST" && url.pathname === "/browser") {
+      const body = await readBody(req);
+      const result = await runBrowser(body);
+      return sendJson(res, 200, result);
     }
 
     sendJson(res, 404, { error: "not found" });

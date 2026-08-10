@@ -203,6 +203,107 @@
                 Applies to Weak and Strong harness alike. Set ≥ catalog size (e.g. <code>100</code>) to expose all tools.
             </FieldHelp>
         </div>
+
+        <h6 class="mt-4">HTTP tools</h6>
+        <FieldHelp>
+            Built-in <code>fetch_url</code>, <code>http_request</code>, <code>web_search</code>.
+            Allowlist is fail-closed (empty list blocks all hosts). Prefer MCP for authenticated APIs (Zuora).
+        </FieldHelp>
+        <div class="form-check mb-2">
+            <InputCheckbox class="form-check-input" id="httpToolsEnabled" @bind-Value="Model.Tools.Http.Enabled" />
+            <label class="form-check-label" for="httpToolsEnabled">Enable HTTP tools</label>
+        </div>
+        <div class="form-row">
+            <div class="col-md-6 form-group">
+                <label>Allowed hosts (comma-separated)</label>
+                <InputText class="form-control form-control-sm" @bind-Value="Model.Tools.Http.AllowedHostsText" placeholder="example.com, api.github.com" />
+            </div>
+            <div class="col-md-3 form-group">
+                <label>Timeout (s)</label>
+                <InputNumber class="form-control form-control-sm" @bind-Value="Model.Tools.Http.TimeoutSeconds" />
+            </div>
+            <div class="col-md-3 form-group">
+                <label>Max response chars</label>
+                <InputNumber class="form-control form-control-sm" @bind-Value="Model.Tools.Http.MaxResponseChars" />
+            </div>
+        </div>
+        <div class="form-check mb-1">
+            <InputCheckbox class="form-check-input" id="allowHttpRequest" @bind-Value="Model.Tools.Http.AllowHttpRequest" />
+            <label class="form-check-label" for="allowHttpRequest">Allow http_request (POST/PUT/…)</label>
+        </div>
+        <div class="form-check mb-3">
+            <InputCheckbox class="form-check-input" id="allowWebSearchTool" @bind-Value="Model.Tools.Http.AllowWebSearchTool" />
+            <label class="form-check-label" for="allowWebSearchTool">Allow web_search tool (needs WebSearch provider keys)</label>
+        </div>
+
+        <h6>Vision tools</h6>
+        <FieldHelp>
+            <code>read_image</code> / <code>screenshot_describe</code> only appear when the model supports vision
+            (or forceEnable). Text models like qwen3.5:9b will not list these tools.
+        </FieldHelp>
+        <div class="form-check mb-2">
+            <InputCheckbox class="form-check-input" id="visionEnabled" @bind-Value="Model.Tools.Vision.Enabled" />
+            <label class="form-check-label" for="visionEnabled">Enable vision tools</label>
+        </div>
+        <div class="form-check mb-2">
+            <InputCheckbox class="form-check-input" id="visionForce" @bind-Value="Model.Tools.Vision.ForceEnable" />
+            <label class="form-check-label" for="visionForce">Force vision capability (override model heuristic)</label>
+        </div>
+        <div class="form-group mb-3">
+            <label>Vision allowed hosts</label>
+            <InputText class="form-control form-control-sm" @bind-Value="Model.Tools.Vision.AllowedHostsText" placeholder="Falls back to HTTP allowlist if empty" />
+        </div>
+
+        <h6>Browser (Playwright)</h6>
+        <div class="form-check mb-2">
+            <InputCheckbox class="form-check-input" id="browserEnabled" @bind-Value="Model.Tools.Browser.Enabled" />
+            <label class="form-check-label" for="browserEnabled">Enable browser tools</label>
+        </div>
+        <div class="form-row">
+            <div class="col-md-6 form-group">
+                <label>Browser allowed hosts</label>
+                <InputText class="form-control form-control-sm" @bind-Value="Model.Tools.Browser.AllowedHostsText" />
+            </div>
+            <div class="col-md-3 form-group">
+                <label>Timeout (s)</label>
+                <InputNumber class="form-control form-control-sm" @bind-Value="Model.Tools.Browser.TimeoutSeconds" />
+            </div>
+            <div class="col-md-3 form-group">
+                <label>Sandbox endpoint</label>
+                <InputText class="form-control form-control-sm" @bind-Value="Model.Tools.Browser.SandboxEndpoint" placeholder="default: self-hosted-sandbox" />
+            </div>
+        </div>
+        <div class="form-check mb-3">
+            <InputCheckbox class="form-check-input" id="browserHeadless" @bind-Value="Model.Tools.Browser.Headless" />
+            <label class="form-check-label" for="browserHeadless">Headless</label>
+        </div>
+
+        <h6>Documents (PDF)</h6>
+        <div class="form-check mb-2">
+            <InputCheckbox class="form-check-input" id="docsEnabled" @bind-Value="Model.Tools.Documents.Enabled" />
+            <label class="form-check-label" for="docsEnabled">Enable parse_pdf / read_document</label>
+        </div>
+        <div class="form-row mb-3">
+            <div class="col-md-4 form-group">
+                <label>Max PDF bytes</label>
+                <InputNumber class="form-control form-control-sm" @bind-Value="Model.Tools.Documents.MaxBytes" />
+            </div>
+            <div class="col-md-4 form-group">
+                <label>Max extract chars</label>
+                <InputNumber class="form-control form-control-sm" @bind-Value="Model.Tools.Documents.MaxExtractChars" />
+            </div>
+            <div class="col-md-4 form-check mt-4">
+                <InputCheckbox class="form-check-input" id="docsWiki" @bind-Value="Model.Tools.Documents.PersistToWiki" />
+                <label class="form-check-label" for="docsWiki">Persist extracts to wiki</label>
+            </div>
+        </div>
+
+        <h6>Canvas</h6>
+        <div class="form-check mb-3">
+            <InputCheckbox class="form-check-input" id="canvasEnabled" @bind-Value="Model.Tools.Canvas.Enabled" />
+            <label class="form-check-label" for="canvasEnabled">Enable canvas_write / canvas_read (Admin Chat Lab panel)</label>
+        </div>
+
         @for (var i = 0; i < Model.Tools.Integrations.Count; i++)
         {
             var index = i;
@@ -435,6 +536,42 @@
             Tools = new AgenticToolsConfig
             {
                 MaxMcpToolsPerTurn = Tools.MaxMcpToolsPerTurn > 0 ? Tools.MaxMcpToolsPerTurn : 12,
+                Http = new AgenticHttpToolsConfig
+                {
+                    Enabled = Tools.Http.Enabled,
+                    AllowedHosts = SplitCsv(Tools.Http.AllowedHostsText),
+                    TimeoutSeconds = Tools.Http.TimeoutSeconds > 0 ? Tools.Http.TimeoutSeconds : 30,
+                    MaxResponseChars = Tools.Http.MaxResponseChars > 0 ? Tools.Http.MaxResponseChars : 50_000,
+                    AllowHttpRequest = Tools.Http.AllowHttpRequest,
+                    AllowWebSearchTool = Tools.Http.AllowWebSearchTool
+                },
+                Vision = new AgenticVisionToolsConfig
+                {
+                    Enabled = Tools.Vision.Enabled,
+                    ForceEnable = Tools.Vision.ForceEnable,
+                    AllowedHosts = SplitCsv(Tools.Vision.AllowedHostsText)
+                },
+                Browser = new AgenticBrowserToolsConfig
+                {
+                    Enabled = Tools.Browser.Enabled,
+                    AllowedHosts = SplitCsv(Tools.Browser.AllowedHostsText),
+                    Headless = Tools.Browser.Headless,
+                    TimeoutSeconds = Tools.Browser.TimeoutSeconds > 0 ? Tools.Browser.TimeoutSeconds : 60,
+                    SandboxEndpoint = string.IsNullOrWhiteSpace(Tools.Browser.SandboxEndpoint)
+                        ? null
+                        : Tools.Browser.SandboxEndpoint.Trim()
+                },
+                Documents = new AgenticDocumentsToolsConfig
+                {
+                    Enabled = Tools.Documents.Enabled,
+                    MaxBytes = Tools.Documents.MaxBytes > 0 ? Tools.Documents.MaxBytes : 10_000_000,
+                    PersistToWiki = Tools.Documents.PersistToWiki,
+                    MaxExtractChars = Tools.Documents.MaxExtractChars > 0 ? Tools.Documents.MaxExtractChars : 100_000
+                },
+                Canvas = new AgenticCanvasToolsConfig
+                {
+                    Enabled = Tools.Canvas.Enabled
+                },
                 Execution = Tools.Execution.Select(e => new ExecutionToolConfig
                 {
                     Type = string.IsNullOrWhiteSpace(e.Type) ? "self-hosted-sandbox" : e.Type,
@@ -504,6 +641,40 @@
                 Tools = new AgenticToolsForm
                 {
                     MaxMcpToolsPerTurn = config.Tools.MaxMcpToolsPerTurn > 0 ? config.Tools.MaxMcpToolsPerTurn : 12,
+                    Http = new HttpToolsForm
+                    {
+                        Enabled = config.Tools.Http.Enabled,
+                        AllowedHostsText = string.Join(", ", config.Tools.Http.AllowedHosts),
+                        TimeoutSeconds = config.Tools.Http.TimeoutSeconds > 0 ? config.Tools.Http.TimeoutSeconds : 30,
+                        MaxResponseChars = config.Tools.Http.MaxResponseChars > 0 ? config.Tools.Http.MaxResponseChars : 50_000,
+                        AllowHttpRequest = config.Tools.Http.AllowHttpRequest,
+                        AllowWebSearchTool = config.Tools.Http.AllowWebSearchTool
+                    },
+                    Vision = new VisionToolsForm
+                    {
+                        Enabled = config.Tools.Vision.Enabled,
+                        ForceEnable = config.Tools.Vision.ForceEnable,
+                        AllowedHostsText = string.Join(", ", config.Tools.Vision.AllowedHosts)
+                    },
+                    Browser = new BrowserToolsForm
+                    {
+                        Enabled = config.Tools.Browser.Enabled,
+                        AllowedHostsText = string.Join(", ", config.Tools.Browser.AllowedHosts),
+                        Headless = config.Tools.Browser.Headless,
+                        TimeoutSeconds = config.Tools.Browser.TimeoutSeconds > 0 ? config.Tools.Browser.TimeoutSeconds : 60,
+                        SandboxEndpoint = config.Tools.Browser.SandboxEndpoint ?? string.Empty
+                    },
+                    Documents = new DocumentsToolsForm
+                    {
+                        Enabled = config.Tools.Documents.Enabled,
+                        MaxBytes = config.Tools.Documents.MaxBytes > 0 ? config.Tools.Documents.MaxBytes : 10_000_000,
+                        PersistToWiki = config.Tools.Documents.PersistToWiki,
+                        MaxExtractChars = config.Tools.Documents.MaxExtractChars > 0 ? config.Tools.Documents.MaxExtractChars : 100_000
+                    },
+                    Canvas = new CanvasToolsForm
+                    {
+                        Enabled = config.Tools.Canvas.Enabled
+                    },
                     Execution = config.Tools.Execution.Select(e => new ExecutionToolForm
                     {
                         Type = string.IsNullOrWhiteSpace(e.Type) ? "aca-session" : e.Type,
@@ -582,8 +753,52 @@
     public sealed class AgenticToolsForm
     {
         public int MaxMcpToolsPerTurn { get; set; } = 12;
+        public HttpToolsForm Http { get; set; } = new();
+        public VisionToolsForm Vision { get; set; } = new();
+        public BrowserToolsForm Browser { get; set; } = new();
+        public DocumentsToolsForm Documents { get; set; } = new();
+        public CanvasToolsForm Canvas { get; set; } = new();
         public List<ExecutionToolForm> Execution { get; set; } = [];
         public List<IntegrationToolForm> Integrations { get; set; } = [];
+    }
+
+    public sealed class HttpToolsForm
+    {
+        public bool Enabled { get; set; }
+        public string AllowedHostsText { get; set; } = string.Empty;
+        public int TimeoutSeconds { get; set; } = 30;
+        public int MaxResponseChars { get; set; } = 50_000;
+        public bool AllowHttpRequest { get; set; } = true;
+        public bool AllowWebSearchTool { get; set; } = true;
+    }
+
+    public sealed class VisionToolsForm
+    {
+        public bool Enabled { get; set; }
+        public bool ForceEnable { get; set; }
+        public string AllowedHostsText { get; set; } = string.Empty;
+    }
+
+    public sealed class BrowserToolsForm
+    {
+        public bool Enabled { get; set; }
+        public string AllowedHostsText { get; set; } = string.Empty;
+        public bool Headless { get; set; } = true;
+        public int TimeoutSeconds { get; set; } = 60;
+        public string SandboxEndpoint { get; set; } = string.Empty;
+    }
+
+    public sealed class DocumentsToolsForm
+    {
+        public bool Enabled { get; set; }
+        public int MaxBytes { get; set; } = 10_000_000;
+        public bool PersistToWiki { get; set; }
+        public int MaxExtractChars { get; set; } = 100_000;
+    }
+
+    public sealed class CanvasToolsForm
+    {
+        public bool Enabled { get; set; } = true;
     }
 
     public sealed class ExecutionToolForm

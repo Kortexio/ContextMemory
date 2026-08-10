@@ -289,6 +289,20 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
                 toolCall.Function.Name, toolResult, observationConfig, artifactId)
         });
 
+        if (toolResult.Entities is not null
+            && toolResult.Entities.TryGetValue(AgenticVisionTools.ImageBase64Entity, out var imageB64)
+            && !string.IsNullOrWhiteSpace(imageB64)
+            && LlmCapabilitiesResolver.ResolveSupportsVision(runtimeConfig))
+        {
+            // Multimodal attach: next LLM turn sees the image via Ollama/OpenAI images field.
+            messages.Add(new OllamaMessage
+            {
+                Role = "user",
+                Content = "[Attached image from tool for visual analysis.]",
+                Images = [imageB64]
+            });
+        }
+
         return new AgentToolCallOutcome { Result = toolResult };
     }
 
