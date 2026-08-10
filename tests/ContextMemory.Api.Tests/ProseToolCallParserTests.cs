@@ -74,4 +74,25 @@ public sealed class ProseToolCallParserTests
         Assert.Contains("accountNumber", normalized, StringComparison.Ordinal);
         Assert.DoesNotContain("object_type", normalized, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Normalize_RewritesFieldsToReturnCamelCase()
+    {
+        const string raw = """
+            {
+              "objectType": "account",
+              "filter": ["status.EQ:Canceled"],
+              "pageSize": 1,
+              "fieldsToReturn": ["accountNumber", "status"]
+            }
+            """;
+
+        var normalized = McpQueryObjectsArgumentNormalizer.Normalize(
+            "zuora-developer-mcp-PACCAR-ACCP__query_objects",
+            raw);
+
+        Assert.Contains("\"fields\":[", normalized, StringComparison.Ordinal);
+        Assert.Contains("accountNumber", normalized, StringComparison.Ordinal);
+        Assert.DoesNotContain("fieldsToReturn", normalized, StringComparison.Ordinal);
+    }
 }

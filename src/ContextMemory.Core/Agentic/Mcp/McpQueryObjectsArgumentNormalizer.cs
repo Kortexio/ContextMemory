@@ -35,11 +35,21 @@ public static class McpQueryObjectsArgumentNormalizer
         Rename(obj, "object_type", "objectType");
         Rename(obj, "ObjectType", "objectType");
         Rename(obj, "page_size", "pageSize");
+        Rename(obj, "PageSize", "pageSize");
         Rename(obj, "limit", "pageSize");
+        Rename(obj, "Limit", "pageSize");
         Rename(obj, "fields_to_return", "fields");
         Rename(obj, "FieldsToReturn", "fields");
+        Rename(obj, "fieldsToReturn", "fields"); // common LLM camelCase hallucination
         Rename(obj, "filters", "filter");
         Rename(obj, "Filters", "filter");
+        // Drop leftover aliases if the canonical key already existed.
+        obj.Remove("fieldsToReturn");
+        obj.Remove("fields_to_return");
+        obj.Remove("FieldsToReturn");
+        obj.Remove("object_type");
+        obj.Remove("limit");
+        obj.Remove("filters");
 
         if (obj["objectType"] is JsonValue ot && ot.TryGetValue<string>(out var objectType)
             && !string.IsNullOrWhiteSpace(objectType))
