@@ -26,7 +26,7 @@ public sealed class McpToolExecutor : IToolExecutor
         return runtimeConfig.Agentic.Tools.Integrations.Any(i =>
             string.Equals(i.Type, "mcp", StringComparison.OrdinalIgnoreCase)
             && i.Enabled
-            && string.Equals(McpToolNaming.SanitizeForCompare(i.Name), serverName, StringComparison.OrdinalIgnoreCase));
+            && McpToolNaming.ServerNamesMatch(i.Name, serverName));
     }
 
     public async Task<ToolExecutionResult> ExecuteAsync(
@@ -46,7 +46,7 @@ public sealed class McpToolExecutor : IToolExecutor
 
         var server = runtimeConfig.Agentic.Tools.Integrations.FirstOrDefault(i =>
             string.Equals(i.Type, "mcp", StringComparison.OrdinalIgnoreCase)
-            && string.Equals(McpToolNaming.SanitizeForCompare(i.Name), serverName, StringComparison.OrdinalIgnoreCase));
+            && McpToolNaming.ServerNamesMatch(i.Name, serverName));
 
         if (server is null)
         {

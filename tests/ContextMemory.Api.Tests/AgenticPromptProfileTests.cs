@@ -52,6 +52,7 @@ public sealed class LlmCapabilitiesResolverTests
         var caps = LlmCapabilitiesResolver.From(config);
         Assert.Equal(ModelHarnessMode.Weak, caps.HarnessMode);
         Assert.False(caps.PreferNativeToolCalls);
+        Assert.True(caps.PreferClientSideToolParsing);
         Assert.True(caps.EnableProseToolCallPromotion);
         Assert.True(caps.SanitizeSchemasAggressively);
         Assert.True(caps.InlineEvidenceRules);
@@ -106,6 +107,7 @@ public sealed class LlmCapabilitiesResolverTests
         var caps = LlmCapabilitiesResolver.From(config);
         Assert.Equal(ModelHarnessMode.Strong, caps.HarnessMode);
         Assert.True(caps.PreferNativeToolCalls);
+        Assert.False(caps.PreferClientSideToolParsing);
         Assert.True(caps.EnableProseToolCallPromotion);
         Assert.False(caps.SanitizeSchemasAggressively);
         Assert.True(caps.SupportsOpenAiJsonFormat);
@@ -162,7 +164,7 @@ public sealed class LlmCapabilitiesResolverTests
     }
 
     [Fact]
-    public void ResolveMaxMcpTools_CapsWeakHint()
+    public void ResolveMaxMcpTools_RespectsTenantConfig_EvenForWeakModels()
     {
         var config = new AppRuntimeConfig
         {
@@ -175,8 +177,8 @@ public sealed class LlmCapabilitiesResolverTests
             }
         };
 
-        Assert.Equal(LlmCapabilitiesResolver.WeakMaxMcpToolsDefault,
-            LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
+        Assert.Equal(100, LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
+        Assert.Equal(ModelHarnessMode.Weak, LlmCapabilitiesResolver.From(config).HarnessMode);
     }
 
     [Fact]
@@ -186,6 +188,7 @@ public sealed class LlmCapabilitiesResolverTests
         var disabled = new LlmCapabilities(
             HarnessMode: ModelHarnessMode.Strong,
             PreferNativeToolCalls: true,
+            PreferClientSideToolParsing: false,
             EnableProseToolCallPromotion: false,
             SanitizeSchemasAggressively: false,
             SupportsOpenAiJsonFormat: true,

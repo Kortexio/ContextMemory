@@ -348,7 +348,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
 
         var server = runtimeConfig.Agentic.Tools.Integrations.FirstOrDefault(i =>
             string.Equals(i.Type, "mcp", StringComparison.OrdinalIgnoreCase)
-            && string.Equals(Mcp.McpToolNaming.SanitizeForCompare(i.Name), serverName, StringComparison.OrdinalIgnoreCase));
+            && Mcp.McpToolNaming.ServerNamesMatch(i.Name, serverName));
         if (server is null)
             return false;
 

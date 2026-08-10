@@ -61,13 +61,25 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
                 return Task.FromResult(isOpenAiChat ? OpenAiText(wiki) : OllamaGenerateWrapped(wiki));
             }
 
-            var awaitingToolResult = body.Contains("\"tools\"", StringComparison.Ordinal)
-                && !body.Contains("\"role\":\"tool\"", StringComparison.Ordinal)
-                && !body.Contains("\"role\": \"tool\"", StringComparison.Ordinal)
-                && !body.Contains("\"tool_call_id\"", StringComparison.Ordinal);
+            // Default test app model (qwen3.5:9b/ollama) now uses client-side tool parsing
+            // (see ClientSideToolCalling): native tools[] is omitted and the catalog is inlined
+            // in the system prompt instead. Support both wire formats so existing scenarios
+            // (native tool_calls) and the client-side JSON-in-content contract both round-trip.
+            var hasNativeTools = body.Contains("\"tools\"", StringComparison.Ordinal);
+            var hasClientCatalog = body.Contains("## Tool catalog", StringComparison.Ordinal);
+            var hasToolResponseAlready = body.Contains("\"role\":\"tool\"", StringComparison.Ordinal)
+                || body.Contains("\"role\": \"tool\"", StringComparison.Ordinal)
+                || body.Contains("\"tool_call_id\"", StringComparison.Ordinal)
+                || body.Contains("Tool result:", StringComparison.Ordinal);
+            var useClientSideReply = isOllamaChat && hasClientCatalog && !hasNativeTools;
 
-            if (InfiniteToolLoop && body.Contains("\"tools\"", StringComparison.Ordinal))
+            var awaitingToolResult = (hasNativeTools || hasClientCatalog) && !hasToolResponseAlready;
+
+            if (InfiniteToolLoop && (hasNativeTools || hasClientCatalog))
             {
+                if (useClientSideReply)
+                    return Task.FromResult(OllamaClientSideToolCall("shell_execute", """{"command":"echo loop"}"""));
+
                 return Task.FromResult(isOpenAiChat
                     ? OpenAiToolCall("shell_execute", """{"command":"echo loop"}""")
                     : OllamaToolCall("shell_execute", """{"command":"echo loop"}"""));
@@ -78,6 +90,9 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
                 var isMcp = body.Contains("zuora-mcp__get_account", StringComparison.Ordinal);
                 if (isMcp)
                 {
+                    if (useClientSideReply)
+                        return Task.FromResult(OllamaClientSideToolCall("zuora-mcp__get_account", """{"accountId":"A-001"}"""));
+
                     return Task.FromResult(isOpenAiChat
                         ? OpenAiToolCall("zuora-mcp__get_account", """{"accountId":"A-001"}""")
                         : OllamaToolCall("zuora-mcp__get_account", """{"accountId":"A-001"}"""));
@@ -85,17 +100,23 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
 
                 if (body.Contains("delete", StringComparison.OrdinalIgnoreCase))
                 {
+                    if (useClientSideReply)
+                        return Task.FromResult(OllamaClientSideToolCall("shell_execute", """{"command":"delete --force user-test"}"""));
+
                     return Task.FromResult(isOpenAiChat
                         ? OpenAiToolCall("shell_execute", """{"command":"delete --force user-test"}""")
                         : OllamaToolCall("shell_execute", """{"command":"delete --force user-test"}"""));
                 }
+
+                if (useClientSideReply)
+                    return Task.FromResult(OllamaClientSideToolCall("shell_execute", """{"command":"echo agentic-ok"}"""));
 
                 return Task.FromResult(isOpenAiChat
                     ? OpenAiToolCall("shell_execute", """{"command":"echo agentic-ok"}""")
                     : OllamaToolCall("shell_execute", """{"command":"echo agentic-ok"}"""));
             }
 
-            var isMcpFollowUp = body.Contains("\"role\":\"tool\"", StringComparison.Ordinal)
+            var isMcpFollowUp = hasToolResponseAlready
                 && (body.Contains("zuora-mcp__get_account", StringComparison.Ordinal)
                     || body.Contains("[mock:zuora-mcp]", StringComparison.Ordinal));
 
@@ -234,6 +255,13 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
             }
             """,
             HttpStatusCode.OK);
+
+    /// <summary>
+    /// Client-side wire format expected by <c>ClientSideToolCalling</c>: a plain assistant
+    /// message whose content is a JSON tool-call payload (no native <c>tool_calls</c>).
+    /// </summary>
+    private static HttpResponseMessage OllamaClientSideToolCall(string name, string argumentsJson) =>
+        OllamaText($$"""{"tool":{{JsonSerializer.Serialize(name)}},"arguments":{{argumentsJson}}}""");
 
     private static HttpResponseMessage OllamaGenerateWrapped(string innerJson) =>
         JsonResponse(
