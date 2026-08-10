@@ -79,6 +79,48 @@ public static class McpInputSchemaSanitizer
         return JsonSerializer.Deserialize<object>(cleaned.ToJsonString()) ?? MinimalObjectSchema();
     }
 
+    /// <summary>
+    /// Removes <c>required</c> arrays while keeping property shapes — intermediate repair step
+    /// when full sanitize still fails llama.cpp grammar init.
+    /// </summary>
+    public static object StripRequired(object? schema)
+    {
+        var sanitized = Sanitize(schema);
+        try
+        {
+            var node = JsonNode.Parse(JsonSerializer.Serialize(sanitized));
+            if (node is null)
+                return sanitized;
+            StripRequiredRecursive(node);
+            return JsonSerializer.Deserialize<object>(node.ToJsonString()) ?? sanitized;
+        }
+        catch
+        {
+            return sanitized;
+        }
+    }
+
+    private static void StripRequiredRecursive(JsonNode node)
+    {
+        if (node is JsonObject obj)
+        {
+            obj.Remove("required");
+            foreach (var (_, value) in obj.ToList())
+            {
+                if (value is not null)
+                    StripRequiredRecursive(value);
+            }
+        }
+        else if (node is JsonArray arr)
+        {
+            foreach (var item in arr)
+            {
+                if (item is not null)
+                    StripRequiredRecursive(item);
+            }
+        }
+    }
+
     private static JsonNode? Clean(JsonNode? node, int depth)
     {
         if (node is null)

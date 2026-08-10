@@ -99,23 +99,39 @@ public sealed class AgentContextCompactor : IAgentContextCompactor
         var system = messages.FirstOrDefault(m =>
             string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase));
         var lastUser = messages.LastOrDefault(m =>
-            string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase));
+            string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase)
+            && !IsToolResponseWrapped(m.Content));
+
+        // Qwen/Bonsai chat templates raise if a second role=system appears.
+        // Merge compaction into the single leading system message.
+        var compactionBlock =
+            "## Compacted context\n"
+            + "Earlier turns were archived. Recover details with artifact_read / session_log_search.\n"
+            + $"historyArtifactId={historyId}\n\n"
+            + "## Session summary\n"
+            + summary.Trim();
+
+        var mergedSystemContent = string.IsNullOrWhiteSpace(system?.Content)
+            ? compactionBlock
+            : system!.Content.TrimEnd() + "\n\n" + compactionBlock;
 
         messages.Clear();
-        if (system is not null)
-            messages.Add(system);
         messages.Add(new OllamaMessage
         {
             Role = "system",
-            Content =
-                "## Compacted context\n"
-                + "Earlier turns were archived. Recover details with artifact_read / session_log_search.\n"
-                + $"historyArtifactId={historyId}\n\n"
-                + "## Session summary\n"
-                + summary.Trim()
+            Content = mergedSystemContent
         });
         if (lastUser is not null)
             messages.Add(lastUser);
+        else
+        {
+            // Strict templates (Qwen3.5 multi_step_tool) require a real user query.
+            messages.Add(new OllamaMessage
+            {
+                Role = "user",
+                Content = "Continue from the compacted session summary. Prefer tools for live data."
+            });
+        }
 
         return new ContextCompactionResult(historyId, summary, estimated, estimated);
     }
@@ -173,4 +189,13 @@ public sealed class AgentContextCompactor : IAgentContextCompactor
         JsonSerializer.Serialize(
             messages.Select(m => new { m.Role, Content = m.Content, ToolCalls = m.ToolCalls?.Count ?? 0 }),
             new JsonSerializerOptions { WriteIndented = true });
+
+    private static bool IsToolResponseWrapped(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return false;
+        var trimmed = content.Trim();
+        return trimmed.StartsWith("<tool_response>", StringComparison.OrdinalIgnoreCase)
+               && trimmed.EndsWith("</tool_response>", StringComparison.OrdinalIgnoreCase);
+    }
 }

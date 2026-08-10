@@ -61,6 +61,9 @@ The seed app in `appsettings.json` uses `en-US`. Tenants can set `DefaultLanguag
 |---|---|---|
 | `docker pull` / health OK but chat hangs or 502/503 | Ollama not reachable from the container | On the **host**: `ollama serve` + `ollama pull qwen3.5:9b`. Keep `ContextMemory__OllamaEndpoint=http://host.docker.internal:11434` (Compose/scripts already set `host-gateway`). On Linux without Docker Desktop, confirm `host.docker.internal` resolves. |
 | Health shows Ollama unhealthy | Wrong endpoint or firewall | From the API container or host, `curl http://host.docker.internal:11434/api/tags`. Override with `-e ContextMemory__OllamaEndpoint=...` or `OLLAMA_ENDPOINT` in `.env`. |
+| Agentic prompt exceeds context (`n_ctx=4096`) | Ollama `/v1` ignored `num_ctx` | Set `llmOptions.numCtx` (gateway auto-uses `ollama-native`) **or** `OLLAMA_CONTEXT_LENGTH` / Modelfile `PARAMETER num_ctx`. |
+| Jinja `No user query found in messages` | Strict Qwen/Bonsai chat_template | Patch model `TEMPLATE` (drop `raise_exception`); gateway already merges compaction into one system + ensures a user message. |
+| Model invents Zuora accounts / `0 tool(s)` | Weak model / missing evidence guardrail | Enable `live-data-evidence`; use `harnessMode=weak` or Qwen profile; smoke with `scripts/smoke-multi-model.ps1`. |
 | Port already in use (`5100` / `5200`) | Another process bound the port | Change `API_PORT` / `ADMIN_PORT`, or stop the other process / previous container: `docker rm -f contextmemory-api contextmemory-admin`. |
 | Admin: “Not connected” / 401 | Missing or wrong Master Key | Settings → Master Key = `ContextMemory:MasterKey` (demo: `cm_master_dev_key_change_me`). For Compose/GHCR Admin, URL from the **Admin container** is `http://api:8080`, not `localhost`. Click **Test connection**. |
 | Admin sidebar / menu does nothing | Stale browser cache after upgrade | Hard refresh. Current Admin uses a Blazor toggle (`admin-shell.js`), not AdminLTE jQuery. |

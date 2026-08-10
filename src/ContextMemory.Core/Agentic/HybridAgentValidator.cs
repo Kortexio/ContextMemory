@@ -92,6 +92,23 @@ public sealed class HybridAgentValidator : IAgentValidator
                     request.RuntimeConfig)));
         }
 
+        if (policy.HasKind(AgenticGuardrailKinds.LiveDataEvidence)
+            && AgenticLiveDataEvidenceGuardrail.TryGetRejectionFeedback(
+                request.UserObjective,
+                request.FinalAnswer,
+                request.Steps,
+                request.RuntimeConfig,
+                out var liveFeedback))
+        {
+            var configured = AgenticGuardrailConfigReader.GetFeedback(
+                policy.FindByKind(AgenticGuardrailKinds.LiveDataEvidence)?.ConfigJson ?? "{}",
+                request.RuntimeConfig.DefaultLanguage);
+            return Task.FromResult(ValidationResult.Reject(
+                ValidationMessages.LiveDataWithoutEvidence(
+                    configured ?? liveFeedback,
+                    request.RuntimeConfig)));
+        }
+
         return Task.FromResult(ValidationResult.Ok());
     }
 }

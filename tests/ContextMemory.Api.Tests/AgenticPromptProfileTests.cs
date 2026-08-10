@@ -50,11 +50,47 @@ public sealed class LlmCapabilitiesResolverTests
         };
 
         var caps = LlmCapabilitiesResolver.From(config);
+        Assert.Equal(ModelHarnessMode.Weak, caps.HarnessMode);
         Assert.False(caps.PreferNativeToolCalls);
         Assert.True(caps.EnableProseToolCallPromotion);
         Assert.True(caps.SanitizeSchemasAggressively);
+        Assert.True(caps.InlineEvidenceRules);
+        Assert.False(caps.PreferSkillDiscovery);
         Assert.Equal("auto", caps.DefaultToolChoice);
         Assert.True(caps.SupportsOpenAiJsonFormat); // default ollama path uses /v1 adapter
+    }
+
+    [Fact]
+    public void From_Bonsai_IsQwenWeak()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            LlmBackend = "ollama",
+            LlmModel = "bonsai-27b-q1_0:latest"
+        };
+
+        Assert.Equal(AgenticPromptProfile.Qwen, AgenticPromptProfileResolver.Resolve(config));
+        var caps = LlmCapabilitiesResolver.From(config);
+        Assert.Equal(ModelHarnessMode.Weak, caps.HarnessMode);
+        Assert.True(caps.InlineEvidenceRules);
+    }
+
+    [Fact]
+    public void From_HarnessModeOverride_Wins()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            LlmBackend = "ollama",
+            LlmModel = "qwen3.5:9b",
+            Agentic = new AgenticConfig { HarnessMode = "strong" }
+        };
+
+        var caps = LlmCapabilitiesResolver.From(config);
+        Assert.Equal(ModelHarnessMode.Strong, caps.HarnessMode);
+        Assert.False(caps.InlineEvidenceRules);
+        Assert.True(caps.PreferSkillDiscovery);
     }
 
     [Fact]
@@ -68,6 +104,7 @@ public sealed class LlmCapabilitiesResolverTests
         };
 
         var caps = LlmCapabilitiesResolver.From(config);
+        Assert.Equal(ModelHarnessMode.Strong, caps.HarnessMode);
         Assert.True(caps.PreferNativeToolCalls);
         Assert.True(caps.EnableProseToolCallPromotion);
         Assert.False(caps.SanitizeSchemasAggressively);
@@ -125,14 +162,36 @@ public sealed class LlmCapabilitiesResolverTests
     }
 
     [Fact]
+    public void ResolveMaxMcpTools_CapsWeakHint()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            LlmBackend = "ollama",
+            LlmModel = "qwen3.5:9b",
+            Agentic = new AgenticConfig
+            {
+                Tools = new AgenticToolsConfig { MaxMcpToolsPerTurn = 100 }
+            }
+        };
+
+        Assert.Equal(LlmCapabilitiesResolver.WeakMaxMcpToolsDefault,
+            LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
+    }
+
+    [Fact]
     public void ProsePromotion_CanBeDisabledViaCapabilityFlag()
     {
         // Documents the loop gate: when EnableProseToolCallPromotion is false, prose JSON must not run.
         var disabled = new LlmCapabilities(
+            HarnessMode: ModelHarnessMode.Strong,
             PreferNativeToolCalls: true,
             EnableProseToolCallPromotion: false,
             SanitizeSchemasAggressively: false,
             SupportsOpenAiJsonFormat: true,
+            InlineEvidenceRules: false,
+            PreferSkillDiscovery: true,
+            MaxMcpToolsHint: int.MaxValue,
             DefaultToolChoice: "auto");
 
         Assert.False(disabled.EnableProseToolCallPromotion);
@@ -151,8 +210,8 @@ public sealed class AgenticSystemPromptBuilderTests
         var config = new AppRuntimeConfig
         {
             AppId = "test",
-            LlmBackend = "ollama",
-            LlmModel = "qwen3.5:9b",
+            LlmBackend = "openai",
+            LlmModel = "gpt-4o",
             ResolvedPolicy = new ResolvedAgenticPolicy
             {
                 ActiveSkills =
@@ -175,8 +234,37 @@ public sealed class AgenticSystemPromptBuilderTests
         Assert.Contains("`tool-calling-discipline`", prompt, StringComparison.Ordinal);
         Assert.Contains("skill_read", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("tool_describe", prompt, StringComparison.OrdinalIgnoreCase);
-        // Lazy discovery: skill body is not stuffed into the system prompt.
+        // Strong / lazy discovery: skill body is not stuffed into the system prompt.
         Assert.DoesNotContain("Emit tool_calls with valid JSON", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_Weak_InlinesEvidenceRules()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            LlmBackend = "ollama",
+            LlmModel = "qwen3.5:9b",
+            ResolvedPolicy = new ResolvedAgenticPolicy
+            {
+                ActiveSkills =
+                [
+                    new AgenticSkillDefinition
+                    {
+                        Id = "tool-calling-discipline",
+                        Name = "Tool-calling discipline",
+                        IsDefaultEnabled = true,
+                        PromptMarkdown = "## Tool-calling discipline\n- Emit tool_calls with valid JSON."
+                    }
+                ]
+            }
+        };
+
+        var prompt = AgenticSystemPromptBuilder.Build(config, "shell_execute");
+        Assert.Contains("## Evidence rules (mandatory)", prompt, StringComparison.Ordinal);
+        Assert.Contains("Emit tool_calls with valid JSON", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("## Default skills", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

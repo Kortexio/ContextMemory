@@ -78,7 +78,16 @@ public static class HealthEndpoint
                 appsLoaded,
                 profilesReady,
                 sessionsPath = Path.Combine(config.DataPath, "sessions"),
-                defaultModel = config.DefaultLlmModel
+                defaultModel = config.DefaultLlmModel,
+                harnessHints = new
+                {
+                    ollamaNumCtxNote =
+                        "When llmBackend=ollama and llmOptions.numCtx is set, gateway uses ollama-native (/api/chat) because Ollama /v1 ignores options.num_ctx.",
+                    formatJsonNote =
+                        "llmOptions.format=json is cleared on agentic turns that send tools (conflicts with tool_calls).",
+                    qwenTemplateNote =
+                        "Qwen/Bonsai packs with strict Jinja raise_exception need TEMPLATE patch or compatible Modelfile for agentic+tools."
+                }
             }
         }, statusCode: code);
     }

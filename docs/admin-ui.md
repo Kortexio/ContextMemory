@@ -101,10 +101,10 @@ Use the app key in Chat Lab and client apps — never the Master Key.
 | Enable model thinking | `llmThinkEnabled` → `reasoning_effort` / `think` (off by default) |
 | **Generation defaults** (`llmOptions`) | Tenant defaults merged into chat/generate unless the client overrides |
 | → temperature / top_p / top_k | Sampling |
-| → num_ctx | Ollama context window (raise for MCP/agentic) |
+| → num_ctx | Ollama context window. With backend `ollama`, gateway auto-uses `ollama-native` so `num_ctx` applies (`/v1` ignores it). |
 | → num_predict | Max tokens to generate (`max_tokens` on OpenAI `/v1`) |
 | → repeat_penalty / seed / stop / tfs_z / mirostat | Advanced Ollama options |
-| → keep_alive / format | Ollama top-level fields |
+| → keep_alive / format | Ollama top-level fields. **`format=json` is ignored on agentic turns with tools.** |
 
 Persisted in `app_profiles.ConfigJson` as `llmOptions`. Request body wins over tenant defaults for any field set.
 
@@ -135,6 +135,7 @@ App RPM, per-user RPM, TPM, agentic request weight, agentic tokens per iteration
 |---|---|
 | Enable agentic loop | Multi-step tools on the same chat request |
 | Prompt profile | `auto` / `ollama` / `openai` / `claude` / `qwen` / `composer` |
+| Harness mode | `auto` / `weak` / `strong` — weak inlines evidence + aggressive repair; strong prefers lazy skills |
 | Loop guardrails | Validation mode, network egress, max iterations, loop timeout, min answer length, confirmation keywords, allowed hosts, expected regexes, require exit 0, human review on max iterations |
 | **Skills & guardrail packs** | Per-app checkboxes from the shared catalog (see Skills page). Omit selection → catalog defaults. Skills may be `always_on` / `requestable` rules. |
 | Execution tools | `self-hosted-sandbox` → sandbox endpoint (Compose: `http://sandbox-runtime:8080`) or `aca-session` → ACA pool URL; runtimes shell/python/node/(custom); `allowEgress`. Sandbox output is always archived as a session artifact. |

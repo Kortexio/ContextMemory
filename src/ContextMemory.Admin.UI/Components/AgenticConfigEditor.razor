@@ -32,6 +32,19 @@
                 <FieldHelp>Harness profile (prompt + protocol capabilities). <code>auto</code> picks from model/backend.</FieldHelp>
             </div>
             <div class="col-md-4 form-group">
+                <label>Harness mode</label>
+                <InputSelect class="form-control" @bind-Value="Model.HarnessMode">
+                    <option value="auto">auto</option>
+                    <option value="weak">weak</option>
+                    <option value="strong">strong</option>
+                </InputSelect>
+                <FieldHelp>
+                    <code>weak</code>: inline evidence, aggressive schema repair, lower MCP tool cap.
+                    <code>strong</code>: lazy skills, native tool_calls preferred.
+                    <code>auto</code> from profile + model size.
+                </FieldHelp>
+            </div>
+            <div class="col-md-4 form-group">
                 <label>Validation mode</label>
                 <InputSelect class="form-control" @bind-Value="Model.Guardrails.ValidationMode">
                     <option value="hybrid">hybrid</option>
@@ -40,6 +53,8 @@
                 </InputSelect>
                 <FieldHelp>How answers are checked before returning to the client.</FieldHelp>
             </div>
+        </div>
+        <div class="form-row">
             <div class="col-md-4 form-group">
                 <label>Network egress</label>
                 <InputSelect class="form-control" @bind-Value="Model.Guardrails.NetworkEgress">
@@ -390,6 +405,7 @@
     {
         public bool Enabled { get; set; }
         public string PromptProfile { get; set; } = "auto";
+        public string HarnessMode { get; set; } = "auto";
         public AgenticToolsForm Tools { get; set; } = new();
         public AgenticGuardrailsForm Guardrails { get; set; } = new();
         public List<string> EnabledSkillIds { get; set; } = [];
@@ -400,6 +416,7 @@
         {
             Enabled = Enabled,
             PromptProfile = PromptProfile,
+            HarnessMode = string.IsNullOrWhiteSpace(HarnessMode) ? "auto" : HarnessMode.Trim(),
             PolicyPacks = PolicyPacksExplicit
                 ? new PolicyPacksConfig
                 {
@@ -476,6 +493,7 @@
             {
                 Enabled = config.Enabled,
                 PromptProfile = config.PromptProfile,
+                HarnessMode = string.IsNullOrWhiteSpace(config.HarnessMode) ? "auto" : config.HarnessMode,
                 PolicyPacksExplicit = packs.EnabledSkillIds is not null || packs.EnabledGuardrailIds is not null,
                 EnabledSkillIds = packs.EnabledSkillIds?.ToList() ?? [],
                 EnabledGuardrailIds = packs.EnabledGuardrailIds?.ToList() ?? [],
