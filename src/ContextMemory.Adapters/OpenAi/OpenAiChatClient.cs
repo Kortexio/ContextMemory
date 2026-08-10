@@ -253,6 +253,8 @@ internal sealed class OpenAiChatClient
             Stream = stream,
             Messages = messages,
             Tools = tools,
+            ToolChoice = NormalizeToolChoice(request.ToolChoice, tools),
+            ResponseFormat = MapResponseFormat(request.Format),
             Temperature = request.Options?.Temperature,
             TopP = request.Options?.TopP,
             MaxTokens = request.Options?.NumPredict,
@@ -263,6 +265,34 @@ internal sealed class OpenAiChatClient
             // Forward Ollama-native options (num_ctx, top_k, …) for Ollama /v1 servers.
             Options = HasOllamaNativeOptions(request.Options) ? request.Options : null
         };
+    }
+
+    private static string? NormalizeToolChoice(string? toolChoice, List<OpenAiTool>? tools)
+    {
+        if (tools is null || tools.Count == 0)
+            return null;
+
+        if (string.IsNullOrWhiteSpace(toolChoice))
+            return null;
+
+        var normalized = toolChoice.Trim().ToLowerInvariant();
+        return normalized is "auto" or "required" or "none" ? normalized : null;
+    }
+
+    private static OpenAiResponseFormat? MapResponseFormat(string? format)
+    {
+        if (string.IsNullOrWhiteSpace(format))
+            return null;
+
+        var f = format.Trim();
+        if (f.Equals("json", StringComparison.OrdinalIgnoreCase)
+            || f.Equals("json_object", StringComparison.OrdinalIgnoreCase)
+            || f.Equals("{\"type\":\"json_object\"}", StringComparison.OrdinalIgnoreCase))
+        {
+            return new OpenAiResponseFormat { Type = "json_object" };
+        }
+
+        return null;
     }
 
     private static bool HasOllamaNativeOptions(OllamaOptions? o) =>

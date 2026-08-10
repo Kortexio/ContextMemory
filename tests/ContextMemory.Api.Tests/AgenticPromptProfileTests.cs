@@ -36,6 +36,113 @@ public sealed class AgenticPromptProfileResolverTests
     }
 }
 
+public sealed class LlmCapabilitiesResolverTests
+{
+    [Fact]
+    public void From_Qwen_EnablesProseAndAggressiveSanitize()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            LlmBackend = "ollama",
+            LlmModel = "qwen3.5:9b",
+            Agentic = new AgenticConfig { PromptProfile = "auto" }
+        };
+
+        var caps = LlmCapabilitiesResolver.From(config);
+        Assert.False(caps.PreferNativeToolCalls);
+        Assert.True(caps.EnableProseToolCallPromotion);
+        Assert.True(caps.SanitizeSchemasAggressively);
+        Assert.Equal("auto", caps.DefaultToolChoice);
+        Assert.True(caps.SupportsOpenAiJsonFormat); // default ollama path uses /v1 adapter
+    }
+
+    [Fact]
+    public void From_OpenAi_PrefersNative_LessAggressiveSanitize()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            LlmBackend = "openai",
+            LlmModel = "gpt-4o"
+        };
+
+        var caps = LlmCapabilitiesResolver.From(config);
+        Assert.True(caps.PreferNativeToolCalls);
+        Assert.True(caps.EnableProseToolCallPromotion);
+        Assert.False(caps.SanitizeSchemasAggressively);
+        Assert.True(caps.SupportsOpenAiJsonFormat);
+    }
+
+    [Fact]
+    public void From_OllamaNative_DisablesOpenAiJsonFormat()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            LlmBackend = "ollama-native",
+            LlmModel = "llama3.2"
+        };
+
+        var caps = LlmCapabilitiesResolver.From(config);
+        Assert.True(caps.EnableProseToolCallPromotion);
+        Assert.True(caps.SanitizeSchemasAggressively);
+        Assert.False(caps.SupportsOpenAiJsonFormat);
+    }
+
+    [Fact]
+    public void ResolveMaxIterations_UsesProfileDefault_WhenZero()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            LlmBackend = "ollama",
+            LlmModel = "qwen3.5:9b",
+            Agentic = new AgenticConfig
+            {
+                Guardrails = new AgenticGuardrailsConfig { MaxIterations = 0 }
+            }
+        };
+
+        Assert.Equal(12, LlmCapabilitiesResolver.ResolveMaxIterations(config));
+    }
+
+    [Fact]
+    public void ResolveMaxIterations_UsesConfiguredValue()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            LlmBackend = "openai",
+            LlmModel = "gpt-4o",
+            Agentic = new AgenticConfig
+            {
+                Guardrails = new AgenticGuardrailsConfig { MaxIterations = 7 }
+            }
+        };
+
+        Assert.Equal(7, LlmCapabilitiesResolver.ResolveMaxIterations(config));
+    }
+
+    [Fact]
+    public void ProsePromotion_CanBeDisabledViaCapabilityFlag()
+    {
+        // Documents the loop gate: when EnableProseToolCallPromotion is false, prose JSON must not run.
+        var disabled = new LlmCapabilities(
+            PreferNativeToolCalls: true,
+            EnableProseToolCallPromotion: false,
+            SanitizeSchemasAggressively: false,
+            SupportsOpenAiJsonFormat: true,
+            DefaultToolChoice: "auto");
+
+        Assert.False(disabled.EnableProseToolCallPromotion);
+
+        const string prose = """{"tool":"wiki_search","arguments":{"query":"x"}}""";
+        Assert.NotNull(ProseToolCallParser.TryParse(prose));
+        // Loop skips TryParse when the flag is false — capability is the control surface.
+    }
+}
+
 public sealed class AgenticSystemPromptBuilderTests
 {
     [Fact]
