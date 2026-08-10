@@ -67,7 +67,7 @@ public static class McpQueryObjectsArgumentNormalizer
                  && filterScalar.TryGetValue<string>(out var filterText)
                  && !string.IsNullOrWhiteSpace(filterText))
         {
-            obj["filter"] = new JsonArray(filterText.Trim());
+            obj["filter"] = new JsonArray(NormalizeFilterClause(filterText.Trim()));
         }
         else if (obj["filter"] is JsonArray filterArr)
         {
@@ -108,7 +108,7 @@ public static class McpQueryObjectsArgumentNormalizer
         if (item is JsonValue scalar && scalar.TryGetValue<string>(out var already)
             && !string.IsNullOrWhiteSpace(already))
         {
-            return already.Trim();
+            return NormalizeFilterClause(already.Trim());
         }
 
         if (item is not JsonObject fo)
@@ -128,6 +128,27 @@ public static class McpQueryObjectsArgumentNormalizer
             return null;
 
         return $"{field.Trim()}.{MapOperator(op)}:{value.Trim()}";
+    }
+
+    /// <summary>
+    /// Rewrites SQL-/expression-like filters (e.g. <c>status = 'Canceled'</c>) into Zuora MCP
+    /// <c>field.OP:value</c> clauses when needed.
+    /// </summary>
+    private static string NormalizeFilterClause(string clause)
+    {
+        if (clause.Contains('.', StringComparison.Ordinal) && clause.Contains(':', StringComparison.Ordinal))
+            return clause;
+
+        // status = 'Canceled' | status=="Canceled" | status EQ Canceled
+        var m = System.Text.RegularExpressions.Regex.Match(
+            clause,
+            """^\s*(?<field>[A-Za-z_][\w]*)\s*(?<op>=|==|!=|<>|>=|<=|>|<|EQ|NE|GT|GE|LT|LE|SW|IN)\s*['"]?(?<value>[^'"]+?)['"]?\s*$""",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+        if (!m.Success)
+            return clause;
+
+        return $"{m.Groups["field"].Value}.{MapOperator(m.Groups["op"].Value)}:{m.Groups["value"].Value.Trim()}";
     }
 
     private static string MapOperator(string op)
