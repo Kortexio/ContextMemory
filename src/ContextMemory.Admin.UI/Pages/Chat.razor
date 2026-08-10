@@ -1,4 +1,4 @@
-﻿@page "/apps/{AppId}/playground"
+@page "/apps/{AppId}/playground"
 @page "/chat"
 @page "/chat-test"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
@@ -23,7 +23,7 @@
     </div>
 }
 
-<div class="kx-chat-layout @(_settings.ShowRawJson ? "with-inspector" : "")">
+<div class="kx-chat-layout @(_settings.ShowRawJson || HasLabPanels ? "with-inspector" : "")">
     <aside class="kx-chat-side">
         <div class="kx-panel">
             <div class="kx-panel-head"><h3>Session</h3></div>
@@ -189,7 +189,23 @@
                                         {
                                             <div class="agentic-step agentic-step-@step.Status">
                                                 <span class="agentic-step-icon">@StepIcon(step.Status)</span>
-                                                <span class="agentic-step-label">@step.Label</span>
+                                                <div class="agentic-step-body">
+                                                    <span class="agentic-step-label">@step.Label</span>
+                                                    <div class="agentic-step-meta small text-muted">
+                                                        @if (!string.IsNullOrEmpty(step.Phase))
+                                                        {
+                                                            <span>@FormatPhase(step.Phase)</span>
+                                                        }
+                                                        @if (!string.IsNullOrEmpty(step.ToolName))
+                                                        {
+                                                            <span> · <code>@step.ToolName</code></span>
+                                                        }
+                                                        @if (!string.IsNullOrEmpty(step.ArtifactId))
+                                                        {
+                                                            <span> · artifact <code>@step.ArtifactId</code></span>
+                                                        }
+                                                    </div>
+                                                </div>
                                             </div>
                                         }
                                     </div>
@@ -273,42 +289,102 @@
         </div>
     </section>
 
-    @if (_settings.ShowRawJson)
+    @if (HasLabPanels)
     {
         <aside class="kx-chat-side">
-            <div class="kx-panel">
-                <div class="kx-panel-head"><h3>Inspector</h3></div>
+            <div class="kx-panel mb-3">
+                <div class="kx-panel-head"><h3>Todos</h3></div>
                 <div class="kx-panel-body p-2">
-                    <label class="small font-weight-bold">Last request</label>
-                    <pre class="chat-raw">@FormatRawJson(_lastRequestJson)</pre>
-                    <label class="small font-weight-bold">Last response</label>
-                    <pre class="chat-raw">@FormatRawJson(_lastResponseJson)</pre>
-                    @if (_lastMeta is not null)
+                    @if (ConversationTodos.Count == 0)
                     {
-                        <div class="small text-muted mt-2">
-                            model: @_lastMeta.Model<br />
-                            done: @_lastMeta.DoneReason<br />
-                            prompt tokens: @_lastMeta.PromptEvalCount<br />
-                            completion tokens: @_lastMeta.EvalCount
-                        </div>
+                        <p class="small text-muted mb-0">No <code>todo_write</code> payloads yet.</p>
                     }
-                    @if (_lastWebSearchUsed is not null)
+                    else
                     {
-                        <div class="small text-muted mt-2">
-                            <strong>Web search</strong><br />
-                            X-Web-Search-Used: @_lastWebSearchUsed<br />
-                            @if (_lastWebSearchProvider is not null)
+                        <ul class="kx-chat-todo-list mb-0">
+                            @foreach (var todo in ConversationTodos)
                             {
-                                @:X-Web-Search-Provider: @_lastWebSearchProvider<br />
+                                <li><code>@todo</code></li>
                             }
-                            @if (_lastWebSearchSkipReason is not null)
-                            {
-                                @:X-Web-Search-Skip-Reason: @_lastWebSearchSkipReason<br />
-                            }
-                        </div>
+                        </ul>
                     }
                 </div>
             </div>
+
+            <div class="kx-panel mb-3">
+                <div class="kx-panel-head"><h3>Artifacts</h3></div>
+                <div class="kx-panel-body p-2">
+                    @if (ConversationArtifactIds.Count == 0)
+                    {
+                        <p class="small text-muted mb-0">No artifact ids in this conversation.</p>
+                    }
+                    else
+                    {
+                        <ul class="kx-chat-artifact-list mb-0">
+                            @foreach (var id in ConversationArtifactIds)
+                            {
+                                <li><code>@id</code></li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+
+            <div class="kx-panel mb-3">
+                <div class="kx-panel-head"><h3>Wiki / discovery</h3></div>
+                <div class="kx-panel-body p-2">
+                    @if (ConversationWikiRefs.Count == 0)
+                    {
+                        <p class="small text-muted mb-0">No wiki_search / wiki_grep / compaction events yet.</p>
+                    }
+                    else
+                    {
+                        <ul class="kx-chat-artifact-list mb-0">
+                            @foreach (var row in ConversationWikiRefs)
+                            {
+                                <li><span class="badge badge-light">@row.Phase</span> @row.Label</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+
+            @if (_settings.ShowRawJson)
+            {
+                <div class="kx-panel">
+                    <div class="kx-panel-head"><h3>Inspector</h3></div>
+                    <div class="kx-panel-body p-2">
+                        <label class="small font-weight-bold">Last request</label>
+                        <pre class="chat-raw">@FormatRawJson(_lastRequestJson)</pre>
+                        <label class="small font-weight-bold">Last response</label>
+                        <pre class="chat-raw">@FormatRawJson(_lastResponseJson)</pre>
+                        @if (_lastMeta is not null)
+                        {
+                            <div class="small text-muted mt-2">
+                                model: @_lastMeta.Model<br />
+                                done: @_lastMeta.DoneReason<br />
+                                prompt tokens: @_lastMeta.PromptEvalCount<br />
+                                completion tokens: @_lastMeta.EvalCount
+                            </div>
+                        }
+                        @if (_lastWebSearchUsed is not null)
+                        {
+                            <div class="small text-muted mt-2">
+                                <strong>Web search</strong><br />
+                                X-Web-Search-Used: @_lastWebSearchUsed<br />
+                                @if (_lastWebSearchProvider is not null)
+                                {
+                                    @:X-Web-Search-Provider: @_lastWebSearchProvider<br />
+                                }
+                                @if (_lastWebSearchSkipReason is not null)
+                                {
+                                    @:X-Web-Search-Skip-Reason: @_lastWebSearchSkipReason<br />
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
         </aside>
     }
 </div>
@@ -347,6 +423,42 @@
 
     private bool CanRegenerate =>
         _settings.Mode == ChatEndpointMode.Chat && _messages.Any(m => m.Role == "user");
+
+    private bool HasLabPanels =>
+        _settings.Mode == ChatEndpointMode.Chat || _settings.ShowRawJson;
+
+    private IReadOnlyList<string> ConversationArtifactIds =>
+        _messages
+            .SelectMany(m => m.AgenticSteps)
+            .Select(s => s.ArtifactId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(id => id!)
+            .ToList();
+
+    private IReadOnlyList<string> ConversationTodos =>
+        _messages
+            .SelectMany(m => m.AgenticSteps)
+            .Where(s => string.Equals(s.ToolName, "todo_write", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(ExtractTodoLines)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    private IReadOnlyList<(string Phase, string Label)> ConversationWikiRefs =>
+        _messages
+            .SelectMany(m => m.AgenticSteps)
+            .Where(s =>
+                string.Equals(s.Phase, "Compacting", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(s.ToolName, "wiki_search", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(s.ToolName, "wiki_grep", StringComparison.OrdinalIgnoreCase)
+                || (s.Label?.Contains("wiki", StringComparison.OrdinalIgnoreCase) ?? false)
+                || (s.Detail?.Contains("wiki", StringComparison.OrdinalIgnoreCase) ?? false))
+            .Select(s => (
+                Phase: string.IsNullOrWhiteSpace(s.Phase) ? (s.ToolName ?? "wiki") : s.Phase,
+                Label: s.Label ?? s.Detail ?? s.ToolName ?? s.Phase))
+            .Distinct()
+            .Take(40)
+            .ToList();
 
     protected override async Task OnInitializedAsync()
     {
@@ -703,6 +815,44 @@
             "pending" => "\u23F8",
             _ => "\u2026"
         };
+
+    private static string FormatPhase(string phase) =>
+        phase switch
+        {
+            "Compacting" => "Compacting",
+            "SubagentStarted" => "Subagent",
+            "SubagentCompleted" => "Subagent done",
+            "ToolStarted" => "Tool",
+            "ToolCompleted" => "Tool done",
+            "LlmRequest" => "LLM",
+            "Validating" => "Validating",
+            _ => phase
+        };
+
+    private static IEnumerable<string> ExtractTodoLines(AgenticUiStep step)
+    {
+        foreach (var text in new[] { step.Detail, step.Label })
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                continue;
+
+            var trimmed = text.Trim();
+            var jsonStart = trimmed.IndexOfAny(['[', '{']);
+            if (jsonStart >= 0)
+            {
+                var json = trimmed[jsonStart..];
+                yield return json.Length > 240 ? json[..240] + "…" : json;
+                yield break;
+            }
+
+            if (!string.Equals(trimmed, step.Phase, StringComparison.OrdinalIgnoreCase)
+                && trimmed.Contains("todo", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return trimmed.Length > 240 ? trimmed[..240] + "…" : trimmed;
+                yield break;
+            }
+        }
+    }
 
     private async Task ScrollToBottomAsync()
     {

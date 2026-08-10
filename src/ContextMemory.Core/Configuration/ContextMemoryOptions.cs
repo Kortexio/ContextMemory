@@ -9,8 +9,25 @@ public class ContextMemoryOptions
     public string OllamaEndpoint { get; set; } = "http://localhost:11434";
     public int OllamaRequestTimeoutSeconds { get; set; } = 600;
     public int DefaultAgenticLoopTimeoutSeconds { get; set; } = 120;
-    public int MaxHistoryMessages { get; set; } = 20;
-    public int MaxWikiContextChars { get; set; } = 12_000;
+    public int MaxHistoryMessages { get; set; } = 6;
+
+    /// <summary>Session wiki inject budget (tokens-first; dynamic context discovery).</summary>
+    public int MaxWikiContextChars { get; set; } = 4_000;
+
+    /// <summary>Global Wiki digest inject budget in the system prompt (not full document bodies).</summary>
+    public int MaxDigestContextChars { get; set; } = 2_500;
+
+    /// <summary>How many digest matches to inject before the chat LLM runs.</summary>
+    public int DigestTopK { get; set; } = 3;
+
+    /// <summary>Cap for tool observations in the agent loop; excess becomes a pointer + preview.</summary>
+    public int MaxToolObservationChars { get; set; } = 2_000;
+
+    /// <summary>Estimated tokens before mid-turn compaction archives the transcript.</summary>
+    public int MaxContextTokens { get; set; } = 24_000;
+
+    /// <summary>Fixed preview size for sandbox/terminal observations (always artefact).</summary>
+    public int SandboxObservationPreviewChars { get; set; } = 400;
     public long WikiCompactionThresholdBytes { get; set; } = 524_288;
     public int WikiCompactionMinPages { get; set; } = 8;
     public int MaxPayloadBytes { get; set; } = 1_048_576;
@@ -48,5 +65,5 @@ public class AppOptionsEntry
     public string SystemPrompt { get; set; } = string.Empty;
     public string DefaultLanguage { get; set; } = "en-US";
     public string LlmModel { get; set; } = "qwen3.5:9b";
-    public int MaxHistoryMessages { get; set; } = 20;
+    public int MaxHistoryMessages { get; set; } = 6;
 }

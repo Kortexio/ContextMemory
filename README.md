@@ -73,13 +73,13 @@ How we compare (Mem0 / Zep / Letta / **why we are not RAG**): [`docs/compare.md`
 |---|---|
 | Memory that survives turns without rewriting your client | Session markdown wiki + history inject; send only the new message |
 | Memory you can open, edit, audit | Files on disk / Postgres — not opaque embeddings |
-| Shared company/docs knowledge in chat | **Global Wiki** via on-demand `wiki_search` (agentic tool — **not** classic RAG inject) |
+| Shared company/docs knowledge in chat | **Global Wiki** digests + on-demand `wiki_search` / `wiki_grep` (**not** classic RAG / embeddings) |
 | Point-in-time facts | Temporal revisions (`asOf` / supersede) on Global Wiki |
 | Tools without a second orchestrator | Same `/v1`: sandbox + MCP integrations + wiki tools |
 | Safer agents | Skills & guardrail packs, validators, confirmation keywords, HITL `[CONFIRM:id]` |
 | Cursor / Claude permanent memory fast | MCP wedge: `memory_save` / `memory_search` / `memory_get` (+ `wiki_search`, `session_recall`) |
 | Any LLM per tenant | Ollama, vLLM, LM Studio, OpenAI, Azure-compatible `/v1`, custom |
-| Operate without writing a test client | **Admin** + **Playground** (timeline + HITL) |
+| Operate without writing a test client | **Admin** + **Playground** (timeline, todos, artifacts, HITL) |
 | Full control on your infra | Docker/Compose self-host (API + Admin + mcp-runtime + sandbox) |
 | Zero ops | [Kortexio Cloud](https://kortexio.io) (`cmk_live_…`) |
 
@@ -89,31 +89,37 @@ How we compare (Mem0 / Zep / Letta / **why we are not RAG**): [`docs/compare.md`
 
 ### Memory
 
-- **Session wiki** — markdown pages, index, execution log; compaction; update every N turns; optional dedicated maintainer model
-- **History** — last N messages (per-app budget)
+- **Session wiki** — markdown pages, index, execution log; compaction; update every N turns; optional dedicated maintainer model; **rolling summary** in the system prompt
+- **History** — last N messages (per-app budget); mid-turn **compaction** archives long transcripts as artifacts when over `MaxContextTokens`
 - **Persona & rules** — `basePersona`, `businessRules`, `formatRules`, `wikiSchema` per app
-- **Global Wiki** — app-scoped docs; ingest/batch APIs; digests; FTS; `wiki_search` in the agentic loop; revisions / audit / `asOf`
+- **Global Wiki** — app-scoped docs; ingest/batch APIs; digests; FTS; tools `wiki_search` / `wiki_grep`; revisions / audit / `asOf`
+- **No vector RAG** — discovery is digests + lexical/FTS + tools (Cursor-style), not embeddings
 - **Web search** (optional) — enrich turns; can persist into wiki
 
 ### Agentic harness (server-side)
 
-When agentic tools and/or Global Wiki are enabled, the gateway runs a tool loop:
+When agentic tools are enabled, the gateway runs a tool loop:
 
-- **Iterations / timeout** — max steps, loop timeout, partial answer on timeout
-- **Built-in tools** — `wiki_search`; `shell_execute` / `python_execute` / `node_execute` (self-hosted sandbox or Azure ACA Dynamic Sessions)
+- **Iterations / timeout** — max steps, loop timeout, partial answer on timeout; mid-turn compaction phase
+- **Built-in tools** — `wiki_search`, `wiki_grep`; sandbox `shell_execute` / `python_execute` / `node_execute` / `container_execute` (self-hosted or ACA); discovery helpers (`artifact_*`, `skill_*`, `rule_*`, `tool_describe`, `session_log_search`, `delegate_task`, `todo_write`)
+- **Lazy tool schemas** — MCP and built-ins listed with short/open schemas; `tool_describe` for full args
+- **Artifacts** — long outputs (and all sandbox runs) stored per session; loop keeps a short preview + `artifactId`
+- **Subagents** — `delegate_task` (depth 1, isolated child session)
 - **MCP tools** — per-app catalog (`server__tool`), allow/deny, max tools per turn, OAuth/credentials
 - **Validation modes** — `deterministic` · `hybrid` · `llm-judge`
+- **Hooks** — PreToolUse / PostToolUse guardrail kinds
 - **HITL** — pause before destructive tools; `[CONFIRM:id]` / cancel; checkpoint in session log
-- **Progress** — agentic phases streamed/metadata (`context_memory.agentic`) without leaking tool chatter into the user answer
-- **Prompt profiles** — `auto` / `ollama` / `openai` / `claude`
+- **Progress** — `context_memory.agentic` phases (incl. Compacting / Subagent*) + `context_memory.discovery` counters
+- **Prompt profiles** — `auto` / `ollama` / `openai` / `claude` / `qwen` / `composer`
 - **Network egress policy** — restricted/allowed + host allowlists
 
 ### Skills & guardrails
 
 - **Platform catalog** — shared skills/guardrails (Admin → Skills); import `.skill.json` / `.guardrail.json`
+- **Activation** — `skill` | `always_on` | `requestable` (rules loaded via `rule_search` / `rule_read`)
 - **Per-app policies** — additive inventory on top of platform defaults
 - Seeded examples include anti-hallucination, tool-calling discipline, wiki-first-for-docs, privacy/secrets, transparent failures, and more
-- Guardrail kinds include URL fetch, sandbox claims, tool-failure disclosure, blocked patterns
+- Guardrail kinds include URL fetch, sandbox claims, tool-failure disclosure, blocked patterns, pre/post tool-use hooks
 
 ### MCP (two directions)
 
@@ -130,7 +136,7 @@ Blazor Admin (`:5200`, Master Key auth) — operators configure tenants without 
 |---|---|
 | Dashboard | Apps, requests, wiki/web-search stats |
 | New app / credentials | Register tenant, mint/rotate `cm_live_…` |
-| **Playground** | Chat against an app; agentic timeline; HITL confirm/cancel |
+| **Playground** | Chat Lab: agentic timeline (Compacting/Subagent), Todos, Artifacts, wiki refs, HITL |
 | LLM | Backend, model, endpoint, API key, history, streaming, think |
 | Memory & wiki | Session budgets, compaction, maintainer model, Global Wiki on/off + char budget |
 | Web search | Provider, mode, persist-to-wiki |

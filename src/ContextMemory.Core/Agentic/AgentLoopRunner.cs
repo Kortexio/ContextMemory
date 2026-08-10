@@ -16,6 +16,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
     private readonly IAgentToolCallProcessor _toolCallProcessor;
     private readonly ISessionStore _sessionStore;
     private readonly IAgenticPendingStore _pendingStore;
+    private readonly IAgentContextCompactor _contextCompactor;
     private readonly ILogger<AgentLoopRunner> _logger;
     private readonly ContextMemoryOptions _options;
 
@@ -25,6 +26,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
         IAgentToolCallProcessor toolCallProcessor,
         ISessionStore sessionStore,
         IAgenticPendingStore pendingStore,
+        IAgentContextCompactor contextCompactor,
         ILogger<AgentLoopRunner> logger,
         IOptions<ContextMemoryOptions> options)
     {
@@ -33,6 +35,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
         _toolCallProcessor = toolCallProcessor;
         _sessionStore = sessionStore;
         _pendingStore = pendingStore;
+        _contextCompactor = contextCompactor;
         _logger = logger;
         _options = options.Value;
     }
@@ -47,6 +50,12 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
         var adapter = _adapterResolver.Resolve(request.RuntimeConfig);
         string? lastAnswer = null;
 
+        var staticPromptChars = messages
+            .FirstOrDefault(m => string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase))
+            ?.Content?.Length ?? 0;
+        var compactionCount = 0;
+        var llmCalls = 0;
+
         for (var iteration = request.StartIteration - 1; iteration < maxIterations; iteration++)
         {
             if (loopSw.Elapsed >= loopTimeout)
@@ -57,8 +66,9 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     loopSw.ElapsedMilliseconds,
                     iteration);
 
-                var timeoutResult = BuildTimeoutResult(
-                    lastAnswer, steps, iteration, request.RuntimeConfig.DefaultLanguage);
+                var timeoutResult = AttachDiscovery(
+                    BuildTimeoutResult(lastAnswer, steps, iteration, request.RuntimeConfig.DefaultLanguage),
+                    messages, steps, staticPromptChars, compactionCount, llmCalls);
                 Report(request.Report, new AgenticProgressEvent
                 {
                     Phase = AgenticProgressPhase.TimedOut,
@@ -69,6 +79,28 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             }
 
             cancellationToken.ThrowIfCancellationRequested();
+
+            var compaction = await _contextCompactor
+                .TryCompactAsync(
+                    request.AppId,
+                    request.UserId,
+                    request.SessionId,
+                    request.RuntimeConfig,
+                    messages,
+                    iteration + 1,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (compaction is not null)
+            {
+                compactionCount++;
+                Report(request.Report, new AgenticProgressEvent
+                {
+                    Phase = AgenticProgressPhase.Compacting,
+                    Iteration = iteration + 1,
+                    ArtifactId = compaction.HistoryArtifactId,
+                    Detail = $"Compacted ~{compaction.EstimatedTokensBefore} tokens → summary + historyArtifactId"
+                });
+            }
 
             Report(request.Report, new AgenticProgressEvent
             {
@@ -88,6 +120,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             try
             {
                 response = await adapter.ChatAsync(llmRequest, cancellationToken).ConfigureAwait(false);
+                llmCalls++;
             }
             catch (HttpRequestException ex) when (IsLlmGrammarError(ex))
             {
@@ -101,6 +134,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 try
                 {
                     response = await adapter.ChatAsync(retryRequest, cancellationToken).ConfigureAwait(false);
+                    llmCalls++;
                 }
                 catch (HttpRequestException retryEx) when (IsLlmGrammarError(retryEx))
                 {
@@ -122,8 +156,9 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 {
                     if (loopSw.Elapsed >= loopTimeout)
                     {
-                        var timeoutResult = BuildTimeoutResult(
-                            lastAnswer, steps, iteration + 1, request.RuntimeConfig.DefaultLanguage);
+                        var timeoutResult = AttachDiscovery(
+                            BuildTimeoutResult(lastAnswer, steps, iteration + 1, request.RuntimeConfig.DefaultLanguage),
+                            messages, steps, staticPromptChars, compactionCount, llmCalls);
                         Report(request.Report, new AgenticProgressEvent
                         {
                             Phase = AgenticProgressPhase.TimedOut,
@@ -149,7 +184,11 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                         .ConfigureAwait(false);
 
                     if (toolOutcome.AwaitingConfirmation is not null)
-                        return toolOutcome.AwaitingConfirmation;
+                    {
+                        return AttachDiscovery(
+                            toolOutcome.AwaitingConfirmation,
+                            messages, steps, staticPromptChars, compactionCount, llmCalls);
+                    }
                 }
 
                 continue;
@@ -173,7 +212,9 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
             if (validation.IsValid)
             {
-                var success = AgentResult.Succeeded(lastAnswer, steps, iteration + 1);
+                var success = AttachDiscovery(
+                    AgentResult.Succeeded(lastAnswer, steps, iteration + 1),
+                    messages, steps, staticPromptChars, compactionCount, llmCalls);
                 Report(request.Report, new AgenticProgressEvent
                 {
                     Phase = AgenticProgressPhase.Completed,
@@ -204,7 +245,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
         if (request.RuntimeConfig.Agentic.Guardrails.HumanReviewOnMaxIterations)
         {
-            return await RequestHumanReviewAsync(
+            var review = await RequestHumanReviewAsync(
                     request.AppId,
                     request.UserId,
                     request.SessionId,
@@ -216,6 +257,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     request.Report,
                     cancellationToken)
                 .ConfigureAwait(false);
+            return AttachDiscovery(review, messages, steps, staticPromptChars, compactionCount, llmCalls);
         }
 
         Report(request.Report, new AgenticProgressEvent
@@ -224,7 +266,9 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             Detail = AgenticMessages.MaxIterationsReached(maxIterations, request.RuntimeConfig.DefaultLanguage)
         });
 
-        return AgentResult.LimitReached(fallback, steps, maxIterations);
+        return AttachDiscovery(
+            AgentResult.LimitReached(fallback, steps, maxIterations),
+            messages, steps, staticPromptChars, compactionCount, llmCalls);
     }
 
     private async Task<AgentResult> RequestHumanReviewAsync(
@@ -273,6 +317,43 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             pending.Steps,
             pending.Iteration,
             pending.Kind);
+    }
+
+    private static AgentResult AttachDiscovery(
+        AgentResult result,
+        List<OllamaMessage> messages,
+        List<AgentExecutionStep> steps,
+        int staticPromptChars,
+        int compactionCount,
+        int llmCalls)
+    {
+        var toolObservationChars = messages
+            .Where(m => string.Equals(m.Role, "tool", StringComparison.OrdinalIgnoreCase))
+            .Sum(m => m.Content?.Length ?? 0);
+
+        var discoveryFetchedChars = steps
+            .Where(s => IsDiscoveryFetchTool(s.ToolName))
+            .Sum(s => s.Output?.Length ?? 0);
+
+        return result.WithDiscovery(DiscoveryTelemetry.FromCounts(
+            staticPromptChars,
+            discoveryFetchedChars,
+            toolObservationChars,
+            compactionCount,
+            llmCalls));
+    }
+
+    private static bool IsDiscoveryFetchTool(string? toolName)
+    {
+        if (string.IsNullOrWhiteSpace(toolName))
+            return false;
+
+        if (toolName.StartsWith("wiki_", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return string.Equals(toolName, SessionDiscoveryTools.SkillRead, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(toolName, SessionDiscoveryTools.ArtifactRead, StringComparison.OrdinalIgnoreCase)
+               || string.Equals(toolName, SessionDiscoveryTools.ArtifactTail, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void Report(Action<AgenticProgressEvent>? report, AgenticProgressEvent evt) =>

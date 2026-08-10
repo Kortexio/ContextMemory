@@ -12,13 +12,16 @@ public sealed class AgenticPolicyPackResolverTests
     [Fact]
     public void Seed_ContainsExpectedDefaults()
     {
-        Assert.Equal(13, AgenticCatalogSeed.Skills.Count);
-        Assert.Equal(4, AgenticCatalogSeed.Guardrails.Count);
+        Assert.Equal(15, AgenticCatalogSeed.Skills.Count);
+        Assert.Equal(6, AgenticCatalogSeed.Guardrails.Count);
         Assert.Contains(AgenticCatalogSeed.Skills, s => s.Id == "anti-hallucination-web" && s.IsDefaultEnabled);
         Assert.Contains(AgenticCatalogSeed.Skills, s => s.Id == "strict-no-speculation" && !s.IsDefaultEnabled);
         Assert.Contains(AgenticCatalogSeed.Skills, s => s.Id == "zuora-graphql-discover-first" && !s.IsDefaultEnabled);
+        Assert.Contains(AgenticCatalogSeed.Skills, s =>
+            s.Id == "rule-always-evidence" && s.Activation == AgenticSkillActivation.AlwaysOn);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
             g.Id == "url-fetch-required" && g.Kind == AgenticGuardrailKinds.UrlFetch);
+        Assert.Contains(AgenticCatalogSeed.Guardrails, g => g.Kind == AgenticGuardrailKinds.PostToolUse);
     }
 
     [Fact]
@@ -152,6 +155,7 @@ public sealed class AgenticSystemPromptFromSkillsTests
                     {
                         Id = "anti-hallucination-web",
                         Name = "Anti-hallucination (web)",
+                        IsDefaultEnabled = true,
                         PromptMarkdown = "## Anti-hallucination (web)\n- Fetch URLs first."
                     }
                 ]
@@ -160,8 +164,11 @@ public sealed class AgenticSystemPromptFromSkillsTests
 
         var prompt = AgenticSystemPromptBuilder.Build(config, "python_execute");
 
-        Assert.Contains("## Active skills", prompt, StringComparison.Ordinal);
-        Assert.Contains("Fetch URLs first", prompt, StringComparison.Ordinal);
+        Assert.Contains("## Default skills", prompt, StringComparison.Ordinal);
+        Assert.Contains("`anti-hallucination-web`", prompt, StringComparison.Ordinal);
+        Assert.Contains("skill_read", prompt, StringComparison.OrdinalIgnoreCase);
+        // Lazy discovery: full PromptMarkdown is loaded via skill_read, not stuffed here.
+        Assert.DoesNotContain("Fetch URLs first", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("Anti-alucinação (obrigatório)", prompt, StringComparison.Ordinal);
     }
 
@@ -174,6 +181,7 @@ public sealed class AgenticSystemPromptFromSkillsTests
 
         Assert.Contains("Available tools: shell_execute", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("## Active skills", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("## Default skills", prompt, StringComparison.Ordinal);
     }
 }
 

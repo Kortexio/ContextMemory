@@ -73,6 +73,9 @@ public sealed class PostgresAgenticAppPolicyCatalogStore : IAgenticAppPolicyCata
                 Description = skill.Description,
                 PromptMarkdown = skill.PromptMarkdown,
                 Category = string.IsNullOrWhiteSpace(skill.Category) ? "general" : skill.Category,
+                Activation = string.IsNullOrWhiteSpace(skill.Activation)
+                    ? AgenticSkillActivation.Skill
+                    : skill.Activation,
                 IsEnabled = skill.IsEnabled,
                 SortOrder = skill.SortOrder,
                 LinkedGuardrailIdsJson = JsonSerializer.Serialize(skill.LinkedGuardrailIds, JsonOptions),
@@ -87,6 +90,9 @@ public sealed class PostgresAgenticAppPolicyCatalogStore : IAgenticAppPolicyCata
             row.Description = skill.Description;
             row.PromptMarkdown = skill.PromptMarkdown;
             row.Category = string.IsNullOrWhiteSpace(skill.Category) ? "general" : skill.Category;
+            row.Activation = string.IsNullOrWhiteSpace(skill.Activation)
+                ? AgenticSkillActivation.Skill
+                : skill.Activation;
             row.IsEnabled = skill.IsEnabled;
             row.SortOrder = skill.SortOrder;
             row.LinkedGuardrailIdsJson = JsonSerializer.Serialize(skill.LinkedGuardrailIds, JsonOptions);
@@ -213,6 +219,9 @@ public sealed class PostgresAgenticAppPolicyCatalogStore : IAgenticAppPolicyCata
             Description = row.Description,
             PromptMarkdown = row.PromptMarkdown,
             Category = row.Category,
+            Activation = string.IsNullOrWhiteSpace(row.Activation)
+                ? AgenticSkillActivation.Skill
+                : row.Activation,
             IsEnabled = row.IsEnabled,
             SortOrder = row.SortOrder,
             LinkedGuardrailIds = linked,

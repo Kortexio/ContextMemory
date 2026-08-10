@@ -34,6 +34,9 @@ public record AppConfigFile
     [JsonPropertyName("maxWikiContextChars")]
     public int MaxWikiContextChars { get; init; }
 
+    [JsonPropertyName("maxContextTokens")]
+    public int MaxContextTokens { get; init; }
+
     [JsonPropertyName("wikiCompactionThresholdBytes")]
     public long WikiCompactionThresholdBytes { get; init; }
 
@@ -91,6 +94,9 @@ public record AppConfigPatchRequest
 
     [JsonPropertyName("maxWikiContextChars")]
     public int? MaxWikiContextChars { get; init; }
+
+    [JsonPropertyName("maxContextTokens")]
+    public int? MaxContextTokens { get; init; }
 
     [JsonPropertyName("wikiCompactionThresholdBytes")]
     public long? WikiCompactionThresholdBytes { get; init; }

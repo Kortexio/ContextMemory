@@ -26,6 +26,8 @@ public sealed record AgenticSkillDefinition
     public string Description { get; init; } = string.Empty;
     public string PromptMarkdown { get; init; } = string.Empty;
     public string Category { get; init; } = "general";
+    /// <summary>skill | always_on | requestable — rules use always_on/requestable.</summary>
+    public string Activation { get; init; } = AgenticSkillActivation.Skill;
     public bool IsSystem { get; init; }
     public bool IsDefaultEnabled { get; init; }
     public int SortOrder { get; init; }
@@ -55,6 +57,7 @@ public sealed record AgenticAppSkillDefinition
     public string Description { get; init; } = string.Empty;
     public string PromptMarkdown { get; init; } = string.Empty;
     public string Category { get; init; } = "general";
+    public string Activation { get; init; } = AgenticSkillActivation.Skill;
     public bool IsEnabled { get; init; } = true;
     public int SortOrder { get; init; }
     public IReadOnlyList<string> LinkedGuardrailIds { get; init; } = [];
@@ -69,6 +72,7 @@ public sealed record AgenticAppSkillDefinition
             Description = Description,
             PromptMarkdown = PromptMarkdown,
             Category = Category,
+            Activation = string.IsNullOrWhiteSpace(Activation) ? AgenticSkillActivation.Skill : Activation,
             IsSystem = false,
             IsDefaultEnabled = IsEnabled,
             SortOrder = SortOrder,
@@ -138,4 +142,6 @@ public static class AgenticGuardrailKinds
     public const string SandboxClaim = "sandbox-claim";
     public const string ToolFailureDisclosure = "tool-failure-disclosure";
     public const string BlockedPatterns = "blocked-patterns";
+    public const string PreToolUse = "pre-tool-use";
+    public const string PostToolUse = "post-tool-use";
 }

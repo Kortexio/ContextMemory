@@ -9,4 +9,7 @@ public record ContextMemoryMetadata
 
     [JsonPropertyName("agentic")]
     public AgenticStreamMetadata? Agentic { get; init; }
+
+    [JsonPropertyName("discovery")]
+    public DiscoveryTelemetry? Discovery { get; init; }
 }

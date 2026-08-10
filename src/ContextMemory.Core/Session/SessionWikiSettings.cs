@@ -7,6 +7,21 @@ public static class SessionWikiSettings
     public static int ResolveMaxWikiContextChars(AppRuntimeConfig config, Configuration.ContextMemoryOptions defaults) =>
         config.MaxWikiContextChars > 0 ? config.MaxWikiContextChars : defaults.MaxWikiContextChars;
 
+    public static int ResolveMaxDigestContextChars(AppRuntimeConfig config, Configuration.ContextMemoryOptions defaults) =>
+        config.MaxDigestContextChars > 0 ? config.MaxDigestContextChars : defaults.MaxDigestContextChars;
+
+    public static int ResolveDigestTopK(AppRuntimeConfig config, Configuration.ContextMemoryOptions defaults) =>
+        config.DigestTopK > 0 ? config.DigestTopK : Math.Max(1, defaults.DigestTopK);
+
+    public static int ResolveMaxToolObservationChars(AppRuntimeConfig config, Configuration.ContextMemoryOptions defaults) =>
+        config.MaxToolObservationChars > 0 ? config.MaxToolObservationChars : defaults.MaxToolObservationChars;
+
+    public static int ResolveMaxContextTokens(AppRuntimeConfig config, Configuration.ContextMemoryOptions defaults) =>
+        config.MaxContextTokens > 0 ? config.MaxContextTokens : defaults.MaxContextTokens;
+
+    public static int ResolveMaxHistoryMessages(AppRuntimeConfig config, Configuration.ContextMemoryOptions defaults) =>
+        config.MaxHistoryMessages > 0 ? config.MaxHistoryMessages : defaults.MaxHistoryMessages;
+
     public static long ResolveCompactionThresholdBytes(AppRuntimeConfig config, Configuration.ContextMemoryOptions defaults) =>
         config.WikiCompactionThresholdBytes > 0
             ? config.WikiCompactionThresholdBytes

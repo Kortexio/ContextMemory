@@ -1,8 +1,11 @@
 using System.Text;
+using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
+using ContextMemory.Core.Session;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace ContextMemory.Core.GlobalWiki;
 
@@ -18,7 +21,7 @@ public interface IGlobalWikiDigestGenerator
 }
 
 /// <summary>
-/// Uses the local LLM to build a keyword + ≤6-line digest that captures rules from ticket comments.
+/// Uses the summary LLM (<see cref="AppRuntimeConfig.WikiLlmModel"/>) to build a keyword + ≤6-line digest.
 /// </summary>
 public sealed class GlobalWikiDigestGenerator : IGlobalWikiDigestGenerator
 {
@@ -27,15 +30,18 @@ public sealed class GlobalWikiDigestGenerator : IGlobalWikiDigestGenerator
 
     private readonly ILlmAdapterResolver _adapterResolver;
     private readonly IAppConfigStore _appConfigStore;
+    private readonly ContextMemoryOptions _options;
     private readonly ILogger<GlobalWikiDigestGenerator> _logger;
 
     public GlobalWikiDigestGenerator(
         ILlmAdapterResolver adapterResolver,
         IAppConfigStore appConfigStore,
+        IOptions<ContextMemoryOptions> options,
         ILogger<GlobalWikiDigestGenerator> logger)
     {
         _adapterResolver = adapterResolver;
         _appConfigStore = appConfigStore;
+        _options = options.Value;
         _logger = logger;
     }
 
@@ -55,6 +61,7 @@ public sealed class GlobalWikiDigestGenerator : IGlobalWikiDigestGenerator
         {
             var config = _appConfigStore.GetConfig(appId);
             var adapter = _adapterResolver.Resolve(config);
+            var model = SessionWikiSettings.ResolveWikiLlmModel(config, _options.DefaultWikiLlmModel);
             var prompt = LlmPrompts.WikiTicketDigest(config.DefaultLanguage)
                 .Replace("{documentId}", documentId)
                 .Replace("{title}", resolvedTitle)
@@ -64,7 +71,7 @@ public sealed class GlobalWikiDigestGenerator : IGlobalWikiDigestGenerator
             var response = await adapter.GenerateAsync(
                 new OllamaGenerateRequest
                 {
-                    Model = config.LlmModel,
+                    Model = model,
                     Prompt = prompt,
                     Stream = false
                 },

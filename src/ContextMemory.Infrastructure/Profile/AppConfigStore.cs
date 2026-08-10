@@ -99,6 +99,7 @@ public sealed class AppConfigStore : IAppConfigStore
                 LlmApiKey = patch.LlmApiKey ?? current.LlmApiKey,
                 MaxHistoryMessages = patch.MaxHistoryMessages ?? current.MaxHistoryMessages,
                 MaxWikiContextChars = patch.MaxWikiContextChars ?? current.MaxWikiContextChars,
+                MaxContextTokens = patch.MaxContextTokens ?? current.MaxContextTokens,
                 WikiCompactionThresholdBytes = patch.WikiCompactionThresholdBytes ?? current.WikiCompactionThresholdBytes,
                 WikiCompactionMinPages = patch.WikiCompactionMinPages ?? current.WikiCompactionMinPages,
                 StreamingEnabled = patch.StreamingEnabled ?? current.StreamingEnabled,
@@ -152,6 +153,7 @@ public sealed class AppConfigStore : IAppConfigStore
             LlmApiKey = seed.LlmApiKey,
             MaxHistoryMessages = seed.MaxHistoryMessages,
             MaxWikiContextChars = seed.MaxWikiContextChars > 0 ? seed.MaxWikiContextChars : _defaults.MaxWikiContextChars,
+            MaxContextTokens = seed.MaxContextTokens,
             WikiCompactionThresholdBytes = seed.WikiCompactionThresholdBytes > 0
                 ? seed.WikiCompactionThresholdBytes
                 : _defaults.WikiCompactionThresholdBytes,
@@ -208,6 +210,7 @@ public sealed class AppConfigStore : IAppConfigStore
             MaxWikiContextChars = configFile.MaxWikiContextChars > 0
                 ? configFile.MaxWikiContextChars
                 : _defaults.MaxWikiContextChars,
+            MaxContextTokens = configFile.MaxContextTokens,
             WikiCompactionThresholdBytes = configFile.WikiCompactionThresholdBytes > 0
                 ? configFile.WikiCompactionThresholdBytes
                 : _defaults.WikiCompactionThresholdBytes,

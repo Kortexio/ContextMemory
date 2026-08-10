@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
+using ContextMemory.Core.Models;
 using Microsoft.Extensions.Options;
 
 namespace ContextMemory.Infrastructure.Observability;
@@ -130,6 +131,18 @@ public sealed class TelemetryCollector : ITelemetryCollector
         _ = reason;
     }
 
+    public void RecordAgenticDiscovery(string appId, DiscoveryTelemetry discovery)
+    {
+        if (string.IsNullOrWhiteSpace(appId) || discovery is null)
+            return;
+
+        var metrics = _apps.GetOrAdd(appId, _ => new AppMetrics());
+        Interlocked.Add(ref metrics.AgenticStaticPromptChars, Math.Max(0, discovery.StaticPromptChars));
+        Interlocked.Add(ref metrics.AgenticDiscoveryFetchedChars, Math.Max(0, discovery.DiscoveryFetchedChars));
+        Interlocked.Add(ref metrics.AgenticCompactionTotal, Math.Max(0, discovery.CompactionCount));
+        Interlocked.Add(ref metrics.AgenticLlmCalls, Math.Max(0, discovery.LlmCalls));
+    }
+
     public AppTelemetrySnapshot GetAppSnapshot(string appId)
     {
         if (!_apps.TryGetValue(appId, out var m))
@@ -156,7 +169,11 @@ public sealed class TelemetryCollector : ITelemetryCollector
             WebSearchTotal = m.WebSearchHitTotal + m.WebSearchErrorTotal + m.WebSearchEmptyTotal,
             WebSearchHits = m.WebSearchHitCount,
             WebSearchSkippedTotal = m.WebSearchSkippedTotal,
-            WebSearchLastLatencyMs = m.WebSearchLastLatencyMs
+            WebSearchLastLatencyMs = m.WebSearchLastLatencyMs,
+            AgenticStaticPromptChars = m.AgenticStaticPromptChars,
+            AgenticDiscoveryFetchedChars = m.AgenticDiscoveryFetchedChars,
+            AgenticCompactionTotal = m.AgenticCompactionTotal,
+            AgenticLlmCalls = m.AgenticLlmCalls
         };
     }
 
@@ -196,6 +213,10 @@ public sealed class TelemetryCollector : ITelemetryCollector
             sb.AppendLine($"cm_web_search_skipped_total{{appId=\"{label}\"}} {m.WebSearchSkippedTotal}");
             sb.AppendLine($"cm_web_search_hits{{appId=\"{label}\"}} {m.WebSearchHitCount}");
             sb.AppendLine($"cm_web_search_latency_ms{{appId=\"{label}\"}} {m.WebSearchLastLatencyMs:F0}");
+            sb.AppendLine($"cm_agentic_static_prompt_chars{{appId=\"{label}\"}} {m.AgenticStaticPromptChars}");
+            sb.AppendLine($"cm_agentic_discovery_fetched_chars{{appId=\"{label}\"}} {m.AgenticDiscoveryFetchedChars}");
+            sb.AppendLine($"cm_agentic_compaction_total{{appId=\"{label}\"}} {m.AgenticCompactionTotal}");
+            sb.AppendLine($"cm_agentic_llm_calls{{appId=\"{label}\"}} {m.AgenticLlmCalls}");
         }
 
         return sb.ToString();
@@ -244,6 +265,10 @@ public sealed class TelemetryCollector : ITelemetryCollector
         public long WebSearchSkippedTotal;
         public long WebSearchHitCount;
         public double WebSearchLastLatencyMs;
+        public long AgenticStaticPromptChars;
+        public long AgenticDiscoveryFetchedChars;
+        public long AgenticCompactionTotal;
+        public long AgenticLlmCalls;
         public List<double> LatencySamples { get; } = [];
         public object LatencyLock { get; } = new();
         public ConcurrentDictionary<string, DateTimeOffset> ActiveUsers { get; } = new(StringComparer.Ordinal);

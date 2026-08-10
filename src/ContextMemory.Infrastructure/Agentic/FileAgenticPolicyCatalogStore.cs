@@ -39,12 +39,50 @@ public sealed class FileAgenticPolicyCatalogStore : IAgenticPolicyCatalogStore
                 await WriteSkillsAsync(AgenticCatalogSeed.Skills.ToList(), cancellationToken).ConfigureAwait(false);
                 _logger.LogInformation("Seeded file agentic skills catalog");
             }
+            else
+            {
+                var skills = await ReadSkillsAsync(cancellationToken).ConfigureAwait(false);
+                var ids = new HashSet<string>(skills.Select(s => s.Id), StringComparer.OrdinalIgnoreCase);
+                var added = 0;
+                foreach (var skill in AgenticCatalogSeed.Skills)
+                {
+                    if (ids.Contains(skill.Id))
+                        continue;
+                    skills.Add(skill);
+                    added++;
+                }
+
+                if (added > 0)
+                {
+                    await WriteSkillsAsync(skills, cancellationToken).ConfigureAwait(false);
+                    _logger.LogInformation("Seeded {Count} new file agentic skills", added);
+                }
+            }
 
             if (!File.Exists(_guardrailsPath))
             {
                 await WriteGuardrailsAsync(AgenticCatalogSeed.Guardrails.ToList(), cancellationToken)
                     .ConfigureAwait(false);
                 _logger.LogInformation("Seeded file agentic guardrails catalog");
+            }
+            else
+            {
+                var guardrails = await ReadGuardrailsAsync(cancellationToken).ConfigureAwait(false);
+                var ids = new HashSet<string>(guardrails.Select(g => g.Id), StringComparer.OrdinalIgnoreCase);
+                var added = 0;
+                foreach (var g in AgenticCatalogSeed.Guardrails)
+                {
+                    if (ids.Contains(g.Id))
+                        continue;
+                    guardrails.Add(g);
+                    added++;
+                }
+
+                if (added > 0)
+                {
+                    await WriteGuardrailsAsync(guardrails, cancellationToken).ConfigureAwait(false);
+                    _logger.LogInformation("Seeded {Count} new file agentic guardrails", added);
+                }
             }
         }
         finally
@@ -110,6 +148,9 @@ public sealed class FileAgenticPolicyCatalogStore : IAgenticPolicyCatalogStore
                     Description = skill.Description,
                     PromptMarkdown = skill.PromptMarkdown,
                     Category = skill.Category,
+                    Activation = string.IsNullOrWhiteSpace(skill.Activation)
+                        ? AgenticSkillActivation.Skill
+                        : skill.Activation,
                     IsDefaultEnabled = skill.IsDefaultEnabled,
                     SortOrder = skill.SortOrder,
                     LinkedGuardrailIds = skill.LinkedGuardrailIds,

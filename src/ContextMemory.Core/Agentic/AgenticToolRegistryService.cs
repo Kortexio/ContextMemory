@@ -21,23 +21,38 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
         CancellationToken cancellationToken = default)
     {
         var tools = new List<OllamaTool>();
-        tools.AddRange(AgenticToolRegistry.BuildExecutionTools(runtimeConfig));
+        tools.AddRange(AgenticToolRegistry.BuildExecutionTools(runtimeConfig, lazySchemas: true));
 
-        var wikiTool = AgenticToolRegistry.BuildWikiSearchTool(runtimeConfig);
+        var wikiTool = AgenticToolRegistry.BuildWikiSearchTool(runtimeConfig, lazySchemas: true);
         if (wikiTool is not null)
             tools.Add(wikiTool);
+        var wikiGrep = AgenticToolRegistry.BuildWikiGrepTool(runtimeConfig, lazySchemas: true);
+        if (wikiGrep is not null)
+            tools.Add(wikiGrep);
+
+        // Cursor-style discovery helpers (artifact/skill/log/tool_describe).
+        tools.AddRange(SessionDiscoveryTools.BuildTools(runtimeConfig));
+
+        object openParameters = new Dictionary<string, object?>
+        {
+            ["type"] = "object",
+            ["properties"] = new Dictionary<string, object?>(),
+            ["additionalProperties"] = true
+        };
 
         var mcpTools = await _mcpCatalog
             .GetToolsAsync(runtimeConfig, userQuery, recentToolNames, cancellationToken)
             .ConfigureAwait(false);
         foreach (var mcpTool in mcpTools)
         {
+            var fullDescription = AgenticToolDescriptionBuilder.BuildMcpDescription(mcpTool, runtimeConfig);
+            // Name-only style: open schema; full schema via tool_describe.
             tools.Add(new OllamaTool(
                 "function",
                 new OllamaFunction(
                     mcpTool.QualifiedName,
-                    AgenticToolDescriptionBuilder.BuildMcpDescription(mcpTool, runtimeConfig),
-                    McpInputSchemaSanitizer.Sanitize(mcpTool.InputSchema))));
+                    SessionDiscoveryTools.ShortenDescription(fullDescription),
+                    openParameters)));
         }
 
         return tools;

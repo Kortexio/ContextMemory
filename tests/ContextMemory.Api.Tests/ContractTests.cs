@@ -24,7 +24,7 @@ public class ContractTests : IClassFixture<StubOllamaWebApplicationFactory>, IAs
     public async Task InitializeAsync()
     {
         // Passthrough contract covers native Ollama /api/* fields. Default "ollama" is /v1,
-        // and GlobalWikiEnabled forces the agentic path which rebuilds the response.
+        // Global Wiki digests inject without forcing the agentic loop (dynamic context discovery).
         using var scope = _factory.Services.CreateScope();
         var configStore = scope.ServiceProvider.GetRequiredService<IAppConfigStore>();
         await configStore.UpdateAsync(AppId, new AppConfigPatchRequest

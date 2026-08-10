@@ -10,12 +10,18 @@ public static class AgenticProgressFormatter
             AgenticProgressPhase.Started => AgenticMessages.ProgressStarted(language),
             AgenticProgressPhase.LlmRequest =>
                 AgenticMessages.ProgressLlmRequest(evt.Iteration ?? 1, language),
+            AgenticProgressPhase.Compacting =>
+                evt.Detail ?? "Compacting context…",
             AgenticProgressPhase.ToolStarted =>
                 AgenticMessages.ProgressToolStarted(evt.ToolName ?? "tool", language),
             AgenticProgressPhase.ToolCompleted when evt.Step is not null =>
                 FormatToolCompleted(evt.Step, language),
             AgenticProgressPhase.ToolCompleted =>
                 AgenticMessages.ProgressToolCompletedFallback(evt.ToolName ?? "tool", language),
+            AgenticProgressPhase.SubagentStarted =>
+                evt.Detail ?? $"Subagent started{(string.IsNullOrWhiteSpace(evt.ToolName) ? "" : $": {evt.ToolName}")}",
+            AgenticProgressPhase.SubagentCompleted =>
+                evt.Detail ?? $"Subagent completed{(string.IsNullOrWhiteSpace(evt.ToolName) ? "" : $": {evt.ToolName}")}",
             AgenticProgressPhase.Validating => AgenticMessages.ProgressValidating(language),
             AgenticProgressPhase.ValidationRejected =>
                 evt.Detail ?? AgenticMessages.ProgressValidationRejected(language),
