@@ -246,6 +246,21 @@ Clients keep sending a normal chat body; they do not implement retrieval or orch
   - Checkpoint in session wiki `log.md` (`agentic-checkpoint`)
   - Human review of partial answers when max iterations is reached
 - **Prompt profiles** — `auto`, `ollama`, `openai`, `claude`, `qwen`, `composer` / `composer-like` for system snippets and tool-calling hints.
+- **Harness mode** — `auto` | `weak` | `strong` (`agentic.harnessMode`). Weak inlines evidence rules and sanitizes schemas aggressively; Strong keeps lazy `skill_read` and prefers native tool_calls. Auto uses profile + model-size hints (`bonsai*` → Qwen/Weak).
+- **Guardrail `live-data-evidence`** — rejects live-data answers (accounts/invoices/…) without a successful MCP/wiki tool step.
+- **Format gate** — `llmOptions.format=json` is cleared on agentic iterations that send tools (conflicts with `tool_calls` / `response_format`).
+- **Ollama `num_ctx`** — when `llmBackend=ollama` and `llmOptions.numCtx` is set, the gateway uses **`ollama-native`** (`/api/chat`) because Ollama `/v1` ignores `options.num_ctx`.
+- **Qwen/Bonsai chat templates** — compaction merges into a single `system` message; the loop ensures a real `user` message exists (strict Jinja `raise_exception` packs still need a TEMPLATE patch).
+
+#### Profile → capabilities (matrix)
+
+| Profile / signal | Default harness | Sanitize schemas | Inline evidence | MCP tools cap hint |
+|---|---|---|---|---|
+| Qwen / Ollama / `bonsai*` | Weak | aggressive | yes | min(config, 24) |
+| OpenAI / Claude / Composer | Strong | minimal | no (lazy skills) | config |
+| Override `harnessMode` | wins | follows mode | follows mode | follows mode |
+
+Discovery telemetry also reports `harness_mode`, `resolved_prompt_profile`, `promoted_prose_tool_calls`, `schema_repair_level`.
 
 ### Streaming and latency
 
@@ -276,10 +291,10 @@ Clients keep sending a normal chat body; they do not implement retrieval or orch
 
 | Backend value | Wire protocol | Host default URL |
 |---|---|---|
-| `ollama` (default) | OpenAI `/v1` on `OllamaEndpoint` | `ContextMemory:OllamaEndpoint` |
+| `ollama` (default) | OpenAI `/v1` on `OllamaEndpoint` — **auto-switches to native when `numCtx` is set** | `ContextMemory:OllamaEndpoint` |
 | `vllm` / `openai-compatible` / `openai` / `custom` | OpenAI `/v1/chat/completions` | `ContextMemory:OpenAiEndpoint` or per-app `llmEndpoint` |
 | `lmstudio` | OpenAI `/v1` | `ContextMemory:LmStudioEndpoint` |
-| `ollama-native` | Ollama `/api/chat` (fallback) | `ContextMemory:OllamaEndpoint` |
+| `ollama-native` | Ollama `/api/chat` (respects `options.num_ctx`) | `ContextMemory:OllamaEndpoint` |
 
 **Per-app overrides** (Admin → app → Config, or `PATCH /admin/apps/{id}/config`):
 

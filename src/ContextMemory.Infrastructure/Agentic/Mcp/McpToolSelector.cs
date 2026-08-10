@@ -1,4 +1,5 @@
 using ContextMemory.Core.Agentic.Mcp;
+using ContextMemory.Core.Agentic.Prompts;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 
@@ -22,9 +23,7 @@ public sealed class McpToolSelector : IMcpToolSelector
             .Where(t => t.Length >= 2)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var max = runtimeConfig.Agentic.Tools.MaxMcpToolsPerTurn > 0
-            ? runtimeConfig.Agentic.Tools.MaxMcpToolsPerTurn
-            : 12;
+        var max = LlmCapabilitiesResolver.ResolveMaxMcpTools(runtimeConfig);
 
         return tools
             .Select(t => (Tool: t, Score: Score(t, tokens, recent)))

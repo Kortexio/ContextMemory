@@ -19,6 +19,13 @@ public record AgenticConfig
     [JsonPropertyName("promptProfile")]
     public string PromptProfile { get; init; } = "auto";
 
+    /// <summary>
+    /// Harness intensity: <c>auto</c> | <c>weak</c> | <c>strong</c>.
+    /// Weak = aggressive repair + inline evidence; Strong = native tools + lazy skills.
+    /// </summary>
+    [JsonPropertyName("harnessMode")]
+    public string HarnessMode { get; init; } = "auto";
+
     [JsonPropertyName("policyPacks")]
     public PolicyPacksConfig PolicyPacks { get; init; } = new();
 

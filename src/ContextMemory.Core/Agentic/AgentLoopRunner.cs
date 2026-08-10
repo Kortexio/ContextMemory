@@ -45,6 +45,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
     public async Task<AgentResult> RunAsync(AgentLoopRequest request, CancellationToken cancellationToken = default)
     {
         var messages = request.Messages;
+        EnsureUserMessagePresent(messages, request);
         var steps = request.Steps;
         var capabilities = LlmCapabilitiesResolver.From(request.RuntimeConfig);
         var maxIterations = LlmCapabilitiesResolver.ResolveMaxIterations(request.RuntimeConfig);
@@ -53,6 +54,19 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
         var adapter = _adapterResolver.Resolve(request.RuntimeConfig);
         string? lastAnswer = null;
         var requireToolChoice = false;
+        var promotedProseToolCalls = 0;
+        var schemaRepairLevel = "none";
+        var resolvedProfile = AgenticPromptProfileResolver.Resolve(request.RuntimeConfig).ToString();
+
+        if (request.Tools.Count > 0
+            && !string.IsNullOrWhiteSpace(request.EnrichedRequest.Format)
+            && capabilities.SupportsOpenAiJsonFormat)
+        {
+            _logger.LogInformation(
+                "Ignoring llm format={Format} for agentic turn with tools on {AppId} (tool_calls conflict with response_format)",
+                request.EnrichedRequest.Format,
+                request.AppId);
+        }
 
         var staticPromptChars = messages
             .FirstOrDefault(m => string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase))
@@ -72,7 +86,8 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
                 var timeoutResult = AttachDiscovery(
                     BuildTimeoutResult(lastAnswer, steps, iteration, request.RuntimeConfig.DefaultLanguage),
-                    messages, steps, staticPromptChars, compactionCount, llmCalls);
+                    messages, steps, staticPromptChars, compactionCount, llmCalls,
+                    promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel);
                 Report(request.Report, new AgenticProgressEvent
                 {
                     Phase = AgenticProgressPhase.TimedOut,
@@ -83,6 +98,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             }
 
             cancellationToken.ThrowIfCancellationRequested();
+            EnsureUserMessagePresent(messages, request);
 
             var compaction = await _contextCompactor
                 .TryCompactAsync(
@@ -114,9 +130,17 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
             var toolsForRequest = request.Tools.Count > 0 ? request.Tools.ToList() : null;
             if (toolsForRequest is not null && capabilities.SanitizeSchemasAggressively)
+            {
                 toolsForRequest = SanitizeToolSchemas(toolsForRequest);
+                schemaRepairLevel = MaxRepairLevel(schemaRepairLevel, "sanitize");
+            }
 
-            var toolChoice = ResolveToolChoice(capabilities, requireToolChoice, toolsForRequest);
+            var toolChoice = ResolveToolChoice(capabilities, requireToolChoice, toolsForRequest, request.RuntimeConfig);
+
+            // format=json fights native tool_calls — clear on agentic iterations with tools.
+            var format = toolsForRequest is { Count: > 0 }
+                ? null
+                : request.EnrichedRequest.Format;
 
             var llmRequest = request.EnrichedRequest with
             {
@@ -124,7 +148,8 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 Tools = toolsForRequest,
                 McpServers = request.McpServers.Count > 0 ? request.McpServers.ToList() : null,
                 Stream = false,
-                ToolChoice = toolChoice
+                ToolChoice = toolChoice,
+                Format = format
             };
 
             OllamaResponse response;
@@ -133,28 +158,32 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 response = await adapter.ChatAsync(llmRequest, cancellationToken).ConfigureAwait(false);
                 llmCalls++;
             }
+            catch (HttpRequestException ex) when (IsStrictChatTemplateError(ex))
+            {
+                _logger.LogError(
+                    ex,
+                    "LLM chat template rejected messages for {AppId} (Qwen/Bonsai-style Jinja). Ensure a user message exists and avoid dual system roles; consider patching the model TEMPLATE.",
+                    request.AppId);
+                throw new InvalidOperationException(
+                    "O modelo rejeitou o chat template (ex. 'No user query found in messages'). "
+                    + "Confirma que existe uma mensagem user e um único system; packs Qwen/Bonsai estritos podem precisar de TEMPLATE patch.",
+                    ex);
+            }
             catch (HttpRequestException ex) when (IsLlmGrammarError(ex))
             {
                 _logger.LogWarning(
                     ex,
-                    "LLM rejected tool grammars for {AppId}; retrying with simplified MCP parameter schemas",
+                    "LLM rejected tool grammars for {AppId}; applying graduated schema repair",
                     request.AppId);
 
-                var simplifiedTools = SimplifyToolSchemas(llmRequest.Tools);
-                var retryRequest = llmRequest with { Tools = simplifiedTools };
-                try
-                {
-                    response = await adapter.ChatAsync(retryRequest, cancellationToken).ConfigureAwait(false);
-                    llmCalls++;
-                }
-                catch (HttpRequestException retryEx) when (IsLlmGrammarError(retryEx))
-                {
-                    _logger.LogError(retryEx, "LLM grammar still failing for {AppId} after schema simplify", request.AppId);
-                    throw new InvalidOperationException(
-                        "O modelo LLM rejeitou os schemas das tools (grammar). " +
-                        "Reduza maxMcpToolsPerTurn ou simplifique as tools MCP.",
-                        retryEx);
-                }
+                response = await ChatWithGraduatedRepairAsync(
+                        adapter,
+                        llmRequest,
+                        request.AppId,
+                        repairLevel => schemaRepairLevel = MaxRepairLevel(schemaRepairLevel, repairLevel),
+                        () => llmCalls++,
+                        cancellationToken)
+                    .ConfigureAwait(false);
             }
 
             var assistantMessage = response.Message;
@@ -167,6 +196,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     OllamaLlmText.GetMessageContent(assistantMessage));
                 if (promoted is { Count: > 0 })
                 {
+                    promotedProseToolCalls += promoted.Count;
                     _logger.LogInformation(
                         "Promoted {Count} prose tool call(s) to structured tool_calls for {AppId}",
                         promoted.Count,
@@ -190,7 +220,8 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     {
                         var timeoutResult = AttachDiscovery(
                             BuildTimeoutResult(lastAnswer, steps, iteration + 1, request.RuntimeConfig.DefaultLanguage),
-                            messages, steps, staticPromptChars, compactionCount, llmCalls);
+                            messages, steps, staticPromptChars, compactionCount, llmCalls,
+                            promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel);
                         Report(request.Report, new AgenticProgressEvent
                         {
                             Phase = AgenticProgressPhase.TimedOut,
@@ -219,7 +250,8 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     {
                         return AttachDiscovery(
                             toolOutcome.AwaitingConfirmation,
-                            messages, steps, staticPromptChars, compactionCount, llmCalls);
+                            messages, steps, staticPromptChars, compactionCount, llmCalls,
+                            promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel);
                     }
                 }
 
@@ -246,7 +278,8 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             {
                 var success = AttachDiscovery(
                     AgentResult.Succeeded(lastAnswer, steps, iteration + 1),
-                    messages, steps, staticPromptChars, compactionCount, llmCalls);
+                    messages, steps, staticPromptChars, compactionCount, llmCalls,
+                    promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel);
                 Report(request.Report, new AgenticProgressEvent
                 {
                     Phase = AgenticProgressPhase.Completed,
@@ -292,7 +325,9 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     request.Report,
                     cancellationToken)
                 .ConfigureAwait(false);
-            return AttachDiscovery(review, messages, steps, staticPromptChars, compactionCount, llmCalls);
+            return AttachDiscovery(
+                review, messages, steps, staticPromptChars, compactionCount, llmCalls,
+                promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel);
         }
 
         Report(request.Report, new AgenticProgressEvent
@@ -303,7 +338,50 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
         return AttachDiscovery(
             AgentResult.LimitReached(fallback, steps, maxIterations),
-            messages, steps, staticPromptChars, compactionCount, llmCalls);
+            messages, steps, staticPromptChars, compactionCount, llmCalls,
+            promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel);
+    }
+
+    private async Task<OllamaResponse> ChatWithGraduatedRepairAsync(
+        ILlmAdapter adapter,
+        OllamaRequest llmRequest,
+        string appId,
+        Action<string> setRepairLevel,
+        Action bumpLlmCalls,
+        CancellationToken cancellationToken)
+    {
+        // sanitize already applied by caller when aggressive — try strip required next.
+        setRepairLevel("strip_required");
+        var stripped = StripRequiredToolSchemas(llmRequest.Tools);
+        var stripRequest = llmRequest with { Tools = stripped };
+        try
+        {
+            var response = await adapter.ChatAsync(stripRequest, cancellationToken).ConfigureAwait(false);
+            bumpLlmCalls();
+            return response;
+        }
+        catch (HttpRequestException stripEx) when (IsLlmGrammarError(stripEx))
+        {
+            _logger.LogWarning(stripEx, "Schema strip_required still failing for {AppId}; simplifying", appId);
+        }
+
+        setRepairLevel("simplify");
+        var simplifiedTools = SimplifyToolSchemas(llmRequest.Tools);
+        var retryRequest = llmRequest with { Tools = simplifiedTools };
+        try
+        {
+            var response = await adapter.ChatAsync(retryRequest, cancellationToken).ConfigureAwait(false);
+            bumpLlmCalls();
+            return response;
+        }
+        catch (HttpRequestException retryEx) when (IsLlmGrammarError(retryEx))
+        {
+            _logger.LogError(retryEx, "LLM grammar still failing for {AppId} after schema simplify", appId);
+            throw new InvalidOperationException(
+                "O modelo LLM rejeitou os schemas das tools (grammar). "
+                + "Reduza maxMcpToolsPerTurn ou simplifique as tools MCP.",
+                retryEx);
+        }
     }
 
     private async Task<AgentResult> RequestHumanReviewAsync(
@@ -360,7 +438,11 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
         List<AgentExecutionStep> steps,
         int staticPromptChars,
         int compactionCount,
-        int llmCalls)
+        int llmCalls,
+        int promotedProseToolCalls,
+        string? resolvedPromptProfile,
+        string? harnessMode,
+        string? schemaRepairLevel)
     {
         var toolObservationChars = messages
             .Where(m => string.Equals(m.Role, "tool", StringComparison.OrdinalIgnoreCase))
@@ -375,7 +457,11 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             discoveryFetchedChars,
             toolObservationChars,
             compactionCount,
-            llmCalls));
+            llmCalls,
+            promotedProseToolCalls,
+            resolvedPromptProfile,
+            harnessMode,
+            schemaRepairLevel));
     }
 
     private static bool IsDiscoveryFetchTool(string? toolName)
@@ -420,20 +506,78 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                || msg.Contains("Failed to initialize samplers", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsStrictChatTemplateError(HttpRequestException ex)
+    {
+        var msg = ex.Message ?? string.Empty;
+        return msg.Contains("No user query found in messages", StringComparison.OrdinalIgnoreCase)
+               || msg.Contains("System message must be at the beginning", StringComparison.OrdinalIgnoreCase)
+               || (msg.Contains("Jinja", StringComparison.OrdinalIgnoreCase)
+                   && msg.Contains("raise_exception", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static string? ResolveToolChoice(
         LlmCapabilities capabilities,
         bool requireToolChoice,
-        List<OllamaTool>? tools)
+        List<OllamaTool>? tools,
+        AppRuntimeConfig runtimeConfig)
     {
         if (tools is null || tools.Count == 0)
             return null;
 
         if (requireToolChoice)
+        {
+            if (capabilities.HarnessMode == ModelHarnessMode.Strong)
+            {
+                var hasMcp = runtimeConfig.Agentic.Tools.Integrations.Any(i =>
+                    i.Enabled && string.Equals(i.Type, "mcp", StringComparison.OrdinalIgnoreCase) && i.IsConfigured);
+                return hasMcp ? "required" : "auto";
+            }
+
             return "required";
+        }
 
         return string.IsNullOrWhiteSpace(capabilities.DefaultToolChoice)
             ? null
             : capabilities.DefaultToolChoice;
+    }
+
+    private static void EnsureUserMessagePresent(List<OllamaMessage> messages, AgentLoopRequest request)
+    {
+        var hasRealUser = messages.Any(m =>
+            string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(m.Content)
+            && !IsToolResponseWrapped(m.Content));
+
+        if (hasRealUser)
+            return;
+
+        var objective = request.EnrichedRequest.Messages.GetLastUserMessage()?.Content
+            ?? request.Messages.GetLastUserMessage()?.Content
+            ?? "Continue. Prefer tools for live data.";
+
+        messages.Add(new OllamaMessage { Role = "user", Content = objective });
+    }
+
+    private static bool IsToolResponseWrapped(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return false;
+        var trimmed = content.Trim();
+        return trimmed.StartsWith("<tool_response>", StringComparison.OrdinalIgnoreCase)
+               && trimmed.EndsWith("</tool_response>", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string MaxRepairLevel(string current, string next)
+    {
+        static int Rank(string level) => level switch
+        {
+            "simplify" => 3,
+            "strip_required" => 2,
+            "sanitize" => 1,
+            _ => 0
+        };
+
+        return Rank(next) >= Rank(current) ? next : current;
     }
 
     private static List<OllamaTool> SanitizeToolSchemas(List<OllamaTool> tools) =>
@@ -445,6 +589,21 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     t.Function.Description,
                     McpInputSchemaSanitizer.Sanitize(t.Function.Parameters))))
             .ToList();
+
+    private static List<OllamaTool>? StripRequiredToolSchemas(List<OllamaTool>? tools)
+    {
+        if (tools is null || tools.Count == 0)
+            return tools;
+
+        return tools
+            .Select(t => new OllamaTool(
+                t.Type,
+                new OllamaFunction(
+                    t.Function.Name,
+                    t.Function.Description,
+                    McpInputSchemaSanitizer.StripRequired(t.Function.Parameters))))
+            .ToList();
+    }
 
     private static List<OllamaTool>? SimplifyToolSchemas(List<OllamaTool>? tools)
     {

@@ -23,12 +23,28 @@ public sealed record DiscoveryTelemetry
     [JsonPropertyName("discovery_ratio")]
     public double? DiscoveryRatio { get; init; }
 
+    [JsonPropertyName("promoted_prose_tool_calls")]
+    public int PromotedProseToolCalls { get; init; }
+
+    [JsonPropertyName("resolved_prompt_profile")]
+    public string? ResolvedPromptProfile { get; init; }
+
+    [JsonPropertyName("harness_mode")]
+    public string? HarnessMode { get; init; }
+
+    [JsonPropertyName("schema_repair_level")]
+    public string? SchemaRepairLevel { get; init; }
+
     public static DiscoveryTelemetry FromCounts(
         int staticPromptChars,
         int discoveryFetchedChars,
         int toolObservationChars,
         int compactionCount,
-        int llmCalls)
+        int llmCalls,
+        int promotedProseToolCalls = 0,
+        string? resolvedPromptProfile = null,
+        string? harnessMode = null,
+        string? schemaRepairLevel = null)
     {
         var denom = staticPromptChars + discoveryFetchedChars;
         return new DiscoveryTelemetry
@@ -38,7 +54,11 @@ public sealed record DiscoveryTelemetry
             ToolObservationChars = toolObservationChars,
             CompactionCount = compactionCount,
             LlmCalls = llmCalls,
-            DiscoveryRatio = denom > 0 ? (double)discoveryFetchedChars / denom : null
+            DiscoveryRatio = denom > 0 ? (double)discoveryFetchedChars / denom : null,
+            PromotedProseToolCalls = promotedProseToolCalls,
+            ResolvedPromptProfile = resolvedPromptProfile,
+            HarnessMode = harnessMode,
+            SchemaRepairLevel = schemaRepairLevel
         };
     }
 }

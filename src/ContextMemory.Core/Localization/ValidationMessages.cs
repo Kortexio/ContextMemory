@@ -61,4 +61,12 @@ public static class ValidationMessages
                 "Rejected: website described without fetching it. Call tools first.",
                 "Rejeitado: site descrito sem o ir buscar. Chama tools primeiro.")
             : feedback;
+
+    public static string LiveDataWithoutEvidence(string feedback, AppRuntimeConfig config) =>
+        string.IsNullOrWhiteSpace(feedback)
+            ? TenantLocale.Select(
+                config.DefaultLanguage,
+                "Rejected: live-data answer without MCP/wiki evidence. Emit tool_calls; do not invent.",
+                "Rejeitado: resposta de dados live sem evidência MCP/wiki. Emite tool_calls; não inventes.")
+            : feedback;
 }

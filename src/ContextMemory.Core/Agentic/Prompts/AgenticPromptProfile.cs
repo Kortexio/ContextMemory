@@ -28,7 +28,7 @@ public static class AgenticPromptProfileResolver
         if (ContainsAny(model, "composer", "cursor"))
             return AgenticPromptProfile.ComposerLike;
 
-        if (ContainsAny(model, "qwen", "qwq", "qwen2", "qwen3"))
+        if (ContainsAny(model, "qwen", "qwq", "qwen2", "qwen3", "bonsai", "ornith"))
             return AgenticPromptProfile.Qwen;
 
         if (ContainsAny(model, "claude", "sonnet", "opus", "haiku"))
@@ -42,7 +42,7 @@ public static class AgenticPromptProfileResolver
 
         if (backend is "lmstudio" or "lm-studio" or "lm_studio")
         {
-            if (ContainsAny(model, "qwen", "qwq"))
+            if (ContainsAny(model, "qwen", "qwq", "bonsai", "ornith"))
                 return AgenticPromptProfile.Qwen;
             return ContainsAny(model, "claude", "sonnet", "opus", "haiku")
                 ? AgenticPromptProfile.Claude

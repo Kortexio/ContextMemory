@@ -144,4 +144,5 @@ public static class AgenticGuardrailKinds
     public const string BlockedPatterns = "blocked-patterns";
     public const string PreToolUse = "pre-tool-use";
     public const string PostToolUse = "post-tool-use";
+    public const string LiveDataEvidence = "live-data-evidence";
 }

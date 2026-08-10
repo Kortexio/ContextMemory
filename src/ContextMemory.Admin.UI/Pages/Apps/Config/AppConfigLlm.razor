@@ -103,8 +103,10 @@ else
                         <label>num_ctx</label>
                         <InputNumber class="form-control" @bind-Value="_form.NumCtx" />
                         <FieldHelp>
-                            Context window size (Ollama <code>num_ctx</code>). Raise for agentic/MCP turns (e.g. <code>32768</code>)
-                            so tool schemas + wiki do not starve generation tokens.
+                            Context window size (Ollama <code>num_ctx</code>). Raise for agentic/MCP turns (e.g. <code>32768</code>).
+                            When set with backend <code>ollama</code>, the gateway automatically uses <code>ollama-native</code>
+                            (<code>/api/chat</code>) because Ollama <code>/v1</code> ignores <code>options.num_ctx</code>.
+                            Other OpenAI-compatible servers ignore this field — set context at server load time.
                         </FieldHelp>
                     </div>
                 </div>
@@ -153,8 +155,40 @@ else
                 <div class="form-group">
                     <label>format</label>
                     <InputText class="form-control" @bind-Value="_form.Format" placeholder="e.g. json" />
-                    <FieldHelp>Ollama response <code>format</code> (e.g. <code>json</code>). Empty = free text.</FieldHelp>
+                    <FieldHelp>
+                        Ollama response <code>format</code> (e.g. <code>json</code>). Empty = free text.
+                        <strong>Warning:</strong> <code>format=json</code> conflicts with agentic tool calling
+                        (mapped to <code>response_format</code>) and is ignored on agentic turns that include tools.
+                    </FieldHelp>
                 </div>
+
+                @if (!string.IsNullOrWhiteSpace(_form.Format)
+                     && _form.Format.Contains("json", StringComparison.OrdinalIgnoreCase)
+                     && string.Equals(_form.LlmBackend, "ollama", StringComparison.OrdinalIgnoreCase)
+                     && _form.NumCtx is > 0)
+                {
+                    <div class="alert alert-warning small">
+                        Tenant has <code>format</code> containing json and <code>num_ctx</code> set.
+                        Agentic turns will ignore <code>format</code> when tools are present, and Ollama will use
+                        native <code>/api/chat</code> so <code>num_ctx</code> applies.
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(_form.Format)
+                         && _form.Format.Contains("json", StringComparison.OrdinalIgnoreCase))
+                {
+                    <div class="alert alert-warning small">
+                        <code>format=json</code> fights native <code>tool_calls</code>. It is cleared automatically
+                        during agentic iterations that send tools.
+                    </div>
+                }
+                else if (string.Equals(_form.LlmBackend, "ollama", StringComparison.OrdinalIgnoreCase)
+                         && _form.NumCtx is > 0)
+                {
+                    <div class="alert alert-info small">
+                        <code>num_ctx=@(_form.NumCtx)</code> with backend <code>ollama</code>:
+                        runtime switches to <code>ollama-native</code> so context is applied.
+                    </div>
+                }
 
                 @if (Message is not null) { <div class="alert alert-success">@Message</div> }
                 @if (Error is not null) { <div class="alert alert-danger">@Error</div> }

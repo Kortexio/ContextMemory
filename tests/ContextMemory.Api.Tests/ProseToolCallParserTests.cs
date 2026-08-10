@@ -53,6 +53,37 @@ public sealed class ProseToolCallParserTests
     }
 
     [Fact]
+    public void TryParse_PromotesXmlToolCall()
+    {
+        const string prose = """
+            <tool_call>
+            <function=wiki_search>
+            <parameter name="query">billing</parameter>
+            </function>
+            </tool_call>
+            """;
+
+        var parsed = ProseToolCallParser.TryParse(prose);
+        Assert.NotNull(parsed);
+        Assert.Equal("wiki_search", parsed![0].Function.Name);
+        Assert.Contains("billing", parsed[0].Function.Arguments, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryParse_PromotesInvokeAndCallWith()
+    {
+        var invoke = ProseToolCallParser.TryParse(
+            """invoke wiki_search ({"query":"x"})""");
+        Assert.NotNull(invoke);
+        Assert.Equal("wiki_search", invoke![0].Function.Name);
+
+        var callWith = ProseToolCallParser.TryParse(
+            """call zuora__query_objects with {"objectType":"account"}""");
+        Assert.NotNull(callWith);
+        Assert.Equal("zuora__query_objects", callWith![0].Function.Name);
+    }
+
+    [Fact]
     public void Normalize_RewritesQueryObjectsAliases()
     {
         const string raw = """

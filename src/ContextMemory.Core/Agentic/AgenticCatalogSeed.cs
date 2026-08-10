@@ -254,6 +254,25 @@ public static class AgenticCatalogSeed
             },
             new AgenticGuardrailDefinition
             {
+                Id = "live-data-evidence-required",
+                Name = "Live data evidence required",
+                Description = "Reject live-data answers (accounts, invoices, …) without successful MCP/wiki tool evidence.",
+                Kind = AgenticGuardrailKinds.LiveDataEvidence,
+                ConfigJson = JsonSerializer.Serialize(new
+                {
+                    kind = AgenticGuardrailKinds.LiveDataEvidence,
+                    feedbackEn =
+                        "Rejected: live-data question without successful MCP/wiki evidence. Emit tool_calls (e.g. query_objects); do not invent IDs or statuses.",
+                    feedbackPt =
+                        "Rejeitado: pergunta de dados live sem evidência MCP/wiki bem-sucedida. Emite tool_calls (ex. query_objects); não inventes IDs nem estados."
+                }),
+                IsSystem = true,
+                IsDefaultEnabled = true,
+                SortOrder = 25,
+                UpdatedAt = now
+            },
+            new AgenticGuardrailDefinition
+            {
                 Id = "require-error-disclosure",
                 Name = "Require error disclosure",
                 Description = "Reject final answers that ignore failed tool steps.",

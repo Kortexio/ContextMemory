@@ -2,6 +2,7 @@ using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace ContextMemory.Adapters;
@@ -10,28 +11,65 @@ public sealed class LlmAdapterResolver : ILlmAdapterResolver
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ContextMemoryOptions _options;
+    private readonly ILogger<LlmAdapterResolver> _logger;
 
-    public LlmAdapterResolver(IServiceProvider serviceProvider, IOptions<ContextMemoryOptions> options)
+    public LlmAdapterResolver(
+        IServiceProvider serviceProvider,
+        IOptions<ContextMemoryOptions> options,
+        ILogger<LlmAdapterResolver> logger)
     {
         _serviceProvider = serviceProvider;
         _options = options.Value;
+        _logger = logger;
     }
 
     public ILlmAdapter Resolve(string llmBackend) =>
-        Resolve(llmBackend, endpointOverride: null, apiKeyOverride: null);
+        Resolve(llmBackend, endpointOverride: null, apiKeyOverride: null, preferNativeForNumCtx: false);
 
-    public ILlmAdapter Resolve(AppRuntimeConfig runtimeConfig) =>
-        Resolve(
-            runtimeConfig.LlmBackend,
-            string.IsNullOrWhiteSpace(runtimeConfig.LlmEndpoint) ? null : runtimeConfig.LlmEndpoint,
-            string.IsNullOrWhiteSpace(runtimeConfig.LlmApiKey) ? null : runtimeConfig.LlmApiKey);
-
-    private ILlmAdapter Resolve(string llmBackend, string? endpointOverride, string? apiKeyOverride)
+    public ILlmAdapter Resolve(AppRuntimeConfig runtimeConfig)
     {
+        var backend = runtimeConfig.LlmBackend;
+        var preferNative = ShouldPreferOllamaNativeForNumCtx(runtimeConfig);
+        if (preferNative
+            && string.Equals(backend?.Trim(), "ollama", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogDebug(
+                "Using ollama-native (/api/chat) because llmOptions.numCtx={NumCtx}; Ollama /v1 ignores options.num_ctx",
+                runtimeConfig.LlmOptions?.NumCtx);
+            backend = "ollama-native";
+        }
+
+        return Resolve(
+            backend ?? "ollama-native",
+            string.IsNullOrWhiteSpace(runtimeConfig.LlmEndpoint) ? null : runtimeConfig.LlmEndpoint,
+            string.IsNullOrWhiteSpace(runtimeConfig.LlmApiKey) ? null : runtimeConfig.LlmApiKey,
+            preferNativeForNumCtx: false);
+    }
+
+    /// <summary>
+    /// Ollama OpenAI-compat <c>/v1</c> silently ignores <c>options.num_ctx</c>.
+    /// When the tenant sets <see cref="LlmGenerationConfig.NumCtx"/>, prefer native <c>/api/chat</c>.
+    /// </summary>
+    public static bool ShouldPreferOllamaNativeForNumCtx(AppRuntimeConfig runtimeConfig)
+    {
+        var backend = (runtimeConfig.LlmBackend ?? "ollama").Trim();
+        if (!backend.Equals("ollama", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return runtimeConfig.LlmOptions?.NumCtx is > 0;
+    }
+
+    private ILlmAdapter Resolve(
+        string llmBackend,
+        string? endpointOverride,
+        string? apiKeyOverride,
+        bool preferNativeForNumCtx)
+    {
+        _ = preferNativeForNumCtx;
         var kind = (llmBackend ?? "ollama").Trim().ToLowerInvariant();
         return kind switch
         {
-            // Native Ollama /api/chat — only when /v1 is unavailable.
+            // Native Ollama /api/chat — respects options.num_ctx (unlike /v1).
             "ollama-native" =>
                 _serviceProvider.GetRequiredService<OllamaAdapter>()
                     .WithConnection(endpointOverride, apiKeyOverride),
