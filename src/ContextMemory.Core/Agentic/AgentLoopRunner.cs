@@ -148,6 +148,25 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
             var assistantMessage = response.Message;
 
+            if (assistantMessage is not null
+                && (assistantMessage.ToolCalls is null || assistantMessage.ToolCalls.Count == 0))
+            {
+                var promoted = ProseToolCallParser.TryParse(
+                    OllamaLlmText.GetMessageContent(assistantMessage));
+                if (promoted is { Count: > 0 })
+                {
+                    _logger.LogInformation(
+                        "Promoted {Count} prose tool call(s) to structured tool_calls for {AppId}",
+                        promoted.Count,
+                        request.AppId);
+                    assistantMessage = assistantMessage with
+                    {
+                        ToolCalls = promoted.ToList(),
+                        Content = string.Empty
+                    };
+                }
+            }
+
             if (assistantMessage?.ToolCalls is { Count: > 0 } toolCalls)
             {
                 messages.Add(assistantMessage);
