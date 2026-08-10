@@ -240,6 +240,12 @@ public sealed class GlobalWikiQueryRequest
     [JsonPropertyName("includeIndex")]
     public bool IncludeIndex { get; init; }
 
+    /// <summary>
+    /// When true, pack document <c>Summary</c> digests instead of full <c>Content</c> (token-efficient discovery).
+    /// </summary>
+    [JsonPropertyName("digestOnly")]
+    public bool DigestOnly { get; init; }
+
     /// <summary>Point-in-time for temporal facts. Default = UtcNow (only currently valid revisions).</summary>
     [JsonPropertyName("asOf")]
     public DateTimeOffset? AsOf { get; init; }
@@ -267,6 +273,39 @@ public sealed class GlobalWikiQueryResult
 
     [JsonPropertyName("matches")]
     public List<GlobalWikiMatch> Matches { get; init; } = [];
+}
+
+public sealed class GlobalWikiGrepRequest
+{
+    [JsonPropertyName("pattern")]
+    public required string Pattern { get; init; }
+
+    [JsonPropertyName("sourceId")]
+    public string? SourceId { get; init; }
+
+    [JsonPropertyName("maxHits")]
+    public int MaxHits { get; init; } = 40;
+
+    [JsonPropertyName("asOf")]
+    public DateTimeOffset? AsOf { get; init; }
+
+    [JsonPropertyName("budgetChars")]
+    public int BudgetChars { get; init; }
+}
+
+public sealed class GlobalWikiGrepResult
+{
+    [JsonPropertyName("compiledMarkdown")]
+    public string CompiledMarkdown { get; init; } = string.Empty;
+
+    [JsonPropertyName("hitCount")]
+    public int HitCount { get; init; }
+
+    [JsonPropertyName("truncated")]
+    public bool Truncated { get; init; }
+
+    [JsonPropertyName("asOf")]
+    public DateTimeOffset AsOf { get; init; }
 }
 
 public sealed class GlobalWikiMatch

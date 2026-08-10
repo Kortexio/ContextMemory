@@ -8,6 +8,7 @@ using ContextMemory.Core.Profile;
 using ContextMemory.Infrastructure.Profile;
 using ContextMemory.Core.Session;
 using ContextMemory.Adapters.WebSearch;
+using ContextMemory.Adapters.OpenAi;
 using ContextMemory.Core.WebSearch;
 using ContextMemory.Adapters;
 using ContextMemory.Api.Hosting;
@@ -64,6 +65,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IAgentConfirmationFlow, AgentConfirmationFlow>();
         services.AddSingleton<IAgentToolCallProcessor, AgentToolCallProcessor>();
+        services.AddSingleton<IAgentContextCompactor, AgentContextCompactor>();
         services.AddSingleton<IAgentLoopRunner, AgentLoopRunner>();
         services.AddScoped<IAgenticToolRegistry, AgenticToolRegistryService>();
         services.AddScoped<IAgentOrchestrator, AgentOrchestrator>();

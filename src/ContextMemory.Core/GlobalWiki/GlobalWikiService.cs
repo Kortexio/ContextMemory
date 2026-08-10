@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 using ContextMemory.Core.Session;
@@ -10,6 +11,8 @@ public sealed class GlobalWikiService
 {
     public const int DefaultTopK = 5;
     public const int DefaultBudgetChars = 8_000;
+    public const int DefaultDigestTopK = 3;
+    public const int DefaultDigestBudgetChars = 2_500;
 
     private readonly IGlobalWikiStore _store;
     private readonly IGlobalWikiDigestGenerator _digestGenerator;
@@ -205,10 +208,14 @@ public sealed class GlobalWikiService
         CancellationToken cancellationToken = default)
     {
         var asOf = request.AsOf ?? DateTimeOffset.UtcNow;
-        var topK = request.TopK > 0 ? Math.Min(request.TopK, 50) : DefaultTopK;
+        var topK = request.TopK > 0
+            ? Math.Min(request.TopK, 50)
+            : request.DigestOnly ? DefaultDigestTopK : DefaultTopK;
         var budget = request.BudgetChars > 0
             ? request.BudgetChars
-            : defaultBudgetChars is > 0 ? defaultBudgetChars.Value : DefaultBudgetChars;
+            : defaultBudgetChars is > 0
+                ? defaultBudgetChars.Value
+                : request.DigestOnly ? DefaultDigestBudgetChars : DefaultBudgetChars;
 
         var matchedDocs = (await _store
                 .SearchAsync(appId, request.Query, asOf, request.SourceId, topK, cancellationToken)
@@ -267,7 +274,7 @@ public sealed class GlobalWikiService
             && GlobalWikiCatalog.IsCatalogDocument(matchedDocs[0].DocumentId);
         var pages = matchedDocs.ToDictionary(
             d => d.Slug,
-            d => ResolvePackContent(d, catalogIsPrimary),
+            d => ResolvePackContent(d, catalogIsPrimary, request.DigestOnly),
             StringComparer.OrdinalIgnoreCase);
         var lastModified = matchedDocs.ToDictionary(d => d.Slug, d => d.UpdatedAt, StringComparer.OrdinalIgnoreCase);
 
@@ -327,6 +334,99 @@ public sealed class GlobalWikiService
         };
     }
 
+    public async Task<GlobalWikiGrepResult> GrepAsync(
+        string appId,
+        GlobalWikiGrepRequest request,
+        int? defaultBudgetChars = null,
+        CancellationToken cancellationToken = default)
+    {
+        var asOf = request.AsOf ?? DateTimeOffset.UtcNow;
+        var maxHits = request.MaxHits > 0 ? Math.Min(request.MaxHits, 200) : 40;
+        var budget = request.BudgetChars > 0
+            ? request.BudgetChars
+            : defaultBudgetChars is > 0 ? defaultBudgetChars.Value : DefaultBudgetChars;
+
+        Regex regex;
+        try
+        {
+            regex = new Regex(
+                request.Pattern,
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline,
+                TimeSpan.FromSeconds(2));
+        }
+        catch (Exception ex)
+        {
+            return new GlobalWikiGrepResult
+            {
+                CompiledMarkdown = $"Invalid regex: {ex.Message}",
+                HitCount = 0,
+                Truncated = false,
+                AsOf = asOf
+            };
+        }
+
+        var docs = await _store
+            .GetAllForQueryAsync(appId, request.SourceId, asOf, cancellationToken)
+            .ConfigureAwait(false);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# wiki_grep `{request.Pattern}` (asOf={asOf:O})");
+        sb.AppendLine();
+        var hits = 0;
+        var truncated = false;
+
+        foreach (var doc in docs)
+        {
+            if (hits >= maxHits || sb.Length >= budget)
+            {
+                truncated = true;
+                break;
+            }
+
+            var haystack = (doc.Content ?? string.Empty) + "\n" + (doc.Summary ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(haystack))
+                continue;
+
+            MatchCollection matches;
+            try
+            {
+                matches = regex.Matches(haystack);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                truncated = true;
+                break;
+            }
+
+            if (matches.Count == 0)
+                continue;
+
+            foreach (Match m in matches)
+            {
+                if (hits >= maxHits || sb.Length >= budget)
+                {
+                    truncated = true;
+                    break;
+                }
+
+                var line = ExtractLineContext(haystack, m.Index, m.Length);
+                sb.AppendLine($"- `{doc.DocumentId}`:{ApproxLineNumber(haystack, m.Index)}: {line}");
+                hits++;
+            }
+        }
+
+        if (hits == 0)
+            sb.AppendLine("_No matches._");
+
+        return new GlobalWikiGrepResult
+        {
+            CompiledMarkdown = sb.ToString().TrimEnd(),
+            HitCount = hits,
+            Truncated = truncated,
+            AsOf = asOf
+        };
+    }
+
     public async Task<GlobalWikiRevisionListResult> ListRevisionsAsync(
         string appId,
         string documentId,
@@ -338,6 +438,30 @@ public sealed class GlobalWikiService
             DocumentId = documentId,
             Revisions = revs.Select(ToSummary).ToList()
         };
+    }
+
+    private static string ExtractLineContext(string text, int index, int length)
+    {
+        var start = text.LastIndexOf('\n', Math.Max(0, index - 1)) + 1;
+        var end = text.IndexOf('\n', index + length);
+        if (end < 0)
+            end = text.Length;
+        var line = text[start..end].Trim();
+        if (line.Length > 240)
+            line = line[..240] + "…";
+        return line;
+    }
+
+    private static int ApproxLineNumber(string text, int index)
+    {
+        var n = 1;
+        for (var i = 0; i < index && i < text.Length; i++)
+        {
+            if (text[i] == '\n')
+                n++;
+        }
+
+        return n;
     }
 
     public async Task<GlobalWikiAuditExportResult> ExportAuditAsync(
@@ -431,18 +555,33 @@ public sealed class GlobalWikiService
             UpdatedAt = d.UpdatedAt
         };
 
-    private static string ResolvePackContent(GlobalWikiDocument doc, bool catalogIsPrimary)
+    private static string ResolvePackContent(GlobalWikiDocument doc, bool catalogIsPrimary, bool digestOnly)
     {
-        if (!GlobalWikiCatalog.IsCatalogDocument(doc.DocumentId))
+        if (GlobalWikiCatalog.IsCatalogDocument(doc.DocumentId))
+        {
+            if (catalogIsPrimary)
+                return doc.Content;
+
+            var pointer = string.IsNullOrWhiteSpace(doc.Summary)
+                ? "Knowledge catalog overview (digests of ingested documents)."
+                : doc.Summary.Trim();
+            return pointer + "\n\n_(Ask specifically for the knowledge catalog to load the full digest index.)_";
+        }
+
+        if (!digestOnly)
             return doc.Content;
 
-        if (catalogIsPrimary)
-            return doc.Content;
+        // Dynamic context discovery: inject digests, hydrate full body via wiki_search when needed.
+        if (!string.IsNullOrWhiteSpace(doc.Summary))
+        {
+            var title = string.IsNullOrWhiteSpace(doc.Title) ? doc.DocumentId : doc.Title.Trim();
+            return $"### {title} (`{doc.DocumentId}`)\n{doc.Summary.Trim()}";
+        }
 
-        var pointer = string.IsNullOrWhiteSpace(doc.Summary)
-            ? "Knowledge catalog overview (digests of ingested documents)."
-            : doc.Summary.Trim();
-        return pointer + "\n\n_(Ask specifically for the knowledge catalog to load the full digest index.)_";
+        var excerpt = doc.Content ?? string.Empty;
+        if (excerpt.Length > 400)
+            excerpt = excerpt[..400] + "…";
+        return $"### {doc.DocumentId}\n{excerpt}";
     }
 
     private static string BuildIndex(IReadOnlyList<GlobalWikiDocument> docs)

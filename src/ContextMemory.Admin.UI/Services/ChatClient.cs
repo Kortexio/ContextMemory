@@ -492,7 +492,12 @@ public sealed class ChatClient
                 Label = s.Label,
                 Status = s.Success ? "done" : "error",
                 Iteration = s.Iteration,
-                ToolName = s.ToolName
+                ToolName = s.ToolName,
+                Detail = s.Summary,
+                ArtifactId = s.Entities is not null
+                    && s.Entities.TryGetValue("artifactId", out var aid)
+                        ? aid
+                        : null
             }).ToList();
             message.AwaitingConfirmation = false;
             message.PendingConfirmationId = null;
@@ -526,6 +531,44 @@ public sealed class ChatClient
             return;
         }
 
+        if (phase == "Compacting")
+        {
+            UpsertAgenticPhaseStep(message, meta, phase, "running");
+            var compacting = message.AgenticSteps.LastOrDefault(s => s.Phase == "Compacting");
+            if (compacting is not null)
+            {
+                compacting.ArtifactId = meta.ArtifactId ?? compacting.ArtifactId;
+                compacting.Detail = meta.Detail ?? compacting.Detail;
+                compacting.Label = meta.Label ?? "Compacting context…";
+            }
+            return;
+        }
+
+        if (phase == "SubagentStarted")
+        {
+            UpsertAgenticPhaseStep(message, meta, phase, "running");
+            return;
+        }
+
+        if (phase == "SubagentCompleted")
+        {
+            var running = message.AgenticSteps.LastOrDefault(s =>
+                s.Phase == "SubagentStarted" && s.Status == "running"
+                && (meta.ToolName is null || s.ToolName == meta.ToolName));
+            if (running is not null)
+            {
+                running.Phase = "SubagentCompleted";
+                running.Label = meta.Label ?? running.Label;
+                running.Status = "done";
+                running.Detail = meta.Detail ?? running.Detail;
+                running.ArtifactId = meta.ArtifactId ?? running.ArtifactId;
+                return;
+            }
+
+            UpsertAgenticPhaseStep(message, meta, phase, "done");
+            return;
+        }
+
         if (phase == "ToolStarted")
         {
             var existing = message.AgenticSteps.LastOrDefault(s =>
@@ -546,6 +589,8 @@ public sealed class ChatClient
             {
                 running.Phase = "ToolCompleted";
                 running.Label = meta.Label ?? running.Label;
+                running.Detail = meta.Detail ?? running.Detail;
+                running.ArtifactId = meta.ArtifactId ?? running.ArtifactId;
                 running.Status = meta.Detail?.Contains("failed", StringComparison.OrdinalIgnoreCase) == true
                     || meta.Detail?.Contains("falhou", StringComparison.OrdinalIgnoreCase) == true
                     ? "error"
@@ -556,6 +601,10 @@ public sealed class ChatClient
 
         if (phase is "LlmRequest" or "Validating")
         {
+            // Mark prior Compacting as done when LLM resumes.
+            foreach (var step in message.AgenticSteps.Where(s => s.Phase == "Compacting" && s.Status == "running"))
+                step.Status = "done";
+
             var running = message.AgenticSteps.LastOrDefault(s => s.Phase == phase && s.Status == "running");
             if (running is not null)
                 return;
@@ -574,10 +623,12 @@ public sealed class ChatClient
         message.AgenticSteps.Add(new AgenticUiStep
         {
             Phase = phase,
-            Label = meta.Label ?? meta.Detail ?? phase,
+            Label = PolishPhaseLabel(phase, meta.Label ?? meta.Detail ?? phase),
             Status = status,
             Iteration = meta.Iteration,
-            ToolName = meta.ToolName
+            ToolName = meta.ToolName,
+            ArtifactId = meta.ArtifactId,
+            Detail = meta.Detail
         });
     }
 
@@ -589,7 +640,14 @@ public sealed class ChatClient
             Label = s.Label,
             Status = s.Success ? "done" : "error",
             Iteration = s.Iteration,
-            ToolName = s.ToolName
+            ToolName = s.ToolName,
+            Detail = s.Summary,
+            ArtifactId = s.Entities is not null
+                && s.Entities.TryGetValue("artifactId", out var aid)
+                    ? aid
+                    : string.Equals(s.ToolName, "todo_write", StringComparison.OrdinalIgnoreCase)
+                        ? "meta:todos"
+                        : null
         }).ToList();
     }
 
@@ -600,7 +658,7 @@ public sealed class ChatClient
         string status)
     {
         var existing = message.AgenticSteps.LastOrDefault(s => s.Phase == phase);
-        var label = meta.Label ?? meta.Detail ?? phase;
+        var label = PolishPhaseLabel(phase, meta.Label ?? meta.Detail ?? phase);
 
         if (existing is not null)
         {
@@ -608,6 +666,8 @@ public sealed class ChatClient
             existing.Status = status;
             existing.Iteration = meta.Iteration ?? existing.Iteration;
             existing.ToolName = meta.ToolName ?? existing.ToolName;
+            existing.ArtifactId = meta.ArtifactId ?? existing.ArtifactId;
+            existing.Detail = meta.Detail ?? existing.Detail;
             return;
         }
 
@@ -617,17 +677,30 @@ public sealed class ChatClient
             Label = label,
             Status = status,
             Iteration = meta.Iteration,
-            ToolName = meta.ToolName
+            ToolName = meta.ToolName,
+            ArtifactId = meta.ArtifactId,
+            Detail = meta.Detail
         });
     }
 
     private static string ResolveStepStatus(string phase) =>
         phase switch
         {
-            "Completed" or "TimedOut" or "MaxIterations" => phase == "TimedOut" ? "warning" : "done",
+            "Completed" or "TimedOut" or "MaxIterations" or "SubagentCompleted" =>
+                phase == "TimedOut" ? "warning" : "done",
             "ToolCompleted" or "ValidationRejected" or "ConfirmationReceived" => "done",
             "AwaitingConfirmation" => "pending",
+            "Compacting" or "SubagentStarted" => "running",
             _ => "running"
+        };
+
+    private static string PolishPhaseLabel(string phase, string fallback) =>
+        phase switch
+        {
+            "Compacting" when string.IsNullOrWhiteSpace(fallback) || fallback == phase => "Compacting context…",
+            "SubagentStarted" when string.IsNullOrWhiteSpace(fallback) || fallback == phase => "Subagent started",
+            "SubagentCompleted" when string.IsNullOrWhiteSpace(fallback) || fallback == phase => "Subagent completed",
+            _ => fallback
         };
 
     private static string? ExtractConfirmId(string? text)

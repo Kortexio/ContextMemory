@@ -144,6 +144,41 @@ public sealed class GlobalWikiServiceTests
     }
 
     [Fact]
+    public async Task Query_DigestOnly_PacksSummaryNotFullBody()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cm-global-wiki-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var service = CreateService(root);
+            const string secretBody = "SECRET_FULL_BODY_SHOULD_NOT_APPEAR";
+            await service.UpsertAsync("demo", "doc-digest", new GlobalWikiUpsertRequest
+            {
+                Title = "Digest doc",
+                Content = $"# Digest doc\n\n{secretBody}\n\nLong policy text.",
+                Summary = "Keywords: renewal, SLA\nRefunds within 14 days.",
+                SourceId = "confluence:DOCS"
+            });
+
+            var result = await service.QueryAsync("demo", new GlobalWikiQueryRequest
+            {
+                Query = "renewal SLA",
+                TopK = 3,
+                BudgetChars = 2_000,
+                DigestOnly = true
+            });
+
+            Assert.Contains(result.Matches, m => m.DocumentId == "doc-digest");
+            Assert.Contains("Keywords: renewal", result.CompiledMarkdown);
+            Assert.DoesNotContain(secretBody, result.CompiledMarkdown);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Query_PacksMatchedDocumentBody_BeforeFillerIndexPages()
     {
         var root = Path.Combine(Path.GetTempPath(), "cm-global-wiki-" + Guid.NewGuid().ToString("N"));

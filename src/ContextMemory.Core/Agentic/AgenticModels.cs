@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
 
@@ -222,6 +223,22 @@ public sealed class AgentResult
     public bool AwaitingConfirmation { get; init; }
     public string? PendingConfirmationId { get; init; }
     public string? PendingKind { get; init; }
+    public DiscoveryTelemetry? Discovery { get; init; }
+
+    public AgentResult WithDiscovery(DiscoveryTelemetry? discovery) =>
+        new()
+        {
+            FinalAnswer = FinalAnswer,
+            Steps = Steps,
+            Iterations = Iterations,
+            MaxIterationsReached = MaxIterationsReached,
+            TimedOut = TimedOut,
+            Success = Success,
+            AwaitingConfirmation = AwaitingConfirmation,
+            PendingConfirmationId = PendingConfirmationId,
+            PendingKind = PendingKind,
+            Discovery = discovery
+        };
 
     public static AgentResult Succeeded(string answer, IReadOnlyList<AgentExecutionStep> steps, int iterations) =>
         new()

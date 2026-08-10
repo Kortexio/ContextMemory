@@ -27,16 +27,16 @@
 
 ## Why we are not RAG
 
-We are an **alternative** when people search for RAG — not a RAG product.
+We are an **alternative** when people search for RAG — not a RAG product. The harness is **Cursor-style dynamic context discovery** (digests + tools + artifacts), backed by a DB/wiki — **without embeddings**.
 
 | Classic RAG inject | ContextMemory |
 |---|---|
-| Chunks stuffed into the prompt every turn | Session wiki is budgeted memory; Global Wiki is **on demand** via tool `wiki_search` |
-| Usually embeddings / vector DB | Lexical / Postgres FTS on **markdown you can open** — deliberate, not a vector blob |
+| Chunks stuffed into the prompt every turn | Session wiki is budgeted memory; Global Wiki uses **top-K digests** + on-demand `wiki_search` / `wiki_grep` |
+| Usually embeddings / vector DB | Lexical / Postgres FTS (+ optional regex) on **markdown you can open** — deliberate, not a vector blob |
 | Retrieval product bolted onto chat | **One agentic pipeline**: wiki ± sandbox ± MCP ± HITL on the same `/v1/chat/completions` |
-| Client often owns orchestration | Client sends a normal chat body; the gateway runs the loop |
+| Client often owns orchestration | Client sends a normal chat body; the gateway runs the loop (compaction, lazy tools, subagents) |
 
-From the architecture docs: *"`wiki_search` is a loop tool, not a parallel RAG path"* — and classic RAG inject is explicitly **N/A (we don't do this)**. Details: [architecture-and-features.md](architecture-and-features.md).
+From the architecture docs: discovery tools in the loop, **not** a parallel RAG path — and classic RAG inject is explicitly **N/A**. Details: [architecture-and-features.md](architecture-and-features.md#retrieval--agentic-loop).
 
 ## Cloud vs self-host
 

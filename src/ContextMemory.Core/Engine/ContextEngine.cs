@@ -73,6 +73,8 @@ public sealed class ContextEngine : IContextEngine
                     appId, userId, sessionId, enriched, lastUser, runtimeConfig, cancellationToken)
                 .ConfigureAwait(false);
             assistantContent = agentResult.FinalAnswer;
+            if (agentResult.Discovery is not null)
+                _telemetry.RecordAgenticDiscovery(appId, agentResult.Discovery);
             response = new OllamaResponse
             {
                 Model = enriched.Model,
@@ -80,7 +82,8 @@ public sealed class ContextEngine : IContextEngine
                 Done = true,
                 ContextMemory = new ContextMemoryMetadata
                 {
-                    Agentic = AgenticStreamMetadata.FromResult(agentResult, runtimeConfig.DefaultLanguage)
+                    Agentic = AgenticStreamMetadata.FromResult(agentResult, runtimeConfig.DefaultLanguage),
+                    Discovery = agentResult.Discovery
                 }
             };
             _chatTurnContext.AgenticResult = agentResult;
@@ -142,6 +145,8 @@ public sealed class ContextEngine : IContextEngine
                     if (evt.Result is not null)
                     {
                         agentResult = evt.Result;
+                        if (agentResult.Discovery is not null)
+                            _telemetry.RecordAgenticDiscovery(appId, agentResult.Discovery);
                         await _agentExecutionLogger
                             .LogAsync(
                                 appId,

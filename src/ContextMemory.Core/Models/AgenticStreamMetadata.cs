@@ -18,6 +18,9 @@ public record AgenticStreamMetadata
     [JsonPropertyName("detail")]
     public string? Detail { get; init; }
 
+    [JsonPropertyName("artifact_id")]
+    public string? ArtifactId { get; init; }
+
     [JsonPropertyName("label")]
     public string? Label { get; init; }
 
@@ -46,6 +49,7 @@ public record AgenticStreamMetadata
             Iteration = evt.Iteration,
             ToolName = evt.ToolName,
             Detail = evt.Detail,
+            ArtifactId = evt.ArtifactId,
             Label = AgenticProgressFormatter.FormatEvent(evt, defaultLanguage)
         };
 
@@ -131,8 +135,17 @@ public record AgenticStepSummary
     [JsonPropertyName("entities")]
     public Dictionary<string, string>? Entities { get; init; }
 
-    public static AgenticStepSummary FromStep(AgentExecutionStep step, string? defaultLanguage = null) =>
-        new()
+    public static AgenticStepSummary FromStep(AgentExecutionStep step, string? defaultLanguage = null)
+    {
+        var summary = step.Summary;
+        if (string.IsNullOrWhiteSpace(summary)
+            && string.Equals(step.ToolName, "todo_write", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(step.Output))
+        {
+            summary = step.Output.Length > 400 ? step.Output[..400] + "…" : step.Output;
+        }
+
+        return new()
         {
             Iteration = step.Iteration,
             ToolName = step.ToolName,
@@ -140,7 +153,8 @@ public record AgenticStepSummary
             ExitCode = step.ExitCode,
             DurationMs = step.Duration.TotalMilliseconds,
             Label = AgenticProgressFormatter.FormatToolCompleted(step, defaultLanguage),
-            Summary = step.Summary,
+            Summary = summary,
             Entities = step.Entities
         };
+    }
 }

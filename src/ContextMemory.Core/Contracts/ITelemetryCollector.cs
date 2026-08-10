@@ -1,3 +1,5 @@
+using ContextMemory.Core.Models;
+
 namespace ContextMemory.Core.Contracts;
 
 /// <summary>
@@ -30,6 +32,8 @@ public interface ITelemetryCollector
 
     void RecordWebSearchSkipped(string appId, string reason);
 
+    void RecordAgenticDiscovery(string appId, DiscoveryTelemetry discovery);
+
     string ExportPrometheus();
     AppTelemetrySnapshot GetAppSnapshot(string appId);
     IReadOnlyDictionary<string, AppTelemetrySnapshot> GetAllSnapshots();
@@ -55,4 +59,8 @@ public sealed class AppTelemetrySnapshot
     public long WebSearchHits { get; init; }
     public long WebSearchSkippedTotal { get; init; }
     public double WebSearchLastLatencyMs { get; init; }
+    public long AgenticStaticPromptChars { get; init; }
+    public long AgenticDiscoveryFetchedChars { get; init; }
+    public long AgenticCompactionTotal { get; init; }
+    public long AgenticLlmCalls { get; init; }
 }

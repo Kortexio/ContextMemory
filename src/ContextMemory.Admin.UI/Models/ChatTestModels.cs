@@ -55,6 +55,8 @@ public sealed class AgenticUiStep
     public string Status { get; set; } = "running";
     public int? Iteration { get; set; }
     public string? ToolName { get; set; }
+    public string? ArtifactId { get; set; }
+    public string? Detail { get; set; }
 }
 
 public sealed class ChatExchangeResult

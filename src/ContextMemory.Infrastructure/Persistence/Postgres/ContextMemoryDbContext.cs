@@ -129,6 +129,7 @@ public sealed class ContextMemoryDbContext : DbContext
             e.Property(x => x.Description).HasColumnType("text");
             e.Property(x => x.PromptMarkdown).HasColumnType("text");
             e.Property(x => x.Category).HasMaxLength(64);
+            e.Property(x => x.Activation).HasMaxLength(32);
             e.Property(x => x.LinkedGuardrailIdsJson).HasColumnType("jsonb");
             e.HasIndex(x => x.SortOrder);
         });
@@ -156,6 +157,7 @@ public sealed class ContextMemoryDbContext : DbContext
             e.Property(x => x.Description).HasColumnType("text");
             e.Property(x => x.PromptMarkdown).HasColumnType("text");
             e.Property(x => x.Category).HasMaxLength(64);
+            e.Property(x => x.Activation).HasMaxLength(32);
             e.Property(x => x.LinkedGuardrailIdsJson).HasColumnType("jsonb");
             e.HasIndex(x => x.AppId);
             e.HasIndex(x => x.SortOrder);
@@ -185,6 +187,7 @@ public sealed class AgenticSkillCatalogEntity
     public string Description { get; set; } = string.Empty;
     public string PromptMarkdown { get; set; } = string.Empty;
     public string Category { get; set; } = "general";
+    public string Activation { get; set; } = "skill";
     public bool IsSystem { get; set; }
     public bool IsDefaultEnabled { get; set; }
     public int SortOrder { get; set; }
@@ -214,6 +217,7 @@ public sealed class AgenticAppSkillEntity
     public string Description { get; set; } = string.Empty;
     public string PromptMarkdown { get; set; } = string.Empty;
     public string Category { get; set; } = "general";
+    public string Activation { get; set; } = "skill";
     public bool IsEnabled { get; set; } = true;
     public int SortOrder { get; set; }
     public string LinkedGuardrailIdsJson { get; set; } = "[]";

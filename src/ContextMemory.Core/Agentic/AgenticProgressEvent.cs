@@ -4,8 +4,11 @@ public enum AgenticProgressPhase
 {
     Started,
     LlmRequest,
+    Compacting,
     ToolStarted,
     ToolCompleted,
+    SubagentStarted,
+    SubagentCompleted,
     Validating,
     ValidationRejected,
     AwaitingConfirmation,
@@ -21,6 +24,7 @@ public sealed class AgenticProgressEvent
     public int? Iteration { get; init; }
     public string? ToolName { get; init; }
     public string? Detail { get; init; }
+    public string? ArtifactId { get; init; }
     public AgentExecutionStep? Step { get; init; }
 }
 

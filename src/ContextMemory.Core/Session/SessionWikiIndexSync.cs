@@ -54,6 +54,10 @@ internal static partial class SessionWikiIndexSync
             if (string.Equals(parentDir, pagesDir, StringComparison.OrdinalIgnoreCase))
                 continue;
 
+            // Keep dynamic-discovery artifacts out of the wiki hoist path.
+            if (IsUnderArtifactsDir(pagesDir, file))
+                continue;
+
             var dest = Path.Combine(pagesDir, Path.GetFileName(file));
             if (File.Exists(dest))
                 File.Delete(file);
@@ -64,6 +68,9 @@ internal static partial class SessionWikiIndexSync
         foreach (var subdir in Directory.EnumerateDirectories(pagesDir, "*", SearchOption.AllDirectories)
                      .OrderByDescending(path => path.Length))
         {
+            if (IsArtifactsDir(pagesDir, subdir) || IsUnderArtifactsDir(pagesDir, subdir))
+                continue;
+
             try
             {
                 if (!Directory.EnumerateFileSystemEntries(subdir).Any())
@@ -74,6 +81,23 @@ internal static partial class SessionWikiIndexSync
                 // best effort
             }
         }
+    }
+
+    private static bool IsArtifactsDir(string pagesDir, string path) =>
+        string.Equals(
+            Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(Path.Combine(pagesDir, "_artifacts"))
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsUnderArtifactsDir(string pagesDir, string path)
+    {
+        var artifactsRoot = Path.GetFullPath(Path.Combine(pagesDir, "_artifacts"))
+            + Path.DirectorySeparatorChar;
+        var full = Path.GetFullPath(path);
+        if (!full.EndsWith(Path.DirectorySeparatorChar) && Directory.Exists(full))
+            full += Path.DirectorySeparatorChar;
+        return full.StartsWith(artifactsRoot, StringComparison.OrdinalIgnoreCase);
     }
 
     public static string BuildFromPagesDirectory(string sessionDir)

@@ -337,6 +337,9 @@ internal sealed class SessionPersistenceRecord
     public Dictionary<string, string> Pages { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, DateTimeOffset> PageLastModified { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<OllamaMessage> Messages { get; set; } = [];
+
+    /// <summary>Dynamic-discovery tool outputs (not part of compiled wiki).</summary>
+    public Dictionary<string, string> Artifacts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 internal static class SessionWikiIndexBuilder

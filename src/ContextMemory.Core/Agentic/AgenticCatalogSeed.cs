@@ -135,6 +135,24 @@ public static class AgenticCatalogSeed
                 - Reply in the user's language.
                 """),
 
+            Skill("rule-always-evidence", "Always-on: evidence first", "rules", 5, true,
+                "Always-on rule: never invent unsupported facts.",
+                """
+                ## Always-on: evidence first
+                - Prefer tools, wiki_search/wiki_grep, and session artifacts over speculation.
+                - Tag uncertain claims clearly.
+                """,
+                activation: AgenticSkillActivation.AlwaysOn),
+
+            Skill("rule-requestable-style", "Requestable: terse style", "rules", 230, true,
+                "Optional rule for ultra-terse answers.",
+                """
+                ## Terse style
+                - Answer in at most 5 short bullets unless the user asks for detail.
+                - No preamble.
+                """,
+                activation: AgenticSkillActivation.Requestable),
+
             Skill("zuora-graphql-discover-first", "Zuora GraphQL — discover first", "integrations", 220, false,
                 "Discover Zuora GraphQL schema with tools before any table/query.",
                 """
@@ -172,12 +190,14 @@ public static class AgenticCatalogSeed
             bool defaultEnabled,
             string description,
             string markdown,
-            string[]? linked = null) =>
+            string[]? linked = null,
+            string activation = AgenticSkillActivation.Skill) =>
             new()
             {
                 Id = id,
                 Name = name,
                 Category = category,
+                Activation = activation,
                 SortOrder = sort,
                 IsSystem = true,
                 IsDefaultEnabled = defaultEnabled,
@@ -258,6 +278,40 @@ public static class AgenticCatalogSeed
                 IsSystem = true,
                 IsDefaultEnabled = true,
                 SortOrder = 40,
+                UpdatedAt = now
+            },
+            new AgenticGuardrailDefinition
+            {
+                Id = "pre-tool-deny-rm-rf",
+                Name = "PreToolUse deny destructive shell patterns",
+                Description = "Deny shell_execute when arguments look like recursive force delete.",
+                Kind = AgenticGuardrailKinds.PreToolUse,
+                ConfigJson = JsonSerializer.Serialize(new
+                {
+                    matchToolPatterns = new[] { "shell_execute" },
+                    denyToolPatterns = Array.Empty<string>(),
+                    requireConfirm = false
+                }),
+                IsSystem = true,
+                IsDefaultEnabled = false,
+                SortOrder = 50,
+                UpdatedAt = now
+            },
+            new AgenticGuardrailDefinition
+            {
+                Id = "post-tool-redact-secrets",
+                Name = "PostToolUse redact secrets",
+                Description = "Redact common secret patterns from tool observations.",
+                Kind = AgenticGuardrailKinds.PostToolUse,
+                ConfigJson = JsonSerializer.Serialize(new
+                {
+                    matchToolPatterns = new[] { "*" },
+                    redactPatterns = new[] { @"(?i)(api[_-]?key|token|secret)\s*[:=]\s*\S+" },
+                    maxOutputChars = 0
+                }),
+                IsSystem = true,
+                IsDefaultEnabled = true,
+                SortOrder = 60,
                 UpdatedAt = now
             }
         ];

@@ -107,10 +107,10 @@ Max wiki context chars, compaction threshold (bytes), compaction min pages.
 
 #### Global Wiki
 
-- Enable Global Wiki → exposes `wiki_search` for documents under `/apps/{id}/wiki/…`
-- Max Global Wiki tool chars — budget per `wiki_search` call (`0` = service default)
+- Enable Global Wiki → digests inject + tools `wiki_search` / `wiki_grep` for documents under `/apps/{id}/wiki/…`
+- Max Global Wiki tool chars — budget per wiki tool call (`0` = service default)
 
-Ingest/digests are API-side; the Admin UI toggles availability and budget. Retrieval runs inside the agentic loop — see [Retrieval + agentic loop](#retrieval--agentic-loop).
+Ingest/digests are API-side; the Admin UI toggles availability and budget. Retrieval is **dynamic context discovery** (digests + FTS/tools), not vector RAG — see [architecture-and-features.md](architecture-and-features.md#retrieval--agentic-loop).
 
 #### Web search
 
@@ -125,11 +125,11 @@ App RPM, per-user RPM, TPM, agentic request weight, agentic tokens per iteration
 | Area | What you configure |
 |---|---|
 | Enable agentic loop | Multi-step tools on the same chat request |
-| Prompt profile | `auto` / `ollama` / `openai` / `claude` |
+| Prompt profile | `auto` / `ollama` / `openai` / `claude` / `qwen` / `composer` |
 | Loop guardrails | Validation mode, network egress, max iterations, loop timeout, min answer length, confirmation keywords, allowed hosts, expected regexes, require exit 0, human review on max iterations |
-| **Skills & guardrail packs** | Per-app checkboxes from the shared catalog (see Skills page). Omit selection → catalog defaults |
-| Execution tools | `self-hosted-sandbox` → sandbox endpoint (Compose: `http://sandbox-runtime:8080`) or `aca-session` → ACA pool URL; runtimes shell/python/node/(custom); `allowEgress` |
-| MCP integrations | `http` or `stdio`; name, URL/command+args, auth mode, credential ref, OAuth fields, allow/deny tool lists, timeout, enabled, allowEgress; max MCP tools per turn |
+| **Skills & guardrail packs** | Per-app checkboxes from the shared catalog (see Skills page). Omit selection → catalog defaults. Skills may be `always_on` / `requestable` rules. |
+| Execution tools | `self-hosted-sandbox` → sandbox endpoint (Compose: `http://sandbox-runtime:8080`) or `aca-session` → ACA pool URL; runtimes shell/python/node/(custom); `allowEgress`. Sandbox output is always archived as a session artifact. |
+| MCP integrations | `http` or `stdio`; name, URL/command+args, auth mode, credential ref, OAuth fields, allow/deny tool lists, timeout, enabled, allowEgress; max MCP tools per turn; schemas are lazy (`tool_describe`) |
 
 Example stdio MCP is shown in a collapsible on the Config page. After editing MCP servers, rebuild the tool catalog via API if needed: `POST /apps/{appId}/mcp/catalog/rebuild` (Master Key or app auth as configured).
 
@@ -168,14 +168,27 @@ Interactive tester for a tenant. Uses the **app API key** + `X-App-Id` (Master K
 | Model | Body `model` (match app config) |
 | Chat / Generate | Legacy `POST /api/chat` or `/api/generate` |
 | Streaming | NDJSON token stream |
-| Show raw JSON | Debug panel |
+| Show raw JSON | Debug / Inspector panel |
 | Save locally / Load app / New session | Persist lab settings, pull app summary, reset session id |
 
 **Ollama options** — optional per-request system prompt, temperature, top_p, top_k, num_ctx, repeat_penalty, num_predict, keep_alive, format.
 
-**Main pane** — conversation; agentic timeline (tool steps); HITL banner with `confirm` / `[CONFIRM:id]` and copy token; Stop / Regenerate / Clear UI.
+**Main pane**
 
-Typical smoke path: Settings connected → open Chat Lab → `demo-dev` + demo key → send a message → same Session ID on the next turn to verify memory.
+- Conversation bubbles with agentic **timeline** (LLM request, tool start/end, **Compacting**, **Subagent** start/complete, validation, HITL)
+- HITL banner with `confirm` / `[CONFIRM:id]` and copy token
+- Stop / Regenerate / Clear UI
+
+**Side panels** (Chat mode)
+
+| Panel | Content |
+|---|---|
+| **Todos** | Items from `todo_write` tool progress |
+| **Artifacts** | `artifactId`s seen in the turn (sandbox, wiki, subagent, history compaction) |
+| **Wiki / discovery** | Compaction + wiki tool steps for quick grounding checks |
+| **Inspector** | Raw request/response when “Show raw JSON” is on |
+
+Typical smoke path: Settings connected → open Chat Lab → `demo-dev` + demo key → send a message → same Session ID on the next turn to verify memory / rolling summary.
 
 ### Keys cheat sheet
 

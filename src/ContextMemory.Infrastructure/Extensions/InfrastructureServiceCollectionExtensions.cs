@@ -22,6 +22,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IAppRegistry, AppRegistry>();
         services.AddSingleton<IAppConfigStore, AppConfigStore>();
         services.AddSingleton<ISessionStore, FileSessionStore>();
+        services.AddSingleton<ISessionArtifactStore, FileSessionArtifactStore>();
         services.AddSingleton<IAgenticPendingStore, FileAgenticPendingStore>();
         services.AddSingleton<IGlobalWikiStore, FileGlobalWikiStore>();
         services.AddSingleton<IMcpCredentialStore, FileMcpCredentialStore>();
@@ -55,6 +56,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IAppRegistry, PostgresAppRegistry>();
         services.AddSingleton<IAppConfigStore, PostgresAppConfigStore>();
         services.AddSingleton<ISessionStore, PostgresSessionStore>();
+        services.AddSingleton<ISessionArtifactStore, PostgresSessionArtifactStore>();
         services.AddSingleton<IAgenticPendingStore, PostgresAgenticPendingStore>();
         services.AddSingleton<IGlobalWikiStore, PostgresGlobalWikiStore>();
         services.AddSingleton<IMcpCredentialStore, PostgresMcpCredentialStore>();
@@ -84,10 +86,14 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddTransient<SelfHostedGVisorExecutor>();
         services.AddTransient<McpToolExecutor>();
         services.AddTransient<GlobalWikiToolExecutor>();
+        services.AddTransient<SessionDiscoveryToolExecutor>();
+        services.AddTransient<DelegateTaskToolExecutor>();
         services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<AcaExecutionToolExecutor>());
         services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<SelfHostedGVisorExecutor>());
         services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<McpToolExecutor>());
         services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<GlobalWikiToolExecutor>());
+        services.AddTransient<ISessionScopedToolExecutor>(sp => sp.GetRequiredService<SessionDiscoveryToolExecutor>());
+        services.AddTransient<ISessionScopedToolExecutor>(sp => sp.GetRequiredService<DelegateTaskToolExecutor>());
 
         services.AddSingleton<IMcpToolSelector, McpToolSelector>();
         services.AddSingleton<IMcpToolCatalog, McpToolCatalog>();

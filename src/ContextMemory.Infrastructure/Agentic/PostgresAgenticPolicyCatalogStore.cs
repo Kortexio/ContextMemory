@@ -36,25 +36,44 @@ public sealed class PostgresAgenticPolicyCatalogStore : IAgenticPolicyCatalogSto
                 return;
 
             await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
-            var skillCount = await db.AgenticSkillCatalog.CountAsync(cancellationToken).ConfigureAwait(false);
-            var guardrailCount = await db.AgenticGuardrailCatalog.CountAsync(cancellationToken).ConfigureAwait(false);
+            var existingSkillIds = await db.AgenticSkillCatalog.AsNoTracking()
+                .Select(s => s.Id)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            var existingGuardrailIds = await db.AgenticGuardrailCatalog.AsNoTracking()
+                .Select(g => g.Id)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
 
-            if (skillCount == 0)
+            var skillIds = new HashSet<string>(existingSkillIds, StringComparer.OrdinalIgnoreCase);
+            var guardrailIds = new HashSet<string>(existingGuardrailIds, StringComparer.OrdinalIgnoreCase);
+            var addedSkills = 0;
+            var addedGuardrails = 0;
+
+            foreach (var skill in AgenticCatalogSeed.Skills)
             {
-                foreach (var skill in AgenticCatalogSeed.Skills)
-                    db.AgenticSkillCatalog.Add(ToEntity(skill));
-                _logger.LogInformation("Seeded {Count} agentic skills", AgenticCatalogSeed.Skills.Count);
+                if (skillIds.Contains(skill.Id))
+                    continue;
+                db.AgenticSkillCatalog.Add(ToEntity(skill));
+                addedSkills++;
             }
 
-            if (guardrailCount == 0)
+            foreach (var g in AgenticCatalogSeed.Guardrails)
             {
-                foreach (var g in AgenticCatalogSeed.Guardrails)
-                    db.AgenticGuardrailCatalog.Add(ToEntity(g));
-                _logger.LogInformation("Seeded {Count} agentic guardrails", AgenticCatalogSeed.Guardrails.Count);
+                if (guardrailIds.Contains(g.Id))
+                    continue;
+                db.AgenticGuardrailCatalog.Add(ToEntity(g));
+                addedGuardrails++;
             }
 
-            if (skillCount == 0 || guardrailCount == 0)
+            if (addedSkills > 0 || addedGuardrails > 0)
+            {
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                _logger.LogInformation(
+                    "Seeded agentic catalog deltas: {SkillCount} skills, {GuardrailCount} guardrails",
+                    addedSkills,
+                    addedGuardrails);
+            }
 
             _seeded = true;
         }
@@ -122,6 +141,9 @@ public sealed class PostgresAgenticPolicyCatalogStore : IAgenticPolicyCatalogSto
                 row.Description = skill.Description;
                 row.PromptMarkdown = skill.PromptMarkdown;
                 row.Category = skill.Category;
+                row.Activation = string.IsNullOrWhiteSpace(skill.Activation)
+                    ? AgenticSkillActivation.Skill
+                    : skill.Activation;
                 row.IsDefaultEnabled = skill.IsDefaultEnabled;
                 row.SortOrder = skill.SortOrder;
                 row.LinkedGuardrailIdsJson = JsonSerializer.Serialize(skill.LinkedGuardrailIds, JsonOptions);
@@ -133,6 +155,9 @@ public sealed class PostgresAgenticPolicyCatalogStore : IAgenticPolicyCatalogSto
                 row.Description = skill.Description;
                 row.PromptMarkdown = skill.PromptMarkdown;
                 row.Category = skill.Category;
+                row.Activation = string.IsNullOrWhiteSpace(skill.Activation)
+                    ? AgenticSkillActivation.Skill
+                    : skill.Activation;
                 row.IsDefaultEnabled = skill.IsDefaultEnabled;
                 row.SortOrder = skill.SortOrder;
                 row.LinkedGuardrailIdsJson = JsonSerializer.Serialize(skill.LinkedGuardrailIds, JsonOptions);
@@ -238,6 +263,7 @@ public sealed class PostgresAgenticPolicyCatalogStore : IAgenticPolicyCatalogSto
             Description = skill.Description,
             PromptMarkdown = skill.PromptMarkdown,
             Category = skill.Category,
+            Activation = string.IsNullOrWhiteSpace(skill.Activation) ? AgenticSkillActivation.Skill : skill.Activation,
             IsSystem = skill.IsSystem,
             IsDefaultEnabled = skill.IsDefaultEnabled,
             SortOrder = skill.SortOrder,
@@ -279,6 +305,7 @@ public sealed class PostgresAgenticPolicyCatalogStore : IAgenticPolicyCatalogSto
             Description = row.Description,
             PromptMarkdown = row.PromptMarkdown,
             Category = row.Category,
+            Activation = string.IsNullOrWhiteSpace(row.Activation) ? AgenticSkillActivation.Skill : row.Activation,
             IsSystem = row.IsSystem,
             IsDefaultEnabled = row.IsDefaultEnabled,
             SortOrder = row.SortOrder,
