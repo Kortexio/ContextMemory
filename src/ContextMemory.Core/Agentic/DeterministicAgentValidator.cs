@@ -1,3 +1,4 @@
+using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 
@@ -5,7 +6,19 @@ namespace ContextMemory.Core.Agentic;
 
 public sealed class DeterministicAgentValidator
 {
-    public Task<ValidationResult> ValidateAsync(
+    private readonly IAgenticUrlAvailabilityChecker? _urlChecker;
+
+    public DeterministicAgentValidator()
+        : this(null)
+    {
+    }
+
+    public DeterministicAgentValidator(IAgenticUrlAvailabilityChecker? urlChecker)
+    {
+        _urlChecker = urlChecker;
+    }
+
+    public async Task<ValidationResult> ValidateAsync(
         AgentValidationRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -16,8 +29,8 @@ public sealed class DeterministicAgentValidator
 
         if (string.IsNullOrWhiteSpace(finalAnswer))
         {
-            return Task.FromResult(ValidationResult.Reject(
-                ValidationMessages.EmptyFinalAnswer(request.RuntimeConfig)));
+            return ValidationResult.Reject(
+                ValidationMessages.EmptyFinalAnswer(request.RuntimeConfig));
         }
 
         if (policy.HasKind(AgenticGuardrailKinds.SandboxClaim)
@@ -30,10 +43,10 @@ public sealed class DeterministicAgentValidator
             var configured = AgenticGuardrailConfigReader.GetFeedback(
                 policy.FindByKind(AgenticGuardrailKinds.SandboxClaim)?.ConfigJson ?? "{}",
                 request.RuntimeConfig.DefaultLanguage);
-            return Task.FromResult(ValidationResult.Reject(
+            return ValidationResult.Reject(
                 ValidationMessages.FabricatedSandboxLimitation(
                     configured ?? sandboxFeedback,
-                    request.RuntimeConfig)));
+                    request.RuntimeConfig));
         }
 
         if (policy.HasKind(AgenticGuardrailKinds.UrlFetch)
@@ -47,10 +60,10 @@ public sealed class DeterministicAgentValidator
             var configured = AgenticGuardrailConfigReader.GetFeedback(
                 policy.FindByKind(AgenticGuardrailKinds.UrlFetch)?.ConfigJson ?? "{}",
                 request.RuntimeConfig.DefaultLanguage);
-            return Task.FromResult(ValidationResult.Reject(
+            return ValidationResult.Reject(
                 ValidationMessages.UrlDescribedWithoutFetch(
                     configured ?? urlFeedback,
-                    request.RuntimeConfig)));
+                    request.RuntimeConfig));
         }
 
         if (policy.HasKind(AgenticGuardrailKinds.LiveDataEvidence)
@@ -64,16 +77,38 @@ public sealed class DeterministicAgentValidator
             var configured = AgenticGuardrailConfigReader.GetFeedback(
                 policy.FindByKind(AgenticGuardrailKinds.LiveDataEvidence)?.ConfigJson ?? "{}",
                 request.RuntimeConfig.DefaultLanguage);
-            return Task.FromResult(ValidationResult.Reject(
+            return ValidationResult.Reject(
                 ValidationMessages.LiveDataWithoutEvidence(
                     configured ?? liveFeedback,
-                    request.RuntimeConfig)));
+                    request.RuntimeConfig));
         }
+
+        if (policy.HasKind(AgenticGuardrailKinds.ToolSurfaceHidden)
+            && AgenticToolIntentNarrationGuardrail.TryGetRejectionFeedback(
+                finalAnswer,
+                steps,
+                request.RuntimeConfig,
+                out var toolIntentFeedback))
+        {
+            var configured = AgenticGuardrailConfigReader.GetFeedback(
+                policy.FindByKind(AgenticGuardrailKinds.ToolSurfaceHidden)?.ConfigJson ?? "{}",
+                request.RuntimeConfig.DefaultLanguage);
+            return ValidationResult.Reject(
+                ValidationMessages.ToolIntentNarration(
+                    configured ?? toolIntentFeedback,
+                    request.RuntimeConfig));
+        }
+
+        var extended = await AgenticExtendedGuardrailRunner.TryGetRejectionAsync(
+                request, _urlChecker, cancellationToken)
+            .ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(extended))
+            return ValidationResult.Reject(extended);
 
         if (guardrails.MinAnswerLength > 0 && finalAnswer.Trim().Length < guardrails.MinAnswerLength)
         {
-            return Task.FromResult(ValidationResult.Reject(
-                ValidationMessages.TooShort(guardrails.MinAnswerLength, request.RuntimeConfig)));
+            return ValidationResult.Reject(
+                ValidationMessages.TooShort(guardrails.MinAnswerLength, request.RuntimeConfig));
         }
 
         var blockedPatterns = new List<string>(guardrails.BlockedAnswerPatterns);
@@ -91,8 +126,8 @@ public sealed class DeterministicAgentValidator
 
             if (finalAnswer.Contains(pattern, StringComparison.OrdinalIgnoreCase))
             {
-                return Task.FromResult(ValidationResult.Reject(
-                    ValidationMessages.BlockedContent(pattern, request.RuntimeConfig)));
+                return ValidationResult.Reject(
+                    ValidationMessages.BlockedContent(pattern, request.RuntimeConfig));
             }
         }
 
@@ -109,8 +144,8 @@ public sealed class DeterministicAgentValidator
         if (guardrails.RequireZeroExitCode && failedSteps.Count > 0)
         {
             var toolList = string.Join(", ", failedSteps.Select(s => s.ToolName).Distinct());
-            return Task.FromResult(ValidationResult.Reject(
-                ValidationMessages.ToolsFailedExitCode(toolList, request.RuntimeConfig)));
+            return ValidationResult.Reject(
+                ValidationMessages.ToolsFailedExitCode(toolList, request.RuntimeConfig));
         }
 
         if (policy.HasKind(AgenticGuardrailKinds.ToolFailureDisclosure)
@@ -121,8 +156,8 @@ public sealed class DeterministicAgentValidator
             && !finalAnswer.Contains("error", StringComparison.OrdinalIgnoreCase))
         {
             var toolList = string.Join(", ", failedSteps.Select(s => s.ToolName).Distinct());
-            return Task.FromResult(ValidationResult.Reject(
-                ValidationMessages.ToolsFailedNotMentioned(toolList, request.RuntimeConfig)));
+            return ValidationResult.Reject(
+                ValidationMessages.ToolsFailedNotMentioned(toolList, request.RuntimeConfig));
         }
 
         foreach (var pattern in guardrails.ExpectedAnswerPatterns)
@@ -138,8 +173,8 @@ public sealed class DeterministicAgentValidator
                         System.Text.RegularExpressions.RegexOptions.IgnoreCase
                         | System.Text.RegularExpressions.RegexOptions.CultureInvariant))
                 {
-                    return Task.FromResult(ValidationResult.Reject(
-                        ValidationMessages.PatternMismatch(pattern, request.RuntimeConfig)));
+                    return ValidationResult.Reject(
+                        ValidationMessages.PatternMismatch(pattern, request.RuntimeConfig));
                 }
             }
             catch
@@ -164,12 +199,12 @@ public sealed class DeterministicAgentValidator
                 && !finalAnswer.Contains("approval", StringComparison.OrdinalIgnoreCase)
                 && !finalAnswer.Contains("aprovação", StringComparison.OrdinalIgnoreCase))
             {
-                return Task.FromResult(ValidationResult.Reject(
-                    ValidationMessages.ConfirmationRequired(keyword, request.RuntimeConfig)));
+                return ValidationResult.Reject(
+                    ValidationMessages.ConfirmationRequired(keyword, request.RuntimeConfig));
             }
         }
 
-        return Task.FromResult(ValidationResult.Ok());
+        return ValidationResult.Ok();
     }
 
     /// <summary>

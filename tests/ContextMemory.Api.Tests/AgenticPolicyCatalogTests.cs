@@ -13,7 +13,7 @@ public sealed class AgenticPolicyPackResolverTests
     public void Seed_ContainsExpectedDefaults()
     {
         Assert.Equal(15, AgenticCatalogSeed.Skills.Count);
-        Assert.Equal(7, AgenticCatalogSeed.Guardrails.Count);
+        Assert.Equal(28, AgenticCatalogSeed.Guardrails.Count);
         Assert.Contains(AgenticCatalogSeed.Skills, s => s.Id == "anti-hallucination-web" && s.IsDefaultEnabled);
         Assert.Contains(AgenticCatalogSeed.Skills, s => s.Id == "strict-no-speculation" && !s.IsDefaultEnabled);
         Assert.Contains(AgenticCatalogSeed.Skills, s => s.Id == "zuora-graphql-discover-first" && !s.IsDefaultEnabled);
@@ -23,6 +23,12 @@ public sealed class AgenticPolicyPackResolverTests
             g.Id == "url-fetch-required" && g.Kind == AgenticGuardrailKinds.UrlFetch);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
             g.Id == "live-data-evidence-required" && g.Kind == AgenticGuardrailKinds.LiveDataEvidence);
+        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
+            g.Id == "tool-surface-hidden" && g.Kind == AgenticGuardrailKinds.ToolSurfaceHidden && g.IsDefaultEnabled);
+        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
+            g.Id == "prompt-injection" && g.Kind == AgenticGuardrailKinds.PromptInjection && !g.IsDefaultEnabled);
+        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
+            g.Id == "fact-check" && g.Kind == AgenticGuardrailKinds.FactCheck && !g.IsDefaultEnabled);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g => g.Kind == AgenticGuardrailKinds.PostToolUse);
     }
 
@@ -59,6 +65,7 @@ public sealed class AgenticPolicyPackResolverTests
         Assert.DoesNotContain(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "strict-no-speculation");
         Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.UrlFetch));
         Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.SandboxClaim));
+        Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.ToolSurfaceHidden));
     }
 
     [Fact]

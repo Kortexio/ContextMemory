@@ -114,6 +114,15 @@ public static class InfrastructureServiceCollectionExtensions
             AllowAutoRedirect = false
         });
 
+        services.AddHttpClient(AgenticUrlAvailabilityChecker.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(8);
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            AllowAutoRedirect = false
+        });
+        services.AddSingleton<IAgenticUrlAvailabilityChecker, AgenticUrlAvailabilityChecker>();
+
         services.AddSingleton<IMcpToolSelector, McpToolSelector>();
         services.AddSingleton<IMcpToolCatalog, McpToolCatalog>();
 

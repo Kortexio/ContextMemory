@@ -39,15 +39,18 @@ public static class AgenticGuardrailConfigReader
         return null;
     }
 
-    public static IReadOnlyList<string> GetBlockedPatterns(string configJson)
+    public static IReadOnlyList<string> GetBlockedPatterns(string configJson) =>
+        GetStringList(configJson, "patterns");
+
+    public static IReadOnlyList<string> GetStringList(string configJson, string propertyName)
     {
-        if (string.IsNullOrWhiteSpace(configJson))
+        if (string.IsNullOrWhiteSpace(configJson) || string.IsNullOrWhiteSpace(propertyName))
             return [];
 
         try
         {
             using var doc = JsonDocument.Parse(configJson);
-            if (!doc.RootElement.TryGetProperty("patterns", out var patterns)
+            if (!doc.RootElement.TryGetProperty(propertyName, out var patterns)
                 || patterns.ValueKind != JsonValueKind.Array)
             {
                 return [];
@@ -70,5 +73,99 @@ public static class AgenticGuardrailConfigReader
         {
             return [];
         }
+    }
+
+    public static string? GetString(string configJson, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(configJson) || string.IsNullOrWhiteSpace(propertyName))
+            return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(configJson);
+            if (doc.RootElement.TryGetProperty(propertyName, out var el)
+                && el.ValueKind == JsonValueKind.String)
+            {
+                var s = el.GetString();
+                return string.IsNullOrWhiteSpace(s) ? null : s;
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return null;
+    }
+
+    public static int GetInt(string configJson, string propertyName, int defaultValue)
+    {
+        if (string.IsNullOrWhiteSpace(configJson) || string.IsNullOrWhiteSpace(propertyName))
+            return defaultValue;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(configJson);
+            if (doc.RootElement.TryGetProperty(propertyName, out var el)
+                && el.TryGetInt32(out var value))
+            {
+                return value;
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return defaultValue;
+    }
+
+    public static double GetDouble(string configJson, string propertyName, double defaultValue)
+    {
+        if (string.IsNullOrWhiteSpace(configJson) || string.IsNullOrWhiteSpace(propertyName))
+            return defaultValue;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(configJson);
+            if (doc.RootElement.TryGetProperty(propertyName, out var el)
+                && el.TryGetDouble(out var value))
+            {
+                return value;
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return defaultValue;
+    }
+
+    /// <summary>Returns raw JSON text of a nested <c>schema</c> object/array, or null.</summary>
+    public static string? GetJsonSchema(string configJson)
+    {
+        if (string.IsNullOrWhiteSpace(configJson))
+            return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(configJson);
+            if (!doc.RootElement.TryGetProperty("schema", out var schema))
+                return null;
+            if (schema.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+                return schema.GetRawText();
+            if (schema.ValueKind == JsonValueKind.String)
+            {
+                var s = schema.GetString();
+                return string.IsNullOrWhiteSpace(s) ? null : s;
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return null;
     }
 }

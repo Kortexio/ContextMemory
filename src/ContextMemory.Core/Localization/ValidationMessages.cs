@@ -69,4 +69,12 @@ public static class ValidationMessages
                 "Rejected: live-data answer without MCP/wiki evidence. Emit tool_calls; do not invent.",
                 "Rejeitado: resposta de dados live sem evidência MCP/wiki. Emite tool_calls; não inventes.")
             : feedback;
+
+    public static string ToolIntentNarration(string feedback, AppRuntimeConfig config) =>
+        string.IsNullOrWhiteSpace(feedback)
+            ? TenantLocale.Select(
+                config.DefaultLanguage,
+                "Rejected: narrated tool intent instead of emitting tool_calls. Call tools now.",
+                "Rejeitado: narraste a intenção de usar tools em vez de emitir tool_calls. Chama as tools agora.")
+            : feedback;
 }

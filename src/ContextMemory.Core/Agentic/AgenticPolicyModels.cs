@@ -145,4 +145,31 @@ public static class AgenticGuardrailKinds
     public const string PreToolUse = "pre-tool-use";
     public const string PostToolUse = "post-tool-use";
     public const string LiveDataEvidence = "live-data-evidence";
+    /// <summary>
+    /// Reject final answers that name internal tools or narrate/ask permission to call them
+    /// instead of emitting tool_calls. End users should only see the result.
+    /// </summary>
+    public const string ToolSurfaceHidden = "tool-surface-hidden";
+
+    // --- LLM Guardrails catalog (image) — default OFF in seed ---
+    public const string InappropriateContent = "inappropriate-content";
+    public const string OffensiveLanguage = "offensive-language";
+    public const string PromptInjection = "prompt-injection";
+    public const string SensitivePii = "sensitive-pii";
+    public const string CompetitorMention = "competitor-mention";
+    public const string PriceQuote = "price-quote";
+    public const string SourceContext = "source-context";
+    public const string Gibberish = "gibberish";
+    public const string SqlQuery = "sql-query";
+    public const string OpenApiResponse = "openapi-response";
+    public const string JsonFormat = "json-format";
+    public const string LogicalFlow = "logical-flow";
+    public const string ResponseQuality = "response-quality";
+    public const string TranslationAccuracy = "translation-accuracy";
+    public const string DuplicateSentence = "duplicate-sentence";
+    public const string Readability = "readability";
+    public const string Relevance = "relevance";
+    public const string PromptAddress = "prompt-address";
+    public const string UrlAvailability = "url-availability";
+    public const string FactCheck = "fact-check";
 }
