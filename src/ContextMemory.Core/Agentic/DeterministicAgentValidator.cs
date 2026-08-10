@@ -98,9 +98,13 @@ public sealed class DeterministicAgentValidator
 
         // Discovery harness tools (tool_describe, skill_*, etc.) must not poison the turn:
         // a failed describe + successful MCP call would otherwise loop forever on RequireZeroExitCode.
+        // Likewise, a failure that was later retried successfully (same tool, later step) must not
+        // keep rejecting the final answer forever: once the model recovers, the earlier failure is
+        // resolved and should no longer block validation.
         var failedSteps = steps
             .Where(s => !s.Success)
             .Where(s => !SessionDiscoveryTools.IsDiscoveryTool(s.ToolName))
+            .Where(s => !HasLaterSuccessfulRetry(steps, s))
             .ToList();
         if (guardrails.RequireZeroExitCode && failedSteps.Count > 0)
         {
@@ -166,5 +170,38 @@ public sealed class DeterministicAgentValidator
         }
 
         return Task.FromResult(ValidationResult.Ok());
+    }
+
+    /// <summary>
+    /// True when the same tool was called again after the given failed step and that later call
+    /// succeeded, meaning the failure was retried and resolved within the same agent turn.
+    /// </summary>
+    private static bool HasLaterSuccessfulRetry(
+        IReadOnlyList<AgentExecutionStep> steps,
+        AgentExecutionStep failedStep)
+    {
+        var failedIndex = -1;
+        for (var i = 0; i < steps.Count; i++)
+        {
+            if (ReferenceEquals(steps[i], failedStep))
+            {
+                failedIndex = i;
+                break;
+            }
+        }
+
+        if (failedIndex < 0)
+            return false;
+
+        for (var i = failedIndex + 1; i < steps.Count; i++)
+        {
+            if (steps[i].Success
+                && string.Equals(steps[i].ToolName, failedStep.ToolName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

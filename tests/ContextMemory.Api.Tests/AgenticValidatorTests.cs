@@ -161,6 +161,49 @@ public sealed class HybridAgentValidatorTests
         Assert.False(result.IsValid);
         Assert.Contains("query_objects", result.FeedbackForModel, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public async Task Deterministic_AllowsAnswer_WhenFailedToolWasLaterRetriedSuccessfully()
+    {
+        // Regression test: wiki_grep failed once, was retried by the model and succeeded on the
+        // next iteration. The earlier failure must not keep rejecting the final answer forever.
+        var request = new AgentValidationRequest
+        {
+            FinalAnswer = "Found 3 matching wiki pages about the topic.",
+            Steps =
+            [
+                new AgentExecutionStep
+                {
+                    Iteration = 1,
+                    ToolName = "wiki_grep",
+                    Arguments = "{\"query\":\"foo\"}",
+                    Success = false,
+                    ExitCode = 1,
+                    Output = "timeout"
+                },
+                new AgentExecutionStep
+                {
+                    Iteration = 2,
+                    ToolName = "wiki_grep",
+                    Arguments = "{\"query\":\"foo\"}",
+                    Success = true,
+                    ExitCode = 0,
+                    Output = "[{page:1},{page:2},{page:3}]"
+                }
+            ],
+            RuntimeConfig = new AppRuntimeConfig
+            {
+                AppId = "test",
+                Agentic = new AgenticConfig
+                {
+                    Guardrails = new AgenticGuardrailsConfig { RequireZeroExitCode = true }
+                }
+            }
+        };
+
+        var result = await _deterministic.ValidateAsync(request);
+        Assert.True(result.IsValid);
+    }
 }
 
 public sealed class HybridAgentValidationIntegrationTests : IClassFixture<AgenticStubWebApplicationFactory>
