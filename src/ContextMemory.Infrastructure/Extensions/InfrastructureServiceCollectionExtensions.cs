@@ -88,12 +88,31 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddTransient<GlobalWikiToolExecutor>();
         services.AddTransient<SessionDiscoveryToolExecutor>();
         services.AddTransient<DelegateTaskToolExecutor>();
+        services.AddTransient<HttpToolsExecutor>();
+        services.AddTransient<VisionToolsExecutor>();
+        services.AddTransient<BrowserToolsExecutor>();
+        services.AddTransient<DocumentToolsExecutor>();
+        services.AddTransient<CanvasToolsExecutor>();
         services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<AcaExecutionToolExecutor>());
         services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<SelfHostedGVisorExecutor>());
         services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<McpToolExecutor>());
         services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<GlobalWikiToolExecutor>());
+        services.AddTransient<IToolExecutor>(sp => sp.GetRequiredService<HttpToolsExecutor>());
         services.AddTransient<ISessionScopedToolExecutor>(sp => sp.GetRequiredService<SessionDiscoveryToolExecutor>());
         services.AddTransient<ISessionScopedToolExecutor>(sp => sp.GetRequiredService<DelegateTaskToolExecutor>());
+        services.AddTransient<ISessionScopedToolExecutor>(sp => sp.GetRequiredService<VisionToolsExecutor>());
+        services.AddTransient<ISessionScopedToolExecutor>(sp => sp.GetRequiredService<BrowserToolsExecutor>());
+        services.AddTransient<ISessionScopedToolExecutor>(sp => sp.GetRequiredService<DocumentToolsExecutor>());
+        services.AddTransient<ISessionScopedToolExecutor>(sp => sp.GetRequiredService<CanvasToolsExecutor>());
+
+        services.AddHttpClient(HttpToolsExecutor.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(2);
+            // Do not follow redirects automatically — we re-validate hosts.
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            AllowAutoRedirect = false
+        });
 
         services.AddSingleton<IMcpToolSelector, McpToolSelector>();
         services.AddSingleton<IMcpToolCatalog, McpToolCatalog>();

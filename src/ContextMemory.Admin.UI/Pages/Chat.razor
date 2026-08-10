@@ -331,6 +331,20 @@
             </div>
 
             <div class="kx-panel mb-3">
+                <div class="kx-panel-head"><h3>Canvas</h3></div>
+                <div class="kx-panel-body p-2">
+                    @if (string.IsNullOrWhiteSpace(ConversationCanvasJson))
+                    {
+                        <p class="small text-muted mb-0">No <code>canvas_write</code> yet. Agent can emit structured JSON for this panel.</p>
+                    }
+                    else
+                    {
+                        <pre class="small mb-0" style="white-space:pre-wrap;max-height:28rem;overflow:auto">@ConversationCanvasJson</pre>
+                    }
+                </div>
+            </div>
+
+            <div class="kx-panel mb-3">
                 <div class="kx-panel-head"><h3>Wiki / discovery</h3></div>
                 <div class="kx-panel-body p-2">
                     @if (ConversationWikiRefs.Count == 0)
@@ -443,6 +457,15 @@
             .SelectMany(ExtractTodoLines)
             .Distinct(StringComparer.Ordinal)
             .ToList();
+
+    private string? ConversationCanvasJson =>
+        _messages
+            .SelectMany(m => m.AgenticSteps)
+            .Where(s => string.Equals(s.ToolName, "canvas_write", StringComparison.OrdinalIgnoreCase))
+            .Select(s => s.Detail ?? s.Label)
+            .LastOrDefault(text =>
+                !string.IsNullOrWhiteSpace(text)
+                && text.TrimStart().StartsWith('{'));
 
     private IReadOnlyList<(string Phase, string Label)> ConversationWikiRefs =>
         _messages

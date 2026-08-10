@@ -130,8 +130,66 @@ public static class OpenAiProtocolMapper
         {
             Role = message.Role ?? "user",
             Content = ExtractTextContent(message.Content),
+            Images = ExtractImages(message.Content),
             ToolCalls = toolCalls
         };
+    }
+
+    /// <summary>Extracts Ollama-style base64 images from OpenAI multimodal content parts.</summary>
+    public static List<string>? ExtractImages(JsonElement? content)
+    {
+        if (content is null || content.Value.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var images = new List<string>();
+        foreach (var part in content.Value.EnumerateArray())
+        {
+            if (part.ValueKind != JsonValueKind.Object)
+                continue;
+            if (!part.TryGetProperty("type", out var type)
+                || !string.Equals(type.GetString(), "image_url", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!part.TryGetProperty("image_url", out var imageUrlEl))
+                continue;
+
+            string? raw = null;
+            if (imageUrlEl.ValueKind == JsonValueKind.String)
+                raw = imageUrlEl.GetString();
+            else if (imageUrlEl.ValueKind == JsonValueKind.Object
+                     && imageUrlEl.TryGetProperty("url", out var urlEl))
+                raw = urlEl.GetString();
+
+            if (string.IsNullOrWhiteSpace(raw))
+                continue;
+
+            var normalized = NormalizeImagePayload(raw);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                images.Add(normalized);
+        }
+
+        return images.Count == 0 ? null : images;
+    }
+
+    internal static string? NormalizeImagePayload(string raw)
+    {
+        raw = raw.Trim();
+        const string dataPrefix = "data:";
+        if (raw.StartsWith(dataPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            var comma = raw.IndexOf(',');
+            if (comma < 0 || comma == raw.Length - 1)
+                return null;
+            return raw[(comma + 1)..].Trim();
+        }
+
+        // Remote URLs: leave as-is for backends that fetch; Ollama typically wants base64.
+        // Keep URL so adapters / vision tools can download when allowlisted.
+        if (raw.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || raw.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return raw;
+
+        return raw;
     }
 
     private static string ExtractTextContent(JsonElement? content)

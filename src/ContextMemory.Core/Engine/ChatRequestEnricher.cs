@@ -1,4 +1,5 @@
 using ContextMemory.Core.Agentic;
+using ContextMemory.Core.Agentic.Prompts;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.GlobalWiki;
@@ -57,6 +58,26 @@ public sealed class ChatRequestEnricher : IChatRequestEnricher
 
         var snapshot = await _sessionStore.LoadAsync(appId, userId, sessionId, cancellationToken).ConfigureAwait(false);
         var lastUser = request.GetLastUserMessage();
+
+        // Drop inbound images when the tenant model cannot see them.
+        if (!LlmCapabilitiesResolver.ResolveSupportsVision(runtimeConfig)
+            && request.Messages.Any(m => m.Images is { Count: > 0 }))
+        {
+            request = request with
+            {
+                Messages = request.Messages.Select(m =>
+                    m.Images is { Count: > 0 }
+                        ? m with
+                        {
+                            Images = null,
+                            Content = string.IsNullOrWhiteSpace(m.Content)
+                                ? "[Image omitted: current model does not support vision.]"
+                                : m.Content + "\n\n[Image omitted: current model does not support vision.]"
+                        }
+                        : m).ToList()
+            };
+            lastUser = request.GetLastUserMessage();
+        }
 
         var webEnrichment = await _webSearchEnricher
             .TryEnrichAsync(appId, lastUser?.Content, snapshot, runtimeConfig.WebSearch, runtimeConfig.DefaultLanguage, cancellationToken)

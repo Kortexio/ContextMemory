@@ -33,7 +33,24 @@ public record AgenticConfig
 
     public bool HasIntegrationTools => Tools.Integrations.Count > 0;
 
-    public bool HasAnyTools => HasExecutionTools || HasIntegrationTools;
+    public bool HasHttpTools => Tools.Http.Enabled;
+
+    public bool HasVisionTools => Tools.Vision.Enabled;
+
+    public bool HasBrowserTools => Tools.Browser.Enabled;
+
+    public bool HasDocumentTools => Tools.Documents.Enabled;
+
+    public bool HasCanvasTools => Tools.Canvas.Enabled;
+
+    public bool HasAnyTools =>
+        HasExecutionTools
+        || HasIntegrationTools
+        || HasHttpTools
+        || HasVisionTools
+        || HasBrowserTools
+        || HasDocumentTools
+        || HasCanvasTools;
 
     /// <summary>
     /// Effective max iterations when no runtime config is available for profile resolution.
@@ -53,6 +70,98 @@ public record AgenticToolsConfig
 
     [JsonPropertyName("maxMcpToolsPerTurn")]
     public int MaxMcpToolsPerTurn { get; init; } = 12;
+
+    [JsonPropertyName("http")]
+    public AgenticHttpToolsConfig Http { get; init; } = new();
+
+    [JsonPropertyName("vision")]
+    public AgenticVisionToolsConfig Vision { get; init; } = new();
+
+    [JsonPropertyName("browser")]
+    public AgenticBrowserToolsConfig Browser { get; init; } = new();
+
+    [JsonPropertyName("documents")]
+    public AgenticDocumentsToolsConfig Documents { get; init; } = new();
+
+    [JsonPropertyName("canvas")]
+    public AgenticCanvasToolsConfig Canvas { get; init; } = new();
+}
+
+/// <summary>Built-in HTTP tools: fetch_url, http_request, web_search.</summary>
+public record AgenticHttpToolsConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; init; }
+
+    /// <summary>Fail-closed: when enabled with an empty list, all hosts are blocked.</summary>
+    [JsonPropertyName("allowedHosts")]
+    public List<string> AllowedHosts { get; init; } = [];
+
+    [JsonPropertyName("timeoutSeconds")]
+    public int TimeoutSeconds { get; init; } = 30;
+
+    [JsonPropertyName("maxResponseChars")]
+    public int MaxResponseChars { get; init; } = 50_000;
+
+    [JsonPropertyName("allowHttpRequest")]
+    public bool AllowHttpRequest { get; init; } = true;
+
+    [JsonPropertyName("allowWebSearchTool")]
+    public bool AllowWebSearchTool { get; init; } = true;
+}
+
+/// <summary>Vision tools are listed only when the model SupportsVision as well.</summary>
+public record AgenticVisionToolsConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; init; }
+
+    /// <summary>Force-enable vision tools even if model-name heuristics say no.</summary>
+    [JsonPropertyName("forceEnable")]
+    public bool ForceEnable { get; init; }
+
+    [JsonPropertyName("allowedHosts")]
+    public List<string> AllowedHosts { get; init; } = [];
+}
+
+public record AgenticBrowserToolsConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; init; }
+
+    [JsonPropertyName("allowedHosts")]
+    public List<string> AllowedHosts { get; init; } = [];
+
+    [JsonPropertyName("headless")]
+    public bool Headless { get; init; } = true;
+
+    [JsonPropertyName("timeoutSeconds")]
+    public int TimeoutSeconds { get; init; } = 60;
+
+    /// <summary>Sandbox/self-hosted endpoint that exposes Playwright browser APIs. Empty = first self-hosted-sandbox.</summary>
+    [JsonPropertyName("sandboxEndpoint")]
+    public string? SandboxEndpoint { get; init; }
+}
+
+public record AgenticDocumentsToolsConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; init; }
+
+    [JsonPropertyName("maxBytes")]
+    public int MaxBytes { get; init; } = 10_000_000;
+
+    [JsonPropertyName("persistToWiki")]
+    public bool PersistToWiki { get; init; }
+
+    [JsonPropertyName("maxExtractChars")]
+    public int MaxExtractChars { get; init; } = 100_000;
+}
+
+public record AgenticCanvasToolsConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; init; } = true;
 }
 
 public record ExecutionToolConfig

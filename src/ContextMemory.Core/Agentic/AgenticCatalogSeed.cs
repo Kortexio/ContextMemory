@@ -44,8 +44,8 @@ public static class AgenticCatalogSeed
                 """
                 ## Prefer MCP over ad-hoc HTTP
                 - When an MCP integration is configured (e.g. Zuora), you MUST use MCP tools (`server__tool`, especially `…__zuora_graphql`).
-                - Do NOT call Zuora (or other MCP-backed APIs) via `python_execute` / `requests` / hand-rolled OAuth or `/api/v1/*`.
-                - Do NOT ask the user for client id, client secret, or access tokens when MCP credentials are already configured.
+                - Do NOT call Zuora (or other MCP-backed APIs) via `python_execute` / `requests` / `http_request` / hand-rolled OAuth or `/api/v1/*`.
+                - Use `fetch_url` / `web_search` only for allowlisted public HTTP and open-web freshness — never as a Zuora substitute.
                 - If MCP fails, report the MCP error. Do not fall back to inventing REST scripts or placeholder credentials.
                 - Reply in the user's language.
                 """),

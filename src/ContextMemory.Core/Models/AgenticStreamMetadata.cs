@@ -139,10 +139,12 @@ public record AgenticStepSummary
     {
         var summary = step.Summary;
         if (string.IsNullOrWhiteSpace(summary)
-            && string.Equals(step.ToolName, "todo_write", StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(step.ToolName, "todo_write", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(step.ToolName, "canvas_write", StringComparison.OrdinalIgnoreCase))
             && !string.IsNullOrWhiteSpace(step.Output))
         {
-            summary = step.Output.Length > 400 ? step.Output[..400] + "…" : step.Output;
+            var max = string.Equals(step.ToolName, "canvas_write", StringComparison.OrdinalIgnoreCase) ? 20_000 : 400;
+            summary = step.Output.Length > max ? step.Output[..max] + "…" : step.Output;
         }
 
         return new()

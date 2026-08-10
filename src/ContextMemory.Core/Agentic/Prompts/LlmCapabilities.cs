@@ -23,6 +23,7 @@ public sealed record LlmCapabilities(
     bool SupportsOpenAiJsonFormat,
     bool InlineEvidenceRules,
     bool PreferSkillDiscovery,
+    bool SupportsVision,
     int MaxMcpToolsHint,
     string? DefaultToolChoice);
 
@@ -42,6 +43,7 @@ public static partial class LlmCapabilitiesResolver
         // (llama3.2, mistral, granite, ...) still use native tool_calls and must not regress.
         var isOllamaChatApi = backend is "ollama" or "ollama-native";
         var clientSideTools = isOllamaChatApi && profile == AgenticPromptProfile.Qwen;
+        var supportsVision = ResolveSupportsVision(config);
 
         return new LlmCapabilities(
             HarnessMode: mode,
@@ -55,9 +57,45 @@ public static partial class LlmCapabilitiesResolver
                 || profile is AgenticPromptProfile.OpenAi or AgenticPromptProfile.ComposerLike,
             InlineEvidenceRules: weak,
             PreferSkillDiscovery: !weak,
+            SupportsVision: supportsVision,
             // Catalog size is owned by tenant maxMcpToolsPerTurn — never silently cap Weak models.
             MaxMcpToolsHint: int.MaxValue,
             DefaultToolChoice: "auto");
+    }
+
+    public static bool ResolveSupportsVision(AppRuntimeConfig config)
+    {
+        if (config.Agentic.Tools.Vision.ForceEnable)
+            return true;
+
+        var model = config.LlmModel ?? string.Empty;
+        return LooksLikeVisionModel(model);
+    }
+
+    public static bool LooksLikeVisionModel(string model)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+            return false;
+
+        return ContainsIgnore(
+            model,
+            "llava",
+            "vision",
+            "gpt-4o",
+            "gpt-4.1",
+            "gpt-4-turbo",
+            "gpt-5",
+            "claude-3",
+            "claude-sonnet-4",
+            "claude-opus-4",
+            "gemini",
+            "qwen2-vl",
+            "qwen2.5-vl",
+            "qwen3-vl",
+            "qwen-vl",
+            "minicpm-v",
+            "moondream",
+            "bakllava");
     }
 
     /// <summary>
