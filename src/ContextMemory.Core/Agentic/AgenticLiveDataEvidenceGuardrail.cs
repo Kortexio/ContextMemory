@@ -7,6 +7,8 @@ namespace ContextMemory.Core.Agentic;
 /// <summary>
 /// Rejects final answers about live external records (accounts, subscriptions, invoices, tickets, …)
 /// when no successful MCP/wiki tool evidence exists for the turn.
+/// After evidence tools were attempted, allows honest "not found / tool failed" disclosures
+/// so the loop cannot reject forever when data is missing.
 /// </summary>
 public static partial class AgenticLiveDataEvidenceGuardrail
 {
@@ -55,6 +57,31 @@ public static partial class AgenticLiveDataEvidenceGuardrail
         "wiki_read"
     ];
 
+    private static readonly string[] HonestUnknownMarkers =
+    [
+        "não encontrei",
+        "nao encontrei",
+        "não foi possível",
+        "nao foi possivel",
+        "sem resultados",
+        "sem evidência",
+        "sem evidencia",
+        "não há dados",
+        "nao ha dados",
+        "not found",
+        "no results",
+        "no evidence",
+        "could not find",
+        "couldn't find",
+        "unable to find",
+        "no matching",
+        "empty result",
+        "tool failed",
+        "tool error",
+        "falhou",
+        "failed"
+    ];
+
     public static bool TryGetRejectionFeedback(
         string? userObjective,
         string finalAnswer,
@@ -72,10 +99,19 @@ public static partial class AgenticLiveDataEvidenceGuardrail
         if (HasSuccessfulEvidence(steps))
             return false;
 
+        // Tools were tried (and failed / returned nothing useful to the model): allow an honest disclosure
+        // instead of looping forever on RequireEvidence.
+        if (HasEvidenceAttempt(steps) && LooksLikeHonestUnknown(finalAnswer))
+            return false;
+
         feedback = TenantLocale.Select(
             runtimeConfig.DefaultLanguage,
-            "Rejected: live-data / wiki question without successful MCP/wiki evidence. Emit tool_calls (e.g. wiki_search or query_objects); do not invent IDs, tickets, or statuses.",
-            "Rejeitado: pergunta de dados live/wiki sem evidência MCP/wiki bem-sucedida. Emite tool_calls (ex. wiki_search ou query_objects); não inventes IDs, tickets nem estados.");
+            "Rejected: live-data/wiki question without successful MCP/wiki evidence. "
+            + "Emit tool_calls now — prefer wiki_search/wiki_grep for tickets/docs, or MCP query_objects for Zuora. "
+            + "Do not invent IDs or statuses. Example: {\"tool\":\"wiki_search\",\"arguments\":{\"query\":\"PAC-759\"}}",
+            "Rejeitado: pergunta live/wiki sem evidência MCP/wiki bem-sucedida. "
+            + "Emite tool_calls agora — prefere wiki_search/wiki_grep para tickets/docs, ou MCP query_objects para Zuora. "
+            + "Não inventes IDs nem estados. Exemplo: {\"tool\":\"wiki_search\",\"arguments\":{\"query\":\"PAC-759\"}}");
         return true;
     }
 
@@ -111,24 +147,31 @@ public static partial class AgenticLiveDataEvidenceGuardrail
             && i.IsConfigured);
     }
 
-    private static bool HasSuccessfulEvidence(IReadOnlyList<AgentExecutionStep> steps)
+    private static bool HasSuccessfulEvidence(IReadOnlyList<AgentExecutionStep> steps) =>
+        steps.Any(s => s.Success && IsEvidenceTool(s.ToolName));
+
+    private static bool HasEvidenceAttempt(IReadOnlyList<AgentExecutionStep> steps) =>
+        steps.Any(s => IsEvidenceTool(s.ToolName));
+
+    private static bool IsEvidenceTool(string? toolName)
     {
-        foreach (var step in steps)
+        if (string.IsNullOrWhiteSpace(toolName) || SessionDiscoveryTools.IsDiscoveryTool(toolName))
+            return false;
+
+        foreach (var marker in EvidenceToolMarkers)
         {
-            if (!step.Success)
-                continue;
-            if (SessionDiscoveryTools.IsDiscoveryTool(step.ToolName))
-                continue;
+            if (toolName.Contains(marker, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
 
-            var name = step.ToolName ?? string.Empty;
-            foreach (var marker in EvidenceToolMarkers)
-            {
-                if (name.Contains(marker, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
+        return toolName.Contains("__", StringComparison.Ordinal);
+    }
 
-            // Any successful MCP-qualified tool (server__tool).
-            if (name.Contains("__", StringComparison.Ordinal))
+    private static bool LooksLikeHonestUnknown(string finalAnswer)
+    {
+        foreach (var marker in HonestUnknownMarkers)
+        {
+            if (finalAnswer.Contains(marker, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
 

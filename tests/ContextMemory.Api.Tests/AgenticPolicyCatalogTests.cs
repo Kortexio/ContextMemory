@@ -15,7 +15,20 @@ public sealed class AgenticPolicyPackResolverTests
         Assert.Equal(15, AgenticCatalogSeed.Skills.Count);
         Assert.Equal(28, AgenticCatalogSeed.Guardrails.Count);
         Assert.All(AgenticCatalogSeed.Skills, s => Assert.True(s.IsDefaultEnabled, s.Id));
-        Assert.All(AgenticCatalogSeed.Guardrails, g => Assert.True(g.IsDefaultEnabled, g.Id));
+        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
+            g.Id == "json-format-validator" && !g.IsDefaultEnabled);
+        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
+            g.Id == "openapi-response-validator" && !g.IsDefaultEnabled);
+        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
+            g.Id == "url-availability" && !g.IsDefaultEnabled);
+        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
+            g.Id == "translation-accuracy" && !g.IsDefaultEnabled);
+        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
+            g.Id == "relevance" && !g.IsDefaultEnabled);
+        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
+            g.Id == "response-quality" && !g.IsDefaultEnabled);
+        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
+            g.Id == "live-data-evidence-required" && g.IsDefaultEnabled);
         Assert.Contains(AgenticCatalogSeed.Skills, s =>
             s.Id == "rule-always-evidence" && s.Activation == AgenticSkillActivation.AlwaysOn);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
