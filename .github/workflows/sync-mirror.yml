@@ -32,6 +32,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Avoid persisting GITHUB_TOKEN in http.*.extraheader — it overrides
+          # any PAT embedded in a remote URL and causes 403 as the source org/bot.
+          persist-credentials: false
 
       - name: Mirror to peer
         if: steps.peer.outputs.skip != 'true'
@@ -45,11 +48,22 @@ jobs:
             exit 0
           fi
 
-          # checkout persists GITHUB_TOKEN in http.extraheader; clear it so PEER_TOKEN is used
-          git config --local --unset-all http.https://github.com/.extraheader || true
+          # Show which account the secret authenticates as (no token leakage).
+          TOKEN_USER="$(curl -sS -H "Authorization: Bearer ${PEER_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/user | jq -r '.login // empty')"
+          echo "PEER_SYNC_TOKEN identity: ${TOKEN_USER:-unknown-or-not-a-user-token}"
+
+          # Strip any leftover Authorization headers from checkout / runner config.
+          git config --local --unset-all "http.https://github.com/.extraheader" || true
+          git config --local --unset-all http.extraheader || true
+
+          # Prefer Authorization header with PEER_TOKEN over URL-embedded creds.
+          BASIC="$(printf 'x-access-token:%s' "${PEER_TOKEN}" | base64 -w 0)"
+          git config --local "http.https://github.com/.extraheader" "AUTHORIZATION: basic ${BASIC}"
 
           git remote remove peer 2>/dev/null || true
-          git remote add peer "https://x-access-token:${PEER_TOKEN}@github.com/${PEER_REPO}.git"
+          git remote add peer "https://github.com/${PEER_REPO}.git"
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             git push peer --all
