@@ -14,9 +14,8 @@ public sealed class AgenticPolicyPackResolverTests
     {
         Assert.Equal(15, AgenticCatalogSeed.Skills.Count);
         Assert.Equal(28, AgenticCatalogSeed.Guardrails.Count);
-        Assert.Contains(AgenticCatalogSeed.Skills, s => s.Id == "anti-hallucination-web" && s.IsDefaultEnabled);
-        Assert.Contains(AgenticCatalogSeed.Skills, s => s.Id == "strict-no-speculation" && !s.IsDefaultEnabled);
-        Assert.Contains(AgenticCatalogSeed.Skills, s => s.Id == "zuora-graphql-discover-first" && !s.IsDefaultEnabled);
+        Assert.All(AgenticCatalogSeed.Skills, s => Assert.True(s.IsDefaultEnabled, s.Id));
+        Assert.All(AgenticCatalogSeed.Guardrails, g => Assert.True(g.IsDefaultEnabled, g.Id));
         Assert.Contains(AgenticCatalogSeed.Skills, s =>
             s.Id == "rule-always-evidence" && s.Activation == AgenticSkillActivation.AlwaysOn);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
@@ -24,11 +23,11 @@ public sealed class AgenticPolicyPackResolverTests
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
             g.Id == "live-data-evidence-required" && g.Kind == AgenticGuardrailKinds.LiveDataEvidence);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
-            g.Id == "tool-surface-hidden" && g.Kind == AgenticGuardrailKinds.ToolSurfaceHidden && g.IsDefaultEnabled);
+            g.Id == "tool-surface-hidden" && g.Kind == AgenticGuardrailKinds.ToolSurfaceHidden);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
-            g.Id == "prompt-injection" && g.Kind == AgenticGuardrailKinds.PromptInjection && !g.IsDefaultEnabled);
+            g.Id == "prompt-injection" && g.Kind == AgenticGuardrailKinds.PromptInjection);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
-            g.Id == "fact-check" && g.Kind == AgenticGuardrailKinds.FactCheck && !g.IsDefaultEnabled);
+            g.Id == "fact-check" && g.Kind == AgenticGuardrailKinds.FactCheck);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g => g.Kind == AgenticGuardrailKinds.PostToolUse);
     }
 
@@ -62,10 +61,13 @@ public sealed class AgenticPolicyPackResolverTests
 
         Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "anti-hallucination-web");
         Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "sandbox-facts-selfhosted");
-        Assert.DoesNotContain(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "strict-no-speculation");
+        Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "strict-no-speculation");
+        Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "zuora-graphql-discover-first");
         Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.UrlFetch));
         Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.SandboxClaim));
         Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.ToolSurfaceHidden));
+        Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.PromptInjection));
+        Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.FactCheck));
     }
 
     [Fact]
