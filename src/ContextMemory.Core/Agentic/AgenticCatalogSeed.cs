@@ -265,9 +265,9 @@ public static class AgenticCatalogSeed
                 {
                     kind = AgenticGuardrailKinds.LiveDataEvidence,
                     feedbackEn =
-                        "Rejected: live-data question without successful MCP/wiki evidence. Emit tool_calls (e.g. query_objects); do not invent IDs or statuses.",
+                        "Rejected: live-data/wiki question without successful MCP/wiki evidence. Emit tool_calls now — prefer wiki_search for tickets/docs or query_objects for Zuora. Example: {\"tool\":\"wiki_search\",\"arguments\":{\"query\":\"PAC-759\"}}",
                     feedbackPt =
-                        "Rejeitado: pergunta de dados live sem evidência MCP/wiki bem-sucedida. Emite tool_calls (ex. query_objects); não inventes IDs nem estados."
+                        "Rejeitado: pergunta live/wiki sem evidência MCP/wiki. Emite tool_calls agora — prefere wiki_search para tickets/docs ou query_objects para Zuora. Exemplo: {\"tool\":\"wiki_search\",\"arguments\":{\"query\":\"PAC-759\"}}"
                 }),
                 IsSystem = true,
                 IsDefaultEnabled = true,
@@ -417,31 +417,31 @@ public static class AgenticCatalogSeed
                 AgenticGuardrailKinds.OpenApiResponse, 190,
                 "Rejected: answer does not match the configured response schema.",
                 "Rejeitado: a resposta não cumpre o schema configurado.",
-                new { }),
+                new { }, defaultEnabled: false),
             Guardrail(now, "json-format-validator", "JSON format validator",
                 "Require the final answer to be parseable JSON (optional schema).",
                 AgenticGuardrailKinds.JsonFormat, 200,
                 "Rejected: final answer must be valid JSON.",
                 "Rejeitado: a resposta final tem de ser JSON válido.",
-                new { }),
+                new { }, defaultEnabled: false),
             Guardrail(now, "logical-flow", "Logical flow checker",
                 "LLM-judge: evaluate reasoning coherence of the final answer.",
                 AgenticGuardrailKinds.LogicalFlow, 210,
                 "Rejected: answer fails logical-flow criteria.",
                 "Rejeitado: a resposta falha critérios de fluxo lógico.",
-                new { }),
+                new { }, defaultEnabled: false),
             Guardrail(now, "response-quality", "Response quality grader",
                 "LLM-judge: score overall answer quality.",
                 AgenticGuardrailKinds.ResponseQuality, 220,
                 "Rejected: answer quality below tenant standard.",
                 "Rejeitado: qualidade da resposta abaixo do padrão do tenant.",
-                new { }),
+                new { }, defaultEnabled: false),
             Guardrail(now, "translation-accuracy", "Translation accuracy checker",
                 "LLM-judge: when the objective asks for translation, verify accuracy.",
                 AgenticGuardrailKinds.TranslationAccuracy, 230,
                 "Rejected: translation accuracy check failed.",
                 "Rejeitado: verificação de precisão da tradução falhou.",
-                new { }),
+                new { }, defaultEnabled: false),
             Guardrail(now, "duplicate-sentence", "Duplicate sentence eliminator",
                 "Reject answers with repeated consecutive / near-duplicate sentences.",
                 AgenticGuardrailKinds.DuplicateSentence, 240,
@@ -453,13 +453,13 @@ public static class AgenticCatalogSeed
                 AgenticGuardrailKinds.Readability, 250,
                 "Rejected: readability level does not match the configured target.",
                 "Rejeitado: o nível de legibilidade não corresponde ao alvo configurado.",
-                new { targetLevel = "clear" }),
+                new { targetLevel = "clear" }, defaultEnabled: false),
             Guardrail(now, "relevance", "Relevance validator",
                 "Reject answers with poor lexical overlap vs the user objective.",
                 AgenticGuardrailKinds.Relevance, 260,
                 "Rejected: answer is not relevant to the user objective. Address the question directly.",
                 "Rejeitado: a resposta não é relevante para o objetivo. Responde directamente à pergunta.",
-                new { minOverlap = 0.08 }),
+                new { minOverlap = 0.08 }, defaultEnabled: false),
             Guardrail(now, "prompt-address", "Prompt address confirmation",
                 "Require Jira keys / enumerated items from the objective to appear in the answer.",
                 AgenticGuardrailKinds.PromptAddress, 270,
@@ -471,7 +471,7 @@ public static class AgenticCatalogSeed
                 AgenticGuardrailKinds.UrlAvailability, 280,
                 "Rejected: one or more URLs in the answer are unreachable. Fix or remove dead links.",
                 "Rejeitado: um ou mais URLs na resposta estão inacessíveis. Corrige ou remove links mortos.",
-                new { timeoutMs = 3000 }),
+                new { timeoutMs = 3000 }, defaultEnabled: false),
             Guardrail(now, "fact-check", "Fact-check validator",
                 "LLM-judge plus ID grounding against tool evidence.",
                 AgenticGuardrailKinds.FactCheck, 290,
@@ -490,7 +490,8 @@ public static class AgenticCatalogSeed
         int sortOrder,
         string feedbackEn,
         string feedbackPt,
-        object extraConfig)
+        object extraConfig,
+        bool defaultEnabled = true)
     {
         var dict = new Dictionary<string, object?>
         {
@@ -510,7 +511,7 @@ public static class AgenticCatalogSeed
             Kind = kind,
             ConfigJson = JsonSerializer.Serialize(dict),
             IsSystem = true,
-            IsDefaultEnabled = true,
+            IsDefaultEnabled = defaultEnabled,
             SortOrder = sortOrder,
             UpdatedAt = now
         };

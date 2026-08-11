@@ -29,6 +29,19 @@ public sealed class DeterministicAgentValidator
 
         if (string.IsNullOrWhiteSpace(finalAnswer))
         {
+            if (AgenticLiveDataEvidenceGuardrail.IsLiveDataQuestion(
+                    request.UserObjective, request.RuntimeConfig)
+                && policy.HasKind(AgenticGuardrailKinds.LiveDataEvidence))
+            {
+                var configured = AgenticGuardrailConfigReader.GetFeedback(
+                    policy.FindByKind(AgenticGuardrailKinds.LiveDataEvidence)?.ConfigJson ?? "{}",
+                    request.RuntimeConfig.DefaultLanguage);
+                return ValidationResult.Reject(
+                    ValidationMessages.LiveDataWithoutEvidence(
+                        configured ?? "Rejected: emit tool_calls (wiki_search / query_objects) before answering.",
+                        request.RuntimeConfig));
+            }
+
             return ValidationResult.Reject(
                 ValidationMessages.EmptyFinalAnswer(request.RuntimeConfig));
         }
@@ -74,13 +87,9 @@ public sealed class DeterministicAgentValidator
                 request.RuntimeConfig,
                 out var liveFeedback))
         {
-            var configured = AgenticGuardrailConfigReader.GetFeedback(
-                policy.FindByKind(AgenticGuardrailKinds.LiveDataEvidence)?.ConfigJson ?? "{}",
-                request.RuntimeConfig.DefaultLanguage);
+            // Prefer code feedback (includes wiki_search example for client-side models).
             return ValidationResult.Reject(
-                ValidationMessages.LiveDataWithoutEvidence(
-                    configured ?? liveFeedback,
-                    request.RuntimeConfig));
+                ValidationMessages.LiveDataWithoutEvidence(liveFeedback, request.RuntimeConfig));
         }
 
         if (policy.HasKind(AgenticGuardrailKinds.ToolSurfaceHidden)

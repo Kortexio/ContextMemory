@@ -102,6 +102,60 @@ public sealed class AgenticLiveDataEvidenceGuardrailTests
         Assert.False(ok);
     }
 
+    [Fact]
+    public void Accepts_HonestUnknown_AfterFailedEvidenceTool()
+    {
+        var config = ConfigWithWiki();
+        var steps = new List<AgentExecutionStep>
+        {
+            new()
+            {
+                Iteration = 1,
+                ToolName = "wiki_search",
+                Arguments = """{"query":"PAC-759"}""",
+                Output = "timeout",
+                Success = false,
+                ExitCode = 1
+            }
+        };
+
+        var ok = AgenticLiveDataEvidenceGuardrail.TryGetRejectionFeedback(
+            "busque os tickets PAC-759",
+            "Não encontrei o ticket PAC-759 na wiki; a pesquisa falhou.",
+            steps,
+            config,
+            out _);
+
+        Assert.False(ok);
+    }
+
+    [Fact]
+    public void StillRejects_InventedAnswer_AfterFailedEvidenceTool()
+    {
+        var config = ConfigWithWiki();
+        var steps = new List<AgentExecutionStep>
+        {
+            new()
+            {
+                Iteration = 1,
+                ToolName = "wiki_search",
+                Arguments = """{"query":"PAC-759"}""",
+                Output = "timeout",
+                Success = false,
+                ExitCode = 1
+            }
+        };
+
+        var ok = AgenticLiveDataEvidenceGuardrail.TryGetRejectionFeedback(
+            "busque os tickets PAC-759",
+            "PAC-759 is about billing reconciliation and was closed yesterday.",
+            steps,
+            config,
+            out _);
+
+        Assert.True(ok);
+    }
+
     private static AppRuntimeConfig ConfigWithMcp() =>
         new()
         {
