@@ -14,11 +14,15 @@ public static class AgenticToolDescriptionBuilder
             return TenantLocale.Select(
                 lang,
                 "Execute a shell command in the self-hosted sandbox. "
-                + "Outbound HTTP(S) is allowed. Working directory is ephemeral (deleted after the call). "
-                + "Print results to stdout — do not assume files persist.",
+                + "Outbound HTTP(S) is allowed. Preinstalled CLIs include git and Azure CLI (az). "
+                + "Prefer MCP tools (azure-monitor__*, github) when configured; use az/git as fallback. "
+                + "Working directory is ephemeral (deleted after the call). "
+                + "Print results to stdout — do not assume files persist. Never echo secrets.",
                 "Executa um comando shell no sandbox self-hosted. "
-                + "Tem acesso a HTTP(S) externo. O diretório de trabalho é efémero (apagado após a chamada). "
-                + "Imprime resultados em stdout — não assumes que ficheiros persistem.");
+                + "Tem acesso a HTTP(S) externo. CLIs pré-instalados: git e Azure CLI (az). "
+                + "Prefere tools MCP (azure-monitor__*, github) quando existirem; usa az/git como fallback. "
+                + "O diretório de trabalho é efémero (apagado após a chamada). "
+                + "Imprime resultados em stdout — não assumes que ficheiros persistem. Nunca echoes secrets.");
         }
 
         return TenantLocale.Select(

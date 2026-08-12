@@ -172,4 +172,9 @@ public static class AgenticGuardrailKinds
     public const string PromptAddress = "prompt-address";
     public const string UrlAvailability = "url-availability";
     public const string FactCheck = "fact-check";
+    /// <summary>
+    /// Reject answers that cite specific numeric values (prices, dates, percentages, counts)
+    /// without those values appearing in successful tool evidence.
+    /// </summary>
+    public const string NumericGrounding = "numeric-grounding";
 }

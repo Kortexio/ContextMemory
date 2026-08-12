@@ -5,7 +5,7 @@ FROM node:22-bookworm-slim
 LABEL org.opencontainers.image.source="https://github.com/Kortexio/ContextMemory"
 LABEL org.opencontainers.image.description="ContextMemory local-dev code sandbox"
 
-# System deps: Python, jq, and Chromium dependencies for Playwright.
+# System deps: Python, jq, git, Azure CLI (ops triage fallback), and Chromium for Playwright.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
        python3 \
@@ -14,6 +14,10 @@ RUN apt-get update \
        ca-certificates \
        jq \
        git \
+       apt-transport-https \
+       lsb-release \
+       gnupg \
+  && curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
   && pip3 install --no-cache-dir --break-system-packages \
        requests \
        httpx \
@@ -33,7 +37,9 @@ RUN apt-get update \
   && useradd -m -u 10001 sandboxuser \
   && mkdir -p /home/sandboxuser/.cache \
   && cp -a /root/.cache/ms-playwright /home/sandboxuser/.cache/ms-playwright \
-  && chown -R sandboxuser:sandboxuser /home/sandboxuser
+  && chown -R sandboxuser:sandboxuser /home/sandboxuser \
+  && az version >/dev/null \
+  && git --version >/dev/null
 
 WORKDIR /app
 COPY sandbox-runtime/package.json ./

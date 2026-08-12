@@ -236,7 +236,9 @@ Clients keep sending a normal chat body; they do not implement retrieval or orch
   - Per-app MCP catalog with **HTTP** and **stdio** transports (`mcp-runtime` hosts stdio packages under `/opt/mcps`)
   - Qualified naming `server__tool`; rebuild with `POST /apps/{appId}/mcp/catalog/rebuild`
   - Lazy schemas in `tools[]`; `tool_describe` for full input schema
-  - Credentials via `POST /apps/{appId}/mcp/credentials/{name}`; test with `POST .../mcp/test/{name}`
+  - Credentials via `POST /apps/{appId}/mcp/credentials/{name}` (`Env` map for `AZURE_*` / `GITHUB_TOKEN`); test with `POST .../mcp/test/{name}`
+  - **Cursor IDE MCP ids are not inbound** — see [inbound-mcp-guide.md](inbound-mcp-guide.md)
+  - Sandbox fallback: same credential `Env` is injected into `shell_execute` / `python_execute` / `node_execute` for integrations named `azure-monitor`, `github`, or `git`
   - `mcp_servers` pass-through for backends that support it natively
   - Authentication: bearer, api-key, or **per-tenant OAuth client-credentials**
 - **Subagents** — `delegate_task` runs a depth-1 child session with an isolated working set; returns summary + `artifactId`.
@@ -400,6 +402,8 @@ Configure via the Admin UI (`/apps/{appId}/config` on `:5200` — checkboxes und
 | Skill | `transparent-failures` | ✅ | Report tool errors honestly |
 | Skill | `concise-professional` | ✅ | Direct answers, less filler |
 | Skill | `strict-no-speculation` | ❌ | Opt-in: refuse claims without evidence |
+| Skill | `small-model-abstention` | ❌ | Opt-in: prefer abstention over invented numbers/dates on weak models |
+| Skill | `ops-triage-evidence-first` | ❌ | Opt-in: MCP-first logs/code evidence, then sandbox `az`/`git` fallback (see [inbound-mcp-guide](inbound-mcp-guide.md)) |
 | Skill | `step-by-step-reasoning-brief` | ❌ | Opt-in: short plan before tools |
 | Skill | `zuora-graphql-discover-first` | ❌ | Opt-in: discover Zuora GraphQL schema before queries |
 | Rule | `rule-always-evidence` | ✅ | `always_on` — prefer tools/wiki over speculation |
@@ -410,6 +414,7 @@ Configure via the Admin UI (`/apps/{appId}/config` on `:5200` — checkboxes und
 | Guardrail | `block-credential-leak` | ✅ | Reject secret-like substrings in the answer |
 | Guardrail | `pre-tool-deny-rm-rf` | ❌ | Sample `pre-tool-use` hook (opt-in) |
 | Guardrail | `post-tool-redact-secrets` | ✅ | `post-tool-use` redact of secret-like patterns |
+| Guardrail | `numeric-grounding` | ❌ | Opt-in: reject prices/dates/%/counts not in tool evidence (see [small-model-guide](small-model-guide.md)) |
 
 Custom skills (non-system) can be created, imported, and exported; system seeds are updated in place on catalog seed but remain selectable per app.
 ---

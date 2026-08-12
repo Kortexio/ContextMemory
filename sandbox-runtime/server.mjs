@@ -153,15 +153,17 @@ function truncate(text) {
 /**
  * @param {string} command
  * @param {string[]} args
- * @param {{ cwd?: string, timeoutMs?: number, input?: string }} opts
+ * @param {{ cwd?: string, timeoutMs?: number, input?: string, env?: Record<string, string> }} opts
  */
 function runProcess(command, args, opts = {}) {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const extraEnv = opts.env && typeof opts.env === "object" ? opts.env : {};
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd: opts.cwd || process.cwd(),
       env: {
         ...process.env,
+        ...extraEnv,
         HOME: "/tmp",
         TMPDIR: "/tmp",
         PYTHONDONTWRITEBYTECODE: "1",
@@ -224,11 +226,19 @@ function runProcess(command, args, opts = {}) {
 }
 
 /**
- * @param {{ runtime?: string, command?: string, code?: string }} body
+ * @param {{ runtime?: string, command?: string, code?: string, env?: Record<string, string> }} body
  */
 async function execute(body) {
   const runtime = String(body.runtime || "").toLowerCase();
   const workDir = await mkdtemp(join(tmpdir(), "cm-sandbox-"));
+  const extraEnv =
+    body.env && typeof body.env === "object" && !Array.isArray(body.env)
+      ? Object.fromEntries(
+          Object.entries(body.env)
+            .filter(([k, v]) => typeof k === "string" && k.length > 0 && typeof v === "string")
+            .map(([k, v]) => [k, String(v)])
+        )
+      : {};
 
   try {
     if (runtime === "shell") {
@@ -239,7 +249,7 @@ async function execute(body) {
         throw err;
       }
       // Local-dev only: run via /bin/sh -c with timeout.
-      return await runProcess("/bin/sh", ["-c", command], { cwd: workDir });
+      return await runProcess("/bin/sh", ["-c", command], { cwd: workDir, env: extraEnv });
     }
 
     if (runtime === "python") {
@@ -251,7 +261,7 @@ async function execute(body) {
       }
       const file = join(workDir, "main.py");
       await writeFile(file, code, "utf8");
-      return await runProcess("python3", [file], { cwd: workDir });
+      return await runProcess("python3", [file], { cwd: workDir, env: extraEnv });
     }
 
     if (runtime === "node") {
@@ -263,7 +273,7 @@ async function execute(body) {
       }
       const file = join(workDir, "main.mjs");
       await writeFile(file, code, "utf8");
-      return await runProcess("node", [file], { cwd: workDir });
+      return await runProcess("node", [file], { cwd: workDir, env: extraEnv });
     }
 
     const err = new Error(`unsupported runtime '${runtime}' (expected shell|python|node)`);

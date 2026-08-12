@@ -1,0 +1,14 @@
+{
+  "name": "azure-monitor-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ContextMemory inbound MCP: Azure Log Analytics KQL tools (stdio)",
+  "bin": {
+    "azure-monitor-mcp": "./src/index.mjs"
+  },
+  "main": "./src/index.mjs",
+  "engines": {
+    "node": ">=18"
+  }
+}

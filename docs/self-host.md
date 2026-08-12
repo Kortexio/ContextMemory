@@ -69,7 +69,9 @@ Then open **[http://localhost:5200](http://localhost:5200)** — Settings are pr
 | Admin | http://localhost:5200 |
 | Health | http://localhost:5100/health |
 | mcp-runtime | internal `http://mcp-runtime:8080` (`ContextMemory__McpRuntimeUrl`) |
-| sandbox-runtime | internal self-hosted sandbox for `shell_execute` / `python_execute` / `node_execute` |
+| sandbox-runtime | internal self-hosted sandbox for `shell_execute` / `python_execute` / `node_execute` (includes **git** + **Azure CLI** for ops fallback) |
+
+Ops triage (Azure Monitor / GitHub): see [inbound-mcp-guide.md](inbound-mcp-guide.md). Prefer Admin MCP credentials `Env`; Compose `AZURE_*` / `GITHUB_TOKEN` on `sandbox-runtime` is lab-only bootstrap.
 | Demo app | `X-App-Id: demo-dev` / Bearer `cm_live_dev_key_change_me` |
 | Master key | `cm_master_dev_key_change_me` |
 

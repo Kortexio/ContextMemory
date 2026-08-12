@@ -12,9 +12,20 @@ public sealed class AgenticPolicyPackResolverTests
     [Fact]
     public void Seed_ContainsExpectedDefaults()
     {
-        Assert.Equal(15, AgenticCatalogSeed.Skills.Count);
-        Assert.Equal(28, AgenticCatalogSeed.Guardrails.Count);
-        Assert.All(AgenticCatalogSeed.Skills, s => Assert.True(s.IsDefaultEnabled, s.Id));
+        Assert.Equal(17, AgenticCatalogSeed.Skills.Count);
+        Assert.Equal(29, AgenticCatalogSeed.Guardrails.Count);
+        Assert.All(
+            AgenticCatalogSeed.Skills.Where(s =>
+                s.Id is not ("small-model-abstention" or "ops-triage-evidence-first")),
+            s => Assert.True(s.IsDefaultEnabled, s.Id));
+        Assert.Contains(AgenticCatalogSeed.Skills, s =>
+            s.Id == "small-model-abstention"
+            && !s.IsDefaultEnabled
+            && s.LinkedGuardrailIds.Contains("numeric-grounding"));
+        Assert.Contains(AgenticCatalogSeed.Skills, s =>
+            s.Id == "ops-triage-evidence-first"
+            && !s.IsDefaultEnabled
+            && s.LinkedGuardrailIds.Contains("live-data-evidence-required"));
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
             g.Id == "json-format-validator" && !g.IsDefaultEnabled);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
@@ -27,6 +38,10 @@ public sealed class AgenticPolicyPackResolverTests
             g.Id == "relevance" && !g.IsDefaultEnabled);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
             g.Id == "response-quality" && !g.IsDefaultEnabled);
+        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
+            g.Id == "numeric-grounding"
+            && g.Kind == AgenticGuardrailKinds.NumericGrounding
+            && !g.IsDefaultEnabled);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
             g.Id == "live-data-evidence-required" && g.IsDefaultEnabled);
         Assert.Contains(AgenticCatalogSeed.Skills, s =>

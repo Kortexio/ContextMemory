@@ -74,6 +74,13 @@ public static class AgenticExtendedGuardrailRunner
                 return fb;
         }
 
+        if (policy.HasKind(AgenticGuardrailKinds.NumericGrounding))
+        {
+            var json = policy.FindByKind(AgenticGuardrailKinds.NumericGrounding)?.ConfigJson ?? "{}";
+            if (AgenticNumericsGroundingGuardrail.TryGetRejectionFeedback(answer, steps, json, config, out var fb))
+                return fb;
+        }
+
         if (policy.HasKind(AgenticGuardrailKinds.PriceQuote))
         {
             var json = policy.FindByKind(AgenticGuardrailKinds.PriceQuote)?.ConfigJson ?? "{}";
