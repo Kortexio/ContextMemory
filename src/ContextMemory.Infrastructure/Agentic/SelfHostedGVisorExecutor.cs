@@ -10,11 +10,16 @@ namespace ContextMemory.Infrastructure.Agentic;
 public sealed class SelfHostedGVisorExecutor : IToolExecutor
 {
     private readonly SelfHostedSandboxClient _client;
+    private readonly IMcpCredentialStore _credentialStore;
     private readonly ILogger<SelfHostedGVisorExecutor> _logger;
 
-    public SelfHostedGVisorExecutor(SelfHostedSandboxClient client, ILogger<SelfHostedGVisorExecutor> logger)
+    public SelfHostedGVisorExecutor(
+        SelfHostedSandboxClient client,
+        IMcpCredentialStore credentialStore,
+        ILogger<SelfHostedGVisorExecutor> logger)
     {
         _client = client;
+        _credentialStore = credentialStore;
         _logger = logger;
     }
 
@@ -56,13 +61,20 @@ public sealed class SelfHostedGVisorExecutor : IToolExecutor
             return AgenticNetworkEgressPolicy.BlockedResult(endpoint, runtimeConfig);
         }
 
+        var env = await SandboxFallbackEnvResolver
+            .ResolveAsync(appId, runtimeConfig, _credentialStore, cancellationToken)
+            .ConfigureAwait(false);
+
         return runtime switch
         {
-            "shell" => await ExecuteShellAsync(endpoint, toolCall.Function.Arguments, appId, runtimeConfig, cancellationToken)
+            "shell" => await ExecuteShellAsync(
+                    endpoint, toolCall.Function.Arguments, appId, runtimeConfig, env, cancellationToken)
                 .ConfigureAwait(false),
-            "python" => await ExecuteCodeAsync(endpoint, "python", toolCall.Function.Arguments, appId, runtimeConfig, cancellationToken)
+            "python" => await ExecuteCodeAsync(
+                    endpoint, "python", toolCall.Function.Arguments, appId, runtimeConfig, env, cancellationToken)
                 .ConfigureAwait(false),
-            "node" => await ExecuteCodeAsync(endpoint, "node", toolCall.Function.Arguments, appId, runtimeConfig, cancellationToken)
+            "node" => await ExecuteCodeAsync(
+                    endpoint, "node", toolCall.Function.Arguments, appId, runtimeConfig, env, cancellationToken)
                 .ConfigureAwait(false),
             _ => new ToolExecutionResult
             {
@@ -77,6 +89,7 @@ public sealed class SelfHostedGVisorExecutor : IToolExecutor
         string argumentsJson,
         string appId,
         AppRuntimeConfig runtimeConfig,
+        IReadOnlyDictionary<string, string> env,
         CancellationToken cancellationToken)
     {
         var command = ExtractStringArgument(argumentsJson, "command");
@@ -95,6 +108,7 @@ public sealed class SelfHostedGVisorExecutor : IToolExecutor
                 new AcaDynamicSessionsClient.ShellPayload { Command = command },
                 appId,
                 runtimeConfig.DefaultLanguage,
+                env.Count > 0 ? env : null,
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -105,6 +119,7 @@ public sealed class SelfHostedGVisorExecutor : IToolExecutor
         string argumentsJson,
         string appId,
         AppRuntimeConfig runtimeConfig,
+        IReadOnlyDictionary<string, string> env,
         CancellationToken cancellationToken)
     {
         var code = ExtractStringArgument(argumentsJson, "code");
@@ -123,6 +138,7 @@ public sealed class SelfHostedGVisorExecutor : IToolExecutor
                 new AcaDynamicSessionsClient.CodePayload { Code = code },
                 appId,
                 runtimeConfig.DefaultLanguage,
+                env.Count > 0 ? env : null,
                 cancellationToken)
             .ConfigureAwait(false);
     }

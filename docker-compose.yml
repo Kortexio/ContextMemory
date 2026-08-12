@@ -20,6 +20,8 @@ services:
       MCP_DEFAULT_TIMEOUT_MS: "120000"
     volumes:
       - mcp_packages:/opt/mcps
+      # Optional scaffold: Azure Log Analytics MCP (stdio)
+      - ./mcp-runtime/mcps/azure-monitor-mcp:/opt/mcps/azure-monitor-mcp:ro
     networks:
       - cm-net
     healthcheck:
@@ -40,6 +42,12 @@ services:
       SANDBOX_TIMEOUT_MS: "60000"
       SANDBOX_MAX_OUTPUT_CHARS: "32000"
       SANDBOX_ALLOW_EGRESS: "true"
+      # Lab bootstrap only — prefer Admin MCP credentials Env (azure-monitor / github).
+      # AZURE_TENANT_ID: ""
+      # AZURE_CLIENT_ID: ""
+      # AZURE_CLIENT_SECRET: ""
+      # LOG_ANALYTICS_WORKSPACE_ID: ""
+      # GITHUB_TOKEN: ""
     networks:
       - cm-net
     healthcheck:

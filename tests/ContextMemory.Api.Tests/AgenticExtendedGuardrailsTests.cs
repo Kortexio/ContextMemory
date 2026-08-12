@@ -89,6 +89,67 @@ public sealed class AgenticExtendedGuardrailsTests
     }
 
     [Fact]
+    public void NumericGrounding_RejectsUngroundedPrice()
+    {
+        var ok = AgenticNumericsGroundingGuardrail.TryGetRejectionFeedback(
+            "The subscription costs €1.234,56 per month.",
+            [],
+            "{}",
+            Config(),
+            out var fb);
+        Assert.True(ok);
+        Assert.Contains("tool", fb, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void NumericGrounding_AcceptsGroundedPercent()
+    {
+        var steps = new List<AgentExecutionStep>
+        {
+            new()
+            {
+                Iteration = 1,
+                ToolName = "wiki_search",
+                Arguments = "{}",
+                Output = "churn rate 12.5% in Q1",
+                Success = true
+            }
+        };
+        var ok = AgenticNumericsGroundingGuardrail.TryGetRejectionFeedback(
+            "Churn is 12.5% this quarter.",
+            steps,
+            "{}",
+            Config(),
+            out _);
+        Assert.False(ok);
+    }
+
+    [Fact]
+    public void NumericGrounding_RespectsMinSpecificsThreshold()
+    {
+        var ok = AgenticNumericsGroundingGuardrail.TryGetRejectionFeedback(
+            "Price is $99.99 and VAT is 23%.",
+            [],
+            """{"minSpecificsToReject": 3}""",
+            Config(),
+            out _);
+        Assert.False(ok);
+    }
+
+    [Fact]
+    public async Task ExtendedRunner_RejectsNumericGroundingWhenKindActive()
+    {
+        var request = new AgentValidationRequest
+        {
+            FinalAnswer = "Invoice total is €450.00 due on 2026-03-15.",
+            UserObjective = "what is the invoice total?",
+            RuntimeConfig = ConfigWithKind(AgenticGuardrailKinds.NumericGrounding)
+        };
+        var fb = await AgenticExtendedGuardrailRunner.TryGetRejectionAsync(request, null);
+        Assert.NotNull(fb);
+    }
+
+    [Fact]
     public void PromptAddress_RequiresAllIssueKeys()
     {
         var ok = AgenticPromptAddressGuardrail.TryGetRejectionFeedback(

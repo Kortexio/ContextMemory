@@ -129,6 +129,34 @@ public static class AgenticCatalogSeed
                 - Reply in the user's language.
                 """),
 
+            Skill("small-model-abstention", "Abstention for weak models", "safety", 145, false,
+                "Express uncertainty explicitly when evidence is missing; prefer tool calls over speculation.",
+                """
+                ## Abstention for weak models
+                - If you do not have tool evidence for a specific number, date, price, or ID: say explicitly that you do not have this information and offer to search.
+                - Never fill a gap with a plausible-sounding value. An explicit "I do not know" is better than a confident wrong answer.
+                - When uncertain: emit a tool call (wiki_search, web_search) rather than speculating.
+                - Reply in the user's language.
+                """,
+                linked: ["numeric-grounding"]),
+
+            Skill("ops-triage-evidence-first", "Ops triage — evidence first", "safety", 148, false,
+                "MCP-first for logs/code; sandbox az/git fallback; never invent timelines.",
+                """
+                ## Ops triage — evidence first
+                - Prefer configured MCP tools for live evidence (Zuora, Jira/wiki, `azure-monitor__*`, GitHub MCP).
+                - Azure logs: call `azure-monitor__azure_logs_query` / `azure_logs_get_timeline` / `azure_logs_search_traces` first.
+                  If those tools are missing or fail recoverably, use `shell_execute` with Azure CLI
+                  (`az monitor log-analytics query … -o json`). Do not invent HTTP timelines or traces.
+                - Code: prefer GitHub MCP / `gh` tools. Fallback: `shell_execute` with `git`/`gh`
+                  (token is injected from credentials — never ask the user to paste secrets into chat).
+                - Archive long tool dumps as session artifacts; cite them instead of pasting walls of JSON.
+                - Never invent IDs, statuses, timestamps, or stack traces. If evidence is missing: abstain clearly.
+                - Require human confirmation before PROD mutations, destructive shell, or `git push` / write operations.
+                - Reply in the user's language.
+                """,
+                linked: ["live-data-evidence-required"]),
+
             Skill("step-by-step-reasoning-brief", "Brief plan before tools", "behavior", 210, true,
                 "One short plan line before tool_calls on complex tasks.",
                 """
@@ -477,7 +505,13 @@ public static class AgenticCatalogSeed
                 AgenticGuardrailKinds.FactCheck, 290,
                 "Rejected: fact-check failed — unsupported claims or ungrounded IDs.",
                 "Rejeitado: fact-check falhou — claims sem suporte ou IDs sem evidência.",
-                new { })
+                new { }),
+            Guardrail(now, "numeric-grounding", "Numeric grounding",
+                "Rejects answers that cite specific numeric values (prices, dates, percentages) without successful tool evidence.",
+                AgenticGuardrailKinds.NumericGrounding, 295,
+                "Rejected: numeric values without tool evidence. Emit tool_calls (wiki_search / MCP / web_search) or remove unsupported numbers.",
+                "Rejeitado: valores numéricos sem evidência de tools. Emite tool_calls (wiki_search / MCP / web_search) ou remove números sem suporte.",
+                new { minSpecificsToReject = 1 }, defaultEnabled: false)
         ];
     }
 

@@ -28,6 +28,7 @@ public sealed class SelfHostedSandboxClient
         object payload,
         string appId,
         string defaultLanguage = "en-US",
+        IReadOnlyDictionary<string, string>? env = null,
         CancellationToken cancellationToken = default)
     {
         if (sandboxEndpoint.StartsWith("mock://", StringComparison.OrdinalIgnoreCase))
@@ -44,6 +45,18 @@ public sealed class SelfHostedSandboxClient
             bodyPayload["command"] = shell.Command;
         else if (payload is AcaDynamicSessionsClient.CodePayload code)
             bodyPayload["code"] = code.Code;
+
+        if (env is { Count: > 0 })
+        {
+            // Never log secret values — only key names for diagnostics.
+            _logger.LogDebug(
+                "Sandbox {Runtime} injecting {EnvCount} env keys for tenant {AppId}: {Keys}",
+                runtime,
+                env.Count,
+                appId,
+                string.Join(',', env.Keys));
+            bodyPayload["env"] = env;
+        }
 
         try
         {
