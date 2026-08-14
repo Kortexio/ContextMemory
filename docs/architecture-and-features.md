@@ -339,7 +339,7 @@ Example — point one tenant at a remote vLLM / LiteLLM server:
         "anti-hallucination-web",
         "prefer-mcp-over-adhoc",
         "wiki-first-for-docs",
-        "zuora-graphql-discover-first"
+        "tool-calling-discipline"
       ],
       "enabledGuardrailIds": [
         "url-fetch-required",
@@ -403,9 +403,7 @@ Configure via the Admin UI (`/apps/{appId}/config` on `:5200` — checkboxes und
 | Skill | `concise-professional` | ✅ | Direct answers, less filler |
 | Skill | `strict-no-speculation` | ❌ | Opt-in: refuse claims without evidence |
 | Skill | `small-model-abstention` | ❌ | Opt-in: prefer abstention over invented numbers/dates on weak models |
-| Skill | `ops-triage-evidence-first` | ❌ | Opt-in: MCP-first logs/code evidence, then sandbox `az`/`git` fallback (see [inbound-mcp-guide](inbound-mcp-guide.md)) |
-| Skill | `step-by-step-reasoning-brief` | ❌ | Opt-in: short plan before tools |
-| Skill | `zuora-graphql-discover-first` | ❌ | Opt-in: discover Zuora GraphQL schema before queries |
+| Skill | `step-by-step-reasoning-brief` | ✅ | Short plan before tools on complex tasks |
 | Rule | `rule-always-evidence` | ✅ | `always_on` — prefer tools/wiki over speculation |
 | Rule | `rule-requestable-style` | ✅ | `requestable` — ultra-terse answers via `rule_read` |
 | Guardrail | `url-fetch-required` | ✅ | Reject URL descriptions without fetch evidence |
