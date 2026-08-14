@@ -129,7 +129,7 @@ az monitor log-analytics query \
 git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/org/repo.git"
 ```
 
-Enable skill **`ops-triage-evidence-first`** (opt-in) so the agent follows this order. Prefer guardrail **`live-data-evidence-required`** (default on when wiki/MCP exist) and optionally **`numeric-grounding`**.
+Add an **app-level** skill for ops triage (MCP-first for logs/code, then sandbox `az`/`git` fallback) when needed — it is not in the platform seed. Prefer guardrail **`live-data-evidence-required`** (when wiki/MCP exist) and optionally **`numeric-grounding`**.
 
 Package drop-in: [`mcp-runtime/mcps/azure-monitor-mcp`](../mcp-runtime/mcps/azure-monitor-mcp/README.md).
 

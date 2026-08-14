@@ -43,10 +43,11 @@ public static class AgenticCatalogSeed
                 "Use configured MCP servers instead of hand-rolled OAuth/HTTP.",
                 """
                 ## Prefer MCP over ad-hoc HTTP
-                - When an MCP integration is configured (e.g. Zuora), you MUST use MCP tools (`server__tool`, especially `…__zuora_graphql`).
-                - Do NOT call Zuora (or other MCP-backed APIs) via `python_execute` / `requests` / `http_request` / hand-rolled OAuth or `/api/v1/*`.
-                - Use `fetch_url` / `web_search` only for allowlisted public HTTP and open-web freshness — never as a Zuora substitute.
+                - When an MCP integration is configured, you MUST use its MCP tools (`server__tool`).
+                - Do NOT call MCP-backed APIs via `python_execute` / `requests` / `http_request` / hand-rolled OAuth.
+                - Use `fetch_url` / `web_search` only for allowlisted public HTTP and open-web freshness — never as a substitute for a configured MCP.
                 - If MCP fails, report the MCP error. Do not fall back to inventing REST scripts or placeholder credentials.
+                - Do NOT ask the user for client id, client secret, or access tokens when MCP credentials are already configured.
                 - Reply in the user's language.
                 """),
 
@@ -140,23 +141,6 @@ public static class AgenticCatalogSeed
                 """,
                 linked: ["numeric-grounding"]),
 
-            Skill("ops-triage-evidence-first", "Ops triage — evidence first", "safety", 148, false,
-                "MCP-first for logs/code; sandbox az/git fallback; never invent timelines.",
-                """
-                ## Ops triage — evidence first
-                - Prefer configured MCP tools for live evidence (Zuora, Jira/wiki, `azure-monitor__*`, GitHub MCP).
-                - Azure logs: call `azure-monitor__azure_logs_query` / `azure_logs_get_timeline` / `azure_logs_search_traces` first.
-                  If those tools are missing or fail recoverably, use `shell_execute` with Azure CLI
-                  (`az monitor log-analytics query … -o json`). Do not invent HTTP timelines or traces.
-                - Code: prefer GitHub MCP / `gh` tools. Fallback: `shell_execute` with `git`/`gh`
-                  (token is injected from credentials — never ask the user to paste secrets into chat).
-                - Archive long tool dumps as session artifacts; cite them instead of pasting walls of JSON.
-                - Never invent IDs, statuses, timestamps, or stack traces. If evidence is missing: abstain clearly.
-                - Require human confirmation before PROD mutations, destructive shell, or `git push` / write operations.
-                - Reply in the user's language.
-                """,
-                linked: ["live-data-evidence-required"]),
-
             Skill("step-by-step-reasoning-brief", "Brief plan before tools", "behavior", 210, true,
                 "One short plan line before tool_calls on complex tasks.",
                 """
@@ -182,35 +166,7 @@ public static class AgenticCatalogSeed
                 - Answer in at most 5 short bullets unless the user asks for detail.
                 - No preamble.
                 """,
-                activation: AgenticSkillActivation.Requestable),
-
-            Skill("zuora-graphql-discover-first", "Zuora GraphQL — discover first", "integrations", 220, true,
-                "Discover Zuora GraphQL schema with tools before any table/query.",
-                """
-                ## Zuora GraphQL — discover before query
-                You do NOT know this tenant's Zuora GraphQL schema from memory. Always discover with tools first.
-
-                ### ID heuristics
-                - Values like `A-S########` are usually **Subscription Number**, NOT Account Id.
-                - Account numbers and Zuora object Ids are different fields — do not guess which filter to use.
-
-                ### Mandatory discovery sequence (before any data fetch)
-                1. Prefer MCP tool `…__zuora_graphql` (never invent OAuth/HTTP).
-                2. If unsure of the object: `operation=list_types`.
-                3. For the chosen object: `operation=filter_keys` with the correct `entryPoint`.
-                4. If needed: `operation=describe_types` / `describe_input` for fields and filter inputs.
-                5. Only then: `table` / `build` / `query` using **only** entry points, filter keys, and fields returned by discovery.
-
-                ### Hard rules
-                - Entry points are usually **plural** (e.g. `accounts`, `subscriptions`) — never invent singular root fields like `account` / `subscription` unless discovery returned them.
-                - `table` always requires `fields` taken from describe/filter discovery.
-                - On GraphQL `FieldUndefined` / `WrongType`: do **not** retry the same query. Re-run discovery and change entryPoint/field/filter.
-                - After 2 consecutive validation errors on the same object, stop guessing: summarize what discovery returned and ask the user which object/id they mean.
-                - Empty `count=0` after a valid query is a real answer — report "not found", do not keep inventing alternate queries forever.
-
-                ### Reply
-                Answer from tool output only. Reply in the user's language.
-                """)
+                activation: AgenticSkillActivation.Requestable)
         ];
 
         AgenticSkillDefinition Skill(

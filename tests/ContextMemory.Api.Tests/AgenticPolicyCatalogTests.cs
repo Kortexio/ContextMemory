@@ -12,20 +12,17 @@ public sealed class AgenticPolicyPackResolverTests
     [Fact]
     public void Seed_ContainsExpectedDefaults()
     {
-        Assert.Equal(17, AgenticCatalogSeed.Skills.Count);
+        Assert.Equal(15, AgenticCatalogSeed.Skills.Count);
         Assert.Equal(29, AgenticCatalogSeed.Guardrails.Count);
         Assert.All(
-            AgenticCatalogSeed.Skills.Where(s =>
-                s.Id is not ("small-model-abstention" or "ops-triage-evidence-first")),
+            AgenticCatalogSeed.Skills.Where(s => s.Id is not "small-model-abstention"),
             s => Assert.True(s.IsDefaultEnabled, s.Id));
         Assert.Contains(AgenticCatalogSeed.Skills, s =>
             s.Id == "small-model-abstention"
             && !s.IsDefaultEnabled
             && s.LinkedGuardrailIds.Contains("numeric-grounding"));
-        Assert.Contains(AgenticCatalogSeed.Skills, s =>
-            s.Id == "ops-triage-evidence-first"
-            && !s.IsDefaultEnabled
-            && s.LinkedGuardrailIds.Contains("live-data-evidence-required"));
+        Assert.DoesNotContain(AgenticCatalogSeed.Skills, s => s.Id == "ops-triage-evidence-first");
+        Assert.DoesNotContain(AgenticCatalogSeed.Skills, s => s.Id == "zuora-graphql-discover-first");
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
             g.Id == "json-format-validator" && !g.IsDefaultEnabled);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
@@ -90,7 +87,9 @@ public sealed class AgenticPolicyPackResolverTests
         Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "anti-hallucination-web");
         Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "sandbox-facts-selfhosted");
         Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "strict-no-speculation");
-        Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "zuora-graphql-discover-first");
+        Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "prefer-mcp-over-adhoc");
+        Assert.DoesNotContain(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "zuora-graphql-discover-first");
+        Assert.DoesNotContain(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "ops-triage-evidence-first");
         Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.UrlFetch));
         Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.SandboxClaim));
         Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.ToolSurfaceHidden));
