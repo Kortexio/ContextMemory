@@ -14,8 +14,10 @@
     <div>
         <h1 class="kx-page-title">Platform Skills &amp; Guardrails</h1>
         <p class="kx-page-lead">
-            Generic defaults for <strong>all apps</strong>. Items marked default-on are always active.
-            App-specific packs are managed under each app’s <strong>Skills &amp; guardrails</strong>.
+            Generic defaults for <strong>all apps</strong>.
+            <strong>Default-on</strong> = included in every app;
+            <strong>Activation</strong> = how it is applied (<code>skill</code>, <code>always_on</code>, <code>requestable</code>).
+            App-specific packs are under each app’s <strong>Skills &amp; guardrails</strong>.
         </p>
     </div>
     <div class="d-flex flex-wrap" style="gap:0.5rem">
@@ -77,10 +79,18 @@ else
                 </div>
                 <div class="form-row">
                     <div class="col-md-4 form-group">
+                        <label>Activation</label>
+                        <InputSelect class="form-control" @bind-Value="_editingSkill.Activation">
+                            <option value="skill">skill — discover / skill_read</option>
+                            <option value="always_on">always_on — inline every turn</option>
+                            <option value="requestable">requestable — rule_search / rule_read</option>
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-4 form-group">
                         <label>Sort order</label>
                         <InputNumber class="form-control" @bind-Value="_editingSkill.SortOrder" />
                     </div>
-                    <div class="col-md-6 form-group d-flex align-items-end">
+                    <div class="col-md-4 form-group d-flex align-items-end">
                         <div class="form-check mb-2">
                             <InputCheckbox class="form-check-input" @bind-Value="_editingSkill.IsDefaultEnabled" />
                             <label class="form-check-label">Default enabled for all apps</label>
@@ -155,7 +165,7 @@ else
     <div class="kx-panel">
         <div class="kx-table-wrap">
             <table class="kx-table">
-                <thead><tr><th>Id</th><th>Name</th><th>Category</th><th>Default</th><th></th></tr></thead>
+                <thead><tr><th>Id</th><th>Name</th><th>Category</th><th>Activation</th><th>Default</th><th></th></tr></thead>
                 <tbody>
                 @foreach (var skill in _skills)
                 {
@@ -163,6 +173,7 @@ else
                         <td><code>@skill.Id</code></td>
                         <td>@skill.Name @if (skill.IsSystem) { <span class="kx-badge ml-1">system</span> }</td>
                         <td>@skill.Category</td>
+                        <td><code>@(string.IsNullOrWhiteSpace(skill.Activation) ? "skill" : skill.Activation)</code></td>
                         <td>@(skill.IsDefaultEnabled ? "yes" : "no")</td>
                         <td class="kx-actions">
                             <button class="btn btn-xs btn-outline-primary" @onclick="() => StartEditSkill(skill)">Edit</button>
@@ -249,7 +260,7 @@ else
         _editingGuardrail = null;
         _editingSkill = new AgenticSkillAdminDto
         {
-            Category = "general", SortOrder = 500, IsDefaultEnabled = false,
+            Category = "general", Activation = "skill", SortOrder = 500, IsDefaultEnabled = false,
             PromptMarkdown = "## My skill\n- Rule one\n"
         };
     }
@@ -262,6 +273,7 @@ else
         {
             Id = skill.Id, Name = skill.Name, Description = skill.Description,
             PromptMarkdown = skill.PromptMarkdown, Category = skill.Category,
+            Activation = string.IsNullOrWhiteSpace(skill.Activation) ? "skill" : skill.Activation,
             IsSystem = skill.IsSystem, IsDefaultEnabled = skill.IsDefaultEnabled,
             SortOrder = skill.SortOrder, LinkedGuardrailIds = skill.LinkedGuardrailIds.ToList()
         };

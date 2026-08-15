@@ -1,5 +1,6 @@
 using ContextMemory.Core.Agentic;
 using ContextMemory.Core.Agentic.Mcp;
+using ContextMemory.Core.Models;
 using Xunit;
 
 namespace ContextMemory.Api.Tests;
@@ -139,18 +140,59 @@ public sealed class ProseToolCallParserTests
     }
 
     [Fact]
-    public void Normalize_WrapsObjectOrStringFilterAsStringArray()
+    public void FilterAgainstCatalog_KeepsKnownTools_CapsAndDropsUnknown()
     {
-        const string asObject = """
-            { "objectType": "account", "filter": { "field": "status", "operator": "=", "value": "Canceled" }, "pageSize": 1 }
-            """;
-        var n1 = McpQueryObjectsArgumentNormalizer.Normalize("x__query_objects", asObject);
-        Assert.Contains("status.EQ:Canceled", n1, StringComparison.Ordinal);
+        var catalog = new List<OllamaTool>
+        {
+            new("function", new OllamaFunction("wiki_search", null, null)),
+            new("function", new OllamaFunction("canvas_upsert", null, null))
+        };
 
-        const string asString = """
-            { "objectType": "account", "filter": "status.EQ:Canceled", "pageSize": 1 }
-            """;
-        var n2 = McpQueryObjectsArgumentNormalizer.Normalize("x__query_objects", asString);
-        Assert.Contains("\"filter\":[\"status.EQ:Canceled\"]", n2, StringComparison.Ordinal);
+        var raw = new List<OllamaToolCall>
+        {
+            new(new OllamaFunctionCall("wiki_search", """{"query":"a"}""")),
+            new(new OllamaFunctionCall("invented_tool", """{"x":1}""")),
+            new(new OllamaFunctionCall("canvas_upsert", """{"id":"1"}""")),
+            new(new OllamaFunctionCall("wiki_search", """{"query":"b"}""")),
+            new(new OllamaFunctionCall("wiki_search", "not-json")),
+            new(new OllamaFunctionCall("canvas_upsert", """{"id":"2"}""")),
+            new(new OllamaFunctionCall("wiki_search", """{"query":"c"}"""))
+        };
+
+        var filtered = ProseToolCallParser.FilterAgainstCatalog(
+            raw,
+            catalog,
+            maxPerTurn: 2,
+            out var droppedUnknown,
+            out var droppedInvalidArgs,
+            out var droppedCapped);
+
+        Assert.NotNull(filtered);
+        Assert.Equal(2, filtered!.Count);
+        Assert.Equal(1, droppedUnknown);
+        Assert.Equal(1, droppedInvalidArgs);
+        Assert.Equal(3, droppedCapped);
+        Assert.Equal("wiki_search", filtered[0].Function.Name);
+        Assert.Equal("canvas_upsert", filtered[1].Function.Name);
+    }
+
+    [Fact]
+    public void FilterAgainstCatalog_ReturnsNull_WhenCatalogEmpty()
+    {
+        var raw = new List<OllamaToolCall>
+        {
+            new(new OllamaFunctionCall("wiki_search", """{"query":"a"}"""))
+        };
+
+        var filtered = ProseToolCallParser.FilterAgainstCatalog(
+            raw,
+            catalog: null,
+            maxPerTurn: 6,
+            out var droppedUnknown,
+            out _,
+            out _);
+
+        Assert.Null(filtered);
+        Assert.Equal(1, droppedUnknown);
     }
 }

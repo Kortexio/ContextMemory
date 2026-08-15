@@ -51,22 +51,33 @@ public sealed class McpToolCatalog : IMcpToolCatalog
         if (integrations.Count == 0)
             return [];
 
+        IReadOnlyList<McpToolDefinition> raw;
         if (_cache.TryGetValue(runtimeConfig.AppId, out var cached) && cached.ExpiresAt > DateTimeOffset.UtcNow)
-            return cached.Tools;
-
-        var integrationNames = integrations.Select(i => i.Name).ToList();
-        var storedTools = await _store.GetToolsAsync(runtimeConfig.AppId, integrationNames, cancellationToken).ConfigureAwait(false);
-        if (storedTools.Count > 0)
         {
-            _cache[runtimeConfig.AppId] = new CacheEntry(storedTools, DateTimeOffset.UtcNow.Add(CacheTtl));
-            return storedTools;
+            raw = cached.Tools;
+        }
+        else
+        {
+            var integrationNames = integrations.Select(i => i.Name).ToList();
+            var storedTools = await _store.GetToolsAsync(runtimeConfig.AppId, integrationNames, cancellationToken).ConfigureAwait(false);
+            if (storedTools.Count > 0)
+            {
+                _cache[runtimeConfig.AppId] = new CacheEntry(storedTools, DateTimeOffset.UtcNow.Add(CacheTtl));
+                raw = storedTools;
+            }
+            else
+            {
+                var synced = await SyncAsync(runtimeConfig, cancellationToken).ConfigureAwait(false);
+                var allTools = await _store.GetToolsAsync(runtimeConfig.AppId, integrationNames, cancellationToken).ConfigureAwait(false);
+                _cache[runtimeConfig.AppId] = new CacheEntry(allTools, DateTimeOffset.UtcNow.Add(CacheTtl));
+                _ = synced;
+                raw = allTools;
+            }
         }
 
-        var synced = await SyncAsync(runtimeConfig, cancellationToken).ConfigureAwait(false);
-        var allTools = await _store.GetToolsAsync(runtimeConfig.AppId, integrationNames, cancellationToken).ConfigureAwait(false);
-        _cache[runtimeConfig.AppId] = new CacheEntry(allTools, DateTimeOffset.UtcNow.Add(CacheTtl));
-        _ = synced;
-        return allTools;
+        // Apply Admin allowlist/denylist on every read so the LLM never sees tools
+        // that ExecuteAsync would reject (cache stays unfiltered for config changes).
+        return McpToolAccess.FilterCatalog(runtimeConfig, raw);
     }
 
     public async Task<IReadOnlyList<McpCatalogSyncResult>> SyncAsync(

@@ -612,6 +612,48 @@ public sealed class McpJsonRpcClientTests
         Assert.Contains(selected, t => t.QualifiedName == "jira__get_issue");
     }
 
+    [Fact]
+    public void McpToolAccess_FilterCatalog_AppliesAllowAndDenyLists()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "companybrain",
+            Agentic = new AgenticConfig
+            {
+                Tools = new AgenticToolsConfig
+                {
+                    Integrations =
+                    [
+                        new IntegrationToolConfig
+                        {
+                            Type = "mcp",
+                            Name = "zuora-developer-mcp-PACCAR-ACCP",
+                            Enabled = true,
+                            ToolAllowlist = ["query_objects", "ask_zuora", "get_account_summary"],
+                            ToolDenylist = ["ping"]
+                        }
+                    ]
+                }
+            }
+        };
+
+        var tools = new[]
+        {
+            new McpToolDefinition { ServerName = "zuora-developer-mcp-PACCAR-ACCP", Name = "query_objects" },
+            new McpToolDefinition { ServerName = "zuora-developer-mcp-PACCAR-ACCP", Name = "ping" },
+            new McpToolDefinition { ServerName = "zuora-developer-mcp-PACCAR-ACCP", Name = "manage_bulk_actions" },
+            new McpToolDefinition { ServerName = "zuora-developer-mcp-PACCAR-ACCP", Name = "ask_zuora" }
+        };
+
+        var filtered = McpToolAccess.FilterCatalog(config, tools);
+
+        Assert.Equal(2, filtered.Count);
+        Assert.Contains(filtered, t => t.Name == "query_objects");
+        Assert.Contains(filtered, t => t.Name == "ask_zuora");
+        Assert.DoesNotContain(filtered, t => t.Name == "ping");
+        Assert.DoesNotContain(filtered, t => t.Name == "manage_bulk_actions");
+    }
+
     private sealed class StubMcpCredentialStore : IMcpCredentialStore
     {
         public Task<McpCredentialRecord?> GetAsync(

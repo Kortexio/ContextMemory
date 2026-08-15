@@ -39,6 +39,67 @@ public static partial class ProseToolCallParser
         return null;
     }
 
+    /// <summary>
+    /// Keeps promoted calls whose names exist in the turn catalog and require valid JSON-object
+    /// arguments. When <paramref name="maxPerTurn"/> is &gt; 0, caps to that limit (Admin
+    /// <c>maxMcpToolsPerTurn</c> via <c>LlmCapabilitiesResolver.ResolveMaxMcpTools</c>).
+    /// Backend-agnostic: same rules for any LLM endpoint configured on the app.
+    /// </summary>
+    public static IReadOnlyList<OllamaToolCall>? FilterAgainstCatalog(
+        IReadOnlyList<OllamaToolCall>? promoted,
+        IReadOnlyList<OllamaTool>? catalog,
+        int maxPerTurn,
+        out int droppedUnknown,
+        out int droppedInvalidArgs,
+        out int droppedCapped)
+    {
+        droppedUnknown = 0;
+        droppedInvalidArgs = 0;
+        droppedCapped = 0;
+        if (promoted is null || promoted.Count == 0)
+            return null;
+
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (catalog is { Count: > 0 })
+        {
+            foreach (var tool in catalog)
+            {
+                var name = tool.Function?.Name;
+                if (!string.IsNullOrWhiteSpace(name))
+                    allowed.Add(name.Trim());
+            }
+        }
+
+        var kept = new List<OllamaToolCall>(promoted.Count);
+        foreach (var call in promoted)
+        {
+            var name = call.Function?.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(name) || allowed.Count == 0 || !allowed.Contains(name))
+            {
+                droppedUnknown++;
+                continue;
+            }
+
+            var args = call.Function?.Arguments ?? "{}";
+            if (!IsValidJsonObject(args))
+            {
+                droppedInvalidArgs++;
+                continue;
+            }
+
+            kept.Add(call);
+        }
+
+        // Cap only when caller passes a positive limit (typically Admin maxMcpToolsPerTurn via ResolveMaxMcpTools).
+        if (maxPerTurn > 0 && kept.Count > maxPerTurn)
+        {
+            droppedCapped = kept.Count - maxPerTurn;
+            kept.RemoveRange(maxPerTurn, droppedCapped);
+        }
+
+        return kept.Count > 0 ? kept : null;
+    }
+
     private static IReadOnlyList<OllamaToolCall>? TryParseXmlStyle(string content)
     {
         var list = new List<OllamaToolCall>();

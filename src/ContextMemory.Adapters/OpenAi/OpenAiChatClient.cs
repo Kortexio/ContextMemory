@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using ContextMemory.Core.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ContextMemory.Adapters.OpenAi;
 
@@ -17,12 +19,14 @@ internal sealed class OpenAiChatClient
     private readonly HttpClient _httpClient;
     private readonly string _baseUrl;
     private readonly string? _apiKey;
+    private readonly ILogger _logger;
 
-    public OpenAiChatClient(HttpClient httpClient, string baseUrl, string? apiKey)
+    public OpenAiChatClient(HttpClient httpClient, string baseUrl, string? apiKey, ILogger? logger = null)
     {
         _httpClient = httpClient;
         _baseUrl = baseUrl.TrimEnd('/');
         _apiKey = apiKey;
+        _logger = logger ?? NullLogger.Instance;
     }
 
     public async Task<OllamaResponse> ChatAsync(OllamaRequest request, CancellationToken cancellationToken)
@@ -34,6 +38,16 @@ internal sealed class OpenAiChatClient
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                var preview = body.Length <= 2000 ? body : body[..2000] + "…";
+                _logger.LogWarning(
+                    "OpenAI-compatible chat returned {StatusCode} from {Url}. Body: {Body}",
+                    (int)response.StatusCode,
+                    httpRequest.RequestUri,
+                    preview);
+            }
+
             throw new HttpRequestException(body, null, response.StatusCode);
         }
 
