@@ -333,6 +333,9 @@ public static class AdminAppAgenticCatalogEndpoint
             Description = body.Description?.Trim() ?? string.Empty,
             PromptMarkdown = body.PromptMarkdown ?? string.Empty,
             Category = string.IsNullOrWhiteSpace(body.Category) ? "general" : body.Category.Trim(),
+            Activation = string.IsNullOrWhiteSpace(body.Activation)
+                ? AgenticSkillActivation.Skill
+                : body.Activation.Trim(),
             IsEnabled = body.IsEnabled,
             SortOrder = body.SortOrder,
             LinkedGuardrailIds = body.LinkedGuardrailIds ?? [],
@@ -417,6 +420,8 @@ public sealed class AgenticAppSkillUpsertRequest
     public string? Description { get; set; }
     public string? PromptMarkdown { get; set; }
     public string? Category { get; set; }
+    /// <summary>skill | always_on | requestable</summary>
+    public string? Activation { get; set; }
     public bool IsEnabled { get; set; } = true;
     public int SortOrder { get; set; } = 500;
     public List<string>? LinkedGuardrailIds { get; set; }

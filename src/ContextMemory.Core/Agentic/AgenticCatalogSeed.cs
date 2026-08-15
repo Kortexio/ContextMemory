@@ -82,7 +82,8 @@ public static class AgenticCatalogSeed
                 - Use `wiki_search` for Jira/Confluence/SQL/docs already ingested into the app before guessing.
                 - Prefer wiki evidence over memory when they conflict.
                 - Reply in the user's language.
-                """),
+                """,
+                activation: AgenticSkillActivation.AlwaysOn),
 
             Skill("clarify-when-ambiguous", "Clarify when ambiguous", "behavior", 70, true,
                 "Ask when the goal is underspecified.",

@@ -43,11 +43,23 @@ public sealed class WebSearchEnricher
             .ConfigureAwait(false);
         if (!decision.ShouldSearch)
         {
-            _logger.LogInformation(
-                "Web search skipped for {AppId}: {Reason} (source={Source})",
-                appId,
-                decision.SkipReason ?? "unknown",
-                decision.Source ?? "unknown");
+            if (config.LogWebSearch)
+            {
+                _logger.LogInformation(
+                    "Web search skipped for {AppId}: {Reason} (source={Source})",
+                    appId,
+                    decision.SkipReason ?? "unknown",
+                    decision.Source ?? "unknown");
+            }
+            else
+            {
+                _logger.LogDebug(
+                    "Web search skipped for {AppId}: {Reason} (source={Source})",
+                    appId,
+                    decision.SkipReason ?? "unknown",
+                    decision.Source ?? "unknown");
+            }
+
             _telemetry.RecordWebSearchSkipped(appId, decision.SkipReason ?? "unknown");
             return WebSearchEnrichment.Skipped(decision.SkipReason ?? "unknown");
         }

@@ -98,6 +98,8 @@ public sealed class AgenticSkillAdminDto
     public string Description { get; set; } = string.Empty;
     public string PromptMarkdown { get; set; } = string.Empty;
     public string Category { get; set; } = "general";
+    /// <summary>skill | always_on | requestable</summary>
+    public string Activation { get; set; } = "skill";
     public bool IsSystem { get; set; }
     public bool IsDefaultEnabled { get; set; }
     public int SortOrder { get; set; }
@@ -130,6 +132,8 @@ public sealed class AgenticAppSkillAdminDto
     public string Description { get; set; } = string.Empty;
     public string PromptMarkdown { get; set; } = string.Empty;
     public string Category { get; set; } = "general";
+    /// <summary>skill | always_on | requestable</summary>
+    public string Activation { get; set; } = "skill";
     public bool IsEnabled { get; set; } = true;
     public int SortOrder { get; set; }
     public List<string> LinkedGuardrailIds { get; set; } = [];

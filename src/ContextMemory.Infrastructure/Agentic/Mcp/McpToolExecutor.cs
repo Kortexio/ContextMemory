@@ -76,21 +76,15 @@ public sealed class McpToolExecutor : IToolExecutor
             return AgenticNetworkEgressPolicy.BlockedResult(server.Url, runtimeConfig);
         }
 
-        if (server.ToolAllowlist.Count > 0
-            && !server.ToolAllowlist.Any(t => string.Equals(t, mcpToolName, StringComparison.OrdinalIgnoreCase)))
+        if (!McpToolAccess.IsPermitted(server, mcpToolName))
         {
+            var denied = server.ToolDenylist.Any(t =>
+                string.Equals(t, mcpToolName, StringComparison.OrdinalIgnoreCase));
             return new ToolExecutionResult
             {
-                Output = $"MCP tool `{mcpToolName}` is not allowed on server `{server.Name}`.",
-                ExitCode = 1
-            };
-        }
-
-        if (server.ToolDenylist.Any(t => string.Equals(t, mcpToolName, StringComparison.OrdinalIgnoreCase)))
-        {
-            return new ToolExecutionResult
-            {
-                Output = $"MCP tool `{mcpToolName}` is blocked on server `{server.Name}`.",
+                Output = denied
+                    ? $"MCP tool `{mcpToolName}` is blocked on server `{server.Name}`."
+                    : $"MCP tool `{mcpToolName}` is not allowed on server `{server.Name}`.",
                 ExitCode = 1
             };
         }

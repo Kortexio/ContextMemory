@@ -168,6 +168,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             };
 
             OllamaResponse response;
+            var skipProsePromotion = false;
             try
             {
                 response = await adapter.ChatAsync(llmRequest, cancellationToken).ConfigureAwait(false);
@@ -219,27 +220,104 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                         cancellationToken)
                     .ConfigureAwait(false);
             }
+            catch (HttpRequestException ex) when (IsHttpBadRequest(ex))
+            {
+                var bodyPreview = TruncateForLog(ex.Message, 2000);
+                _logger.LogWarning(
+                    ex,
+                    "LLM returned HTTP 400 for {AppId}; retrying without tools/tool_calls. Body: {Body}",
+                    request.AppId,
+                    bodyPreview);
+
+                var recoveryRequest = llmRequest with
+                {
+                    Messages = ClientSideToolCalling.FlattenForClientSideWire(messages),
+                    Tools = null,
+                    McpServers = null,
+                    ToolChoice = null,
+                    Format = request.EnrichedRequest.Format
+                };
+
+                try
+                {
+                    response = await adapter.ChatAsync(recoveryRequest, cancellationToken).ConfigureAwait(false);
+                    llmCalls++;
+                    useClientSideTools = true;
+                    skipProsePromotion = true;
+                }
+                catch (HttpRequestException recoveryEx) when (IsHttpBadRequest(recoveryEx))
+                {
+                    _logger.LogWarning(
+                        recoveryEx,
+                        "LLM HTTP 400 recovery also failed for {AppId}. Body: {Body}",
+                        request.AppId,
+                        TruncateForLog(recoveryEx.Message, 2000));
+
+                    if (!string.IsNullOrWhiteSpace(lastAnswer))
+                    {
+                        var partial = AttachDiscovery(
+                            AgentResult.Succeeded(lastAnswer, steps, iteration + 1),
+                            messages, steps, staticPromptChars, compactionCount, llmCalls,
+                            promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel);
+                        Report(request.Report, new AgenticProgressEvent
+                        {
+                            Phase = AgenticProgressPhase.Completed,
+                            Iteration = iteration + 1,
+                            Detail = "Completed with prior answer after LLM HTTP 400"
+                        });
+                        return partial;
+                    }
+
+                    throw;
+                }
+            }
 
             var assistantMessage = response.Message;
 
-            if ((capabilities.EnableProseToolCallPromotion || useClientSideTools)
+            if (!skipProsePromotion
+                && (capabilities.EnableProseToolCallPromotion || useClientSideTools)
                 && assistantMessage is not null
                 && (assistantMessage.ToolCalls is null || assistantMessage.ToolCalls.Count == 0))
             {
-                var promoted = ProseToolCallParser.TryParse(
+                var rawPromoted = ProseToolCallParser.TryParse(
                     OllamaLlmText.GetMessageContent(assistantMessage));
-                if (promoted is { Count: > 0 })
+                if (rawPromoted is { Count: > 0 })
                 {
-                    promotedProseToolCalls += promoted.Count;
-                    _logger.LogInformation(
-                        "Promoted {Count} prose tool call(s) to structured tool_calls for {AppId}",
-                        promoted.Count,
-                        request.AppId);
-                    assistantMessage = assistantMessage with
+                    var maxPerTurn = LlmCapabilitiesResolver.ResolveMaxMcpTools(request.RuntimeConfig);
+                    var promoted = ProseToolCallParser.FilterAgainstCatalog(
+                        rawPromoted,
+                        toolsForRequest,
+                        maxPerTurn,
+                        out var droppedUnknown,
+                        out var droppedInvalidArgs,
+                        out var droppedCapped);
+
+                    if (droppedUnknown > 0 || droppedInvalidArgs > 0 || droppedCapped > 0)
                     {
-                        ToolCalls = promoted.ToList(),
-                        Content = string.Empty
-                    };
+                        _logger.LogWarning(
+                            "Dropped prose tool call(s) for {AppId}: unknown={Unknown}, invalidArgs={InvalidArgs}, capped={Capped} (raw={Raw}, kept={Kept}, maxPerTurn={Max})",
+                            request.AppId,
+                            droppedUnknown,
+                            droppedInvalidArgs,
+                            droppedCapped,
+                            rawPromoted.Count,
+                            promoted?.Count ?? 0,
+                            maxPerTurn);
+                    }
+
+                    if (promoted is { Count: > 0 })
+                    {
+                        promotedProseToolCalls += promoted.Count;
+                        _logger.LogInformation(
+                            "Promoted {Count} prose tool call(s) to structured tool_calls for {AppId}",
+                            promoted.Count,
+                            request.AppId);
+                        assistantMessage = assistantMessage with
+                        {
+                            ToolCalls = promoted.ToList(),
+                            Content = string.Empty
+                        };
+                    }
                 }
             }
 
@@ -566,6 +644,19 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                || msg.Contains("System message must be at the beginning", StringComparison.OrdinalIgnoreCase)
                || (msg.Contains("Jinja", StringComparison.OrdinalIgnoreCase)
                    && msg.Contains("raise_exception", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsHttpBadRequest(HttpRequestException ex) =>
+        ex.StatusCode == System.Net.HttpStatusCode.BadRequest
+        || (ex.Message?.Contains("\"code\":400", StringComparison.Ordinal) == true)
+        || (ex.Message?.Contains("status code 400", StringComparison.OrdinalIgnoreCase) == true);
+
+    private static string TruncateForLog(string? value, int maxChars)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxChars ? trimmed : trimmed[..maxChars] + "…";
     }
 
     private static string? ResolveToolChoice(

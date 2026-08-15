@@ -6,6 +6,7 @@ using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Engine;
 using ContextMemory.Core.Models;
 using ContextMemory.Core.WebSearch;
+using Microsoft.Extensions.Logging;
 
 namespace ContextMemory.Api.Endpoints;
 
@@ -28,6 +29,7 @@ public static class ChatCompletionsEndpoint
         IContextEngine contextEngine,
         IAppConfigStore appConfigStore,
         ChatTurnContext chatTurnContext,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         var appId = (string)httpContext.Items[AuthMiddleware.AppIdItemKey]!;
@@ -37,11 +39,21 @@ public static class ChatCompletionsEndpoint
         chatTurnContext.Reset();
 
         var ollamaRequest = OpenAiProtocolMapper.ToOllamaRequest(request);
-        if (string.IsNullOrWhiteSpace(ollamaRequest.Model))
+        var cfg = appConfigStore.GetConfig(appId);
+        var configuredModel = string.IsNullOrWhiteSpace(cfg.LlmModel) ? ollamaRequest.Model : cfg.LlmModel.Trim();
+        if (!string.IsNullOrWhiteSpace(ollamaRequest.Model)
+            && !string.IsNullOrWhiteSpace(configuredModel)
+            && !string.Equals(ollamaRequest.Model.Trim(), configuredModel, StringComparison.OrdinalIgnoreCase))
         {
-            var cfg = appConfigStore.GetConfig(appId);
-            ollamaRequest = ollamaRequest with { Model = cfg.LlmModel };
+            loggerFactory.CreateLogger("ContextMemory.Api.Endpoints.ChatCompletionsEndpoint").LogInformation(
+                "Ignoring request model {Requested} for {AppId}; using {Configured}",
+                ollamaRequest.Model,
+                appId,
+                configuredModel);
         }
+
+        if (!string.IsNullOrWhiteSpace(configuredModel))
+            ollamaRequest = ollamaRequest with { Model = configuredModel };
 
         var isStreaming = request.Stream ?? false;
         var completionId = $"chatcmpl-{Guid.NewGuid():N}";

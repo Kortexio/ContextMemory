@@ -49,7 +49,7 @@ else
                     <ul class="mb-0 pl-3">
                         @foreach (var s in _platformSkills.Where(x => x.IsDefaultEnabled))
                         {
-                            <li><code>@s.Id</code> — @s.Name</li>
+                            <li><code>@s.Id</code> — @s.Name <span class="text-muted">(@(string.IsNullOrWhiteSpace(s.Activation) ? "skill" : s.Activation))</span></li>
                         }
                         @if (!_platformSkills.Any(x => x.IsDefaultEnabled))
                         {
@@ -102,6 +102,14 @@ else
                     <MarkdownEditor @bind-Value="_editingSkill.PromptMarkdown" />
                 </div>
                 <div class="form-row">
+                    <div class="col-md-4 form-group">
+                        <label>Activation</label>
+                        <InputSelect class="form-control" @bind-Value="_editingSkill.Activation">
+                            <option value="skill">skill — discover / skill_read</option>
+                            <option value="always_on">always_on — inline every turn</option>
+                            <option value="requestable">requestable — rule_search / rule_read</option>
+                        </InputSelect>
+                    </div>
                     <div class="col-md-4 form-group">
                         <label>Sort order</label>
                         <InputNumber class="form-control" @bind-Value="_editingSkill.SortOrder" />
@@ -167,17 +175,18 @@ else
     <div class="kx-panel">
         <div class="kx-table-wrap">
             <table class="kx-table">
-                <thead><tr><th>Id</th><th>Name</th><th>Enabled</th><th></th></tr></thead>
+                <thead><tr><th>Id</th><th>Name</th><th>Activation</th><th>Enabled</th><th></th></tr></thead>
                 <tbody>
                 @if (_appSkills.Count == 0)
                 {
-                    <tr><td colspan="4" class="text-muted">No app skills yet.</td></tr>
+                    <tr><td colspan="5" class="text-muted">No app skills yet.</td></tr>
                 }
                 @foreach (var s in _appSkills)
                 {
                     <tr>
                         <td><code>@s.Id</code></td>
                         <td>@s.Name</td>
+                        <td><code>@(string.IsNullOrWhiteSpace(s.Activation) ? "skill" : s.Activation)</code></td>
                         <td>@(s.IsEnabled ? "yes" : "no")</td>
                         <td class="kx-actions">
                             <button class="btn btn-xs btn-outline-primary" @onclick="() => StartEditSkill(s)">Edit</button>
@@ -287,7 +296,7 @@ else
         _editingGuardrail = null;
         _editingSkill = new AgenticAppSkillAdminDto
         {
-            AppId = AppId, Category = "general", SortOrder = 500, IsEnabled = true,
+            AppId = AppId, Category = "general", Activation = "skill", SortOrder = 500, IsEnabled = true,
             PromptMarkdown = "## App skill\n- Tenant-specific rule\n"
         };
     }
@@ -300,6 +309,7 @@ else
         {
             AppId = AppId, Id = s.Id, Name = s.Name, Description = s.Description,
             PromptMarkdown = s.PromptMarkdown, Category = s.Category,
+            Activation = string.IsNullOrWhiteSpace(s.Activation) ? "skill" : s.Activation,
             IsEnabled = s.IsEnabled, SortOrder = s.SortOrder,
             LinkedGuardrailIds = s.LinkedGuardrailIds.ToList()
         };
