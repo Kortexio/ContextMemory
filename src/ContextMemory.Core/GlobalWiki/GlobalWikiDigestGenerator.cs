@@ -25,7 +25,7 @@ public interface IGlobalWikiDigestGenerator
 /// </summary>
 public sealed class GlobalWikiDigestGenerator : IGlobalWikiDigestGenerator
 {
-    public const int MaxLines = 6;
+    public const int MaxLines = 7;
     public const int MaxChars = 2_000;
 
     private readonly ILlmAdapterResolver _adapterResolver;

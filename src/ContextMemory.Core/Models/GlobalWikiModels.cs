@@ -130,6 +130,12 @@ public sealed class GlobalWikiDigestRebuildResult
 
     [JsonPropertyName("catalogRefreshed")]
     public bool CatalogRefreshed { get; init; }
+
+    [JsonPropertyName("glossaryRefreshed")]
+    public bool GlossaryRefreshed { get; init; }
+
+    [JsonPropertyName("glossaryPairs")]
+    public int GlossaryPairs { get; init; }
 }
 
 public sealed class GlobalWikiBatchDocument

@@ -75,6 +75,7 @@ public sealed class FileGlobalWikiStore : IGlobalWikiStore
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            GlobalWikiAliasLexicon.Invalidate(appId);
             EnsureDirs(appId, documentId);
 
             var hash = GlobalWikiSlug.ComputeContentHash(request.Content);
@@ -274,6 +275,7 @@ public sealed class FileGlobalWikiStore : IGlobalWikiStore
         if (File.Exists(pointer))
             File.Delete(pointer);
         await RebuildIndexAsync(appId, cancellationToken).ConfigureAwait(false);
+        GlobalWikiAliasLexicon.Invalidate(appId);
         return true;
     }
 
@@ -303,7 +305,10 @@ public sealed class FileGlobalWikiStore : IGlobalWikiStore
     {
         var docs = await GetAllForQueryAsync(appId, sourceId, asOf, cancellationToken).ConfigureAwait(false);
         var index = await ReadIndexAsync(appId, cancellationToken).ConfigureAwait(false);
-        var tokens = Tokenize(query);
+        var lexicon = GlobalWikiAliasLexicon.FromDocuments(docs);
+        GlobalWikiAliasLexicon.Remember(appId, lexicon);
+        var expansion = lexicon.Expand(query);
+        var tokens = expansion.IndexTokens.ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (tokens.Count == 0)
             return docs.Take(Math.Max(1, topK)).ToList();
 
@@ -326,7 +331,7 @@ public sealed class FileGlobalWikiStore : IGlobalWikiStore
             ? docs.Where(d => candidateIds.Contains(d.DocumentId)).ToList()
             : docs;
 
-        return GlobalWikiScoring.ScoreMatches(pool, query)
+        return GlobalWikiScoring.ScoreMatches(pool, query, lexicon)
             .Take(Math.Clamp(topK, 1, 200))
             .Select(x => x.Document)
             .ToList();
