@@ -234,9 +234,12 @@ public static class LlmPrompts
             FULL CONTENT (includes comments — extract rules/policies from them):
             {content}
 
-            Write at most 6 lines of plain text (no markdown fences, no JSON):
+            Write at most 8 lines of plain text (no markdown fences, no JSON):
             - Line 1 MUST be: Keywords: k1, k2, k3, ... (5–12 specific terms: IDs, systems, rules, entities)
-            - Lines 2–6: short factual bullets covering problem, decisions, and especially RULES found in comments/discussion
+            - When the document uses an acronym, include BOTH forms in Keywords, e.g. VVE (Virtual Vehicle Enablement)
+            - Line 2 (only when acronyms appear in the document): Aliases: ACRO=Full expansion; ACRO2=Other expansion
+            - Line 3 (optional, 1–3 intent questions this doc answers): Questions: short question one? | short question two?
+            - Lines 4–8: short factual bullets covering problem, decisions, and especially RULES found in comments/discussion
             - Prefer concrete constraints ("must", "cannot", SLAs, formulas, owners) over vague summary
             - Same language as the document
             - Do not invent facts; omit unknowns
@@ -251,9 +254,12 @@ public static class LlmPrompts
             CONTEÚDO COMPLETO (inclui comentários — extrai regras/políticas deles):
             {content}
 
-            Escreve no máximo 6 linhas de texto simples (sem fences markdown, sem JSON):
+            Escreve no máximo 8 linhas de texto simples (sem fences markdown, sem JSON):
             - A linha 1 DEVE ser: Keywords: k1, k2, k3, ... (5–12 termos específicos: IDs, sistemas, regras, entidades)
-            - Linhas 2–6: factos curtos sobre problema, decisões e sobretudo REGRAS nos comentários/discussão
+            - Quando o documento usa uma sigla, inclui as DUAS formas em Keywords, p.ex. VVE (Virtual Vehicle Enablement)
+            - Linha 2 (só se houver siglas no documento): Aliases: SIGLA=Expansão completa; SIGLA2=Outra expansão
+            - Linha 3 (opcional, 1–3 perguntas de intenção que este doc responde): Questions: pergunta curta? | outra pergunta?
+            - Linhas 4–8: factos curtos sobre problema, decisões e sobretudo REGRAS nos comentários/discussão
             - Prefere restrições concretas ("deve", "não pode", SLAs, fórmulas, owners) a resumos vagos
             - Mesma língua do documento
             - Não inventes factos; omite o que não souberes

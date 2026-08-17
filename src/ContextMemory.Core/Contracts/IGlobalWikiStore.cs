@@ -47,6 +47,7 @@ public interface IGlobalWikiStore
         DateTimeOffset? asOf = null,
         string? sourceId = null,
         int topK = 50,
+        bool digestOnly = false,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<GlobalWikiDocument>> ListRevisionsAsync(

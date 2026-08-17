@@ -48,7 +48,7 @@ public sealed class GlobalWikiService
         {
             if (string.IsNullOrWhiteSpace(doc.DocumentId) || string.IsNullOrWhiteSpace(doc.Content))
                 continue;
-            if (GlobalWikiCatalog.IsCatalogDocument(doc.DocumentId))
+            if (GlobalWikiCatalog.IsReservedDocument(doc.DocumentId))
                 continue;
 
             var result = await _store.UpsertAsync(
@@ -87,7 +87,7 @@ public sealed class GlobalWikiService
             .ConfigureAwait(false);
 
         var candidates = docs
-            .Where(d => !GlobalWikiCatalog.IsCatalogDocument(d.DocumentId))
+            .Where(d => !GlobalWikiCatalog.IsReservedDocument(d.DocumentId))
             .OrderBy(d => d.DocumentId, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -143,13 +143,15 @@ public sealed class GlobalWikiService
         }
 
         await RefreshCatalogAsync(appId, cancellationToken).ConfigureAwait(false);
+        var glossary = await RefreshGlossaryAsync(appId, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
-            "Wiki digests rebuilt for {AppId}: processed={Processed}, updated={Updated}, skipped={Skipped}",
+            "Wiki digests rebuilt for {AppId}: processed={Processed}, updated={Updated}, skipped={Skipped}, glossaryPairs={GlossaryPairs}",
             appId,
             candidates.Count,
             updated,
-            skipped);
+            skipped,
+            glossary.PairCount);
 
         return new GlobalWikiDigestRebuildResult
         {
@@ -157,18 +159,23 @@ public sealed class GlobalWikiService
             Processed = candidates.Count,
             Updated = updated,
             Skipped = skipped,
-            CatalogRefreshed = true
+            CatalogRefreshed = true,
+            GlossaryRefreshed = glossary.Refreshed,
+            GlossaryPairs = glossary.PairCount
         };
     }
 
     public async Task<bool> DeleteAsync(string appId, string documentId, CancellationToken cancellationToken = default)
     {
-        if (GlobalWikiCatalog.IsCatalogDocument(documentId))
+        if (GlobalWikiCatalog.IsReservedDocument(documentId))
             return await _store.DeleteAsync(appId, documentId, cancellationToken).ConfigureAwait(false);
 
         var deleted = await _store.DeleteAsync(appId, documentId, cancellationToken).ConfigureAwait(false);
         if (deleted)
+        {
             await RefreshCatalogAsync(appId, cancellationToken).ConfigureAwait(false);
+            await RefreshGlossaryAsync(appId, cancellationToken).ConfigureAwait(false);
+        }
         return deleted;
     }
 
@@ -218,8 +225,16 @@ public sealed class GlobalWikiService
                 : request.DigestOnly ? DefaultDigestBudgetChars : DefaultBudgetChars;
 
         var matchedDocs = (await _store
-                .SearchAsync(appId, request.Query, asOf, request.SourceId, topK, cancellationToken)
+                .SearchAsync(
+                    appId,
+                    request.Query,
+                    asOf,
+                    request.SourceId,
+                    topK,
+                    request.DigestOnly,
+                    cancellationToken)
                 .ConfigureAwait(false))
+            .Where(d => !GlobalWikiCatalog.IsGlossaryDocument(d.DocumentId))
             .ToList();
 
         var totalDocs = await _store
@@ -241,7 +256,12 @@ public sealed class GlobalWikiService
         // Prefer scored ordering from GlobalWikiScoring when we have the pool.
         if (matchedDocs.Count > 0)
         {
-            var rescored = GlobalWikiScoring.ScoreMatches(matchedDocs, request.Query).ToList();
+            var lexicon = GlobalWikiAliasLexicon.ForApp(appId);
+            var rescored = GlobalWikiScoring.ScoreMatches(
+                matchedDocs,
+                request.Query,
+                lexicon,
+                request.DigestOnly).ToList();
             matchedDocs = rescored.Select(x => x.Document).ToList();
             matches = rescored
                 .Select(m => new GlobalWikiMatch
@@ -493,7 +513,7 @@ public sealed class GlobalWikiService
             var docs = await _store.GetAllForQueryAsync(appId, sourceId: null, asOf: null, cancellationToken)
                 .ConfigureAwait(false);
             var entries = docs
-                .Where(d => !GlobalWikiCatalog.IsCatalogDocument(d.DocumentId))
+                .Where(d => !GlobalWikiCatalog.IsReservedDocument(d.DocumentId))
                 .OrderBy(d => d.DocumentId, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
@@ -537,6 +557,64 @@ public sealed class GlobalWikiService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to refresh global wiki catalog for {AppId}", appId);
+        }
+    }
+
+    private async Task<(bool Refreshed, int PairCount)> RefreshGlossaryAsync(
+        string appId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var docs = await _store
+                .GetAllForQueryAsync(appId, sourceId: null, asOf: null, cancellationToken)
+                .ConfigureAwait(false);
+
+            var existing = await _store
+                .GetAsync(appId, GlobalWikiCatalog.GlossaryDocumentId, cancellationToken)
+                .ConfigureAwait(false);
+            var (manual, _) = GlobalWikiAliasLexicon.ParseGlossarySections(existing?.Content);
+
+            var harvested = GlobalWikiAliasLexicon.HarvestPairsFromDocuments(docs);
+            var auto = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in harvested)
+            {
+                if (manual.ContainsKey(kv.Key))
+                    continue;
+                auto[kv.Key] = kv.Value;
+            }
+
+            var totalPairs = auto.Count + manual.Count;
+            if (totalPairs == 0 && existing is null)
+                return (Refreshed: false, PairCount: 0);
+
+            var markdown = GlobalWikiAliasLexicon.BuildGlossaryMarkdown(auto, manual);
+            var unchanged = existing is not null
+                && string.Equals(existing.Content.Trim(), markdown.Trim(), StringComparison.Ordinal);
+            if (unchanged)
+                return (Refreshed: true, PairCount: totalPairs);
+
+            await _store.UpsertAsync(
+                appId,
+                GlobalWikiCatalog.GlossaryDocumentId,
+                new GlobalWikiUpsertRequest
+                {
+                    Title = GlobalWikiCatalog.GlossaryTitle,
+                    Content = markdown,
+                    Summary = $"Acronym glossary: {auto.Count} auto from digests, {manual.Count} manual.",
+                    SourceId = "wiki:glossary",
+                    Slug = "wiki-glossary",
+                    Overwrite = true
+                },
+                cancellationToken).ConfigureAwait(false);
+
+            GlobalWikiAliasLexicon.Invalidate(appId);
+            return (Refreshed: true, PairCount: totalPairs);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to refresh global wiki glossary for {AppId}", appId);
+            return (Refreshed: false, PairCount: 0);
         }
     }
 
