@@ -286,6 +286,7 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
         DateTimeOffset? asOf = null,
         string? sourceId = null,
         int topK = 50,
+        bool digestOnly = false,
         CancellationToken cancellationToken = default)
     {
         topK = Math.Clamp(topK, 1, 200);
@@ -295,67 +296,89 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
         var lexicon = await LoadLexiconAsync(db, appId, point, cancellationToken).ConfigureAwait(false);
         GlobalWikiAliasLexicon.Remember(appId, lexicon);
         var expansion = lexicon.Expand(query);
-        var tsQuery = GlobalWikiAliasLexicon.ToPostgresTsQuery(expansion);
+
+        if (expansion.Groups.Count == 0)
+            return [];
+
+        var vectorColumn = digestOnly ? "digest_search_vector" : "search_vector";
+        var strictQuery = GlobalWikiAliasLexicon.ToPostgresTsQuery(expansion);
+        var orQuery = GlobalWikiAliasLexicon.ToPostgresOrTsQuery(expansion);
 
         List<GlobalWikiDocumentEntity> entities;
         try
         {
-            if (expansion.Groups.Count == 0)
-            {
-                return (await GetAllForQueryAsync(appId, sourceId, asOf, cancellationToken).ConfigureAwait(false))
-                    .Take(topK)
-                    .ToList();
-            }
-
-            if (string.IsNullOrWhiteSpace(tsQuery))
-            {
-                var docs = await GetAllForQueryAsync(appId, sourceId, asOf, cancellationToken).ConfigureAwait(false);
-                return GlobalWikiScoring.ScoreMatches(docs, query, lexicon)
-                    .Take(topK)
-                    .Select(x => x.Document)
-                    .ToList();
-            }
-
-            // Synonym groups as OR, AND across original query terms. Safer than raw user plainto_tsquery.
-            var sql = """
-                SELECT * FROM global_wiki_documents
-                WHERE "AppId" = {0}
-                  AND "ValidFrom" <= {1}
-                  AND ("ValidTo" IS NULL OR "ValidTo" > {1})
-                  AND ({2}::text IS NULL OR "SourceId" = {2})
-                  AND search_vector @@ to_tsquery('simple', {3})
-                ORDER BY ts_rank(search_vector, to_tsquery('simple', {3})) DESC
-                LIMIT {4}
-                """;
-
-            entities = await db.GlobalWikiDocuments
-                .FromSqlRaw(sql, appId, point, (object?)sourceId ?? DBNull.Value, tsQuery, topK)
-                .AsNoTracking()
-                .ToListAsync(cancellationToken)
+            entities = await QueryFtsAsync(
+                    db,
+                    appId,
+                    point,
+                    sourceId,
+                    vectorColumn,
+                    strictQuery,
+                    topK,
+                    cancellationToken)
                 .ConfigureAwait(false);
+
+            if (entities.Count == 0 && !string.IsNullOrWhiteSpace(orQuery)
+                && !string.Equals(orQuery, strictQuery, StringComparison.Ordinal))
+            {
+                entities = await QueryFtsAsync(
+                        db,
+                        appId,
+                        point,
+                        sourceId,
+                        vectorColumn,
+                        orQuery,
+                        topK,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
         catch
         {
-            var docs = await GetAllForQueryAsync(appId, sourceId, asOf, cancellationToken).ConfigureAwait(false);
-            return GlobalWikiScoring.ScoreMatches(docs, query, lexicon)
-                .Take(topK)
-                .Select(x => x.Document)
-                .ToList();
+            return [];
         }
 
         if (entities.Count == 0)
-        {
-            var docs = await GetAllForQueryAsync(appId, sourceId, asOf, cancellationToken).ConfigureAwait(false);
-            return GlobalWikiScoring.ScoreMatches(docs, query, lexicon)
-                .Take(topK)
-                .Select(x => x.Document)
-                .ToList();
-        }
+            return [];
 
-        return GlobalWikiScoring.ScoreMatches(entities.Select(ToDocument).ToList(), query, lexicon)
+        return GlobalWikiScoring.ScoreMatches(
+                entities.Select(ToDocument).ToList(),
+                query,
+                lexicon,
+                digestOnly)
             .Take(topK)
             .Select(x => x.Document)
             .ToList();
+    }
+
+    private static async Task<List<GlobalWikiDocumentEntity>> QueryFtsAsync(
+        ContextMemoryDbContext db,
+        string appId,
+        DateTimeOffset point,
+        string? sourceId,
+        string vectorColumn,
+        string? tsQuery,
+        int topK,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(tsQuery))
+            return [];
+
+        var sql =
+            "SELECT * FROM global_wiki_documents " +
+            "WHERE \"AppId\" = {0} " +
+            "AND \"ValidFrom\" <= {1} " +
+            "AND (\"ValidTo\" IS NULL OR \"ValidTo\" > {1}) " +
+            "AND ({2}::text IS NULL OR \"SourceId\" = {2}) " +
+            $"AND {vectorColumn} @@ to_tsquery('simple', {{3}}) " +
+            $"ORDER BY ts_rank({vectorColumn}, to_tsquery('simple', {{3}})) DESC " +
+            "LIMIT {4}";
+
+        return await db.GlobalWikiDocuments
+            .FromSqlRaw(sql, appId, point, (object?)sourceId ?? DBNull.Value, tsQuery, topK)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static async Task<GlobalWikiAliasLexicon> LoadLexiconAsync(

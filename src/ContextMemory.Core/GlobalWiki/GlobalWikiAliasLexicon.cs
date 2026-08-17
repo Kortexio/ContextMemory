@@ -352,6 +352,18 @@ public sealed class GlobalWikiAliasLexicon
         return groups.Count == 0 ? null : string.Join(" & ", groups);
     }
 
+    /// <summary>Permissive OR tsquery — used when strict AND matching returns no hits.</summary>
+    public static string? ToPostgresOrTsQuery(GlobalWikiQueryExpansion expansion)
+    {
+        var terms = expansion.IndexTokens
+            .Select(SanitizeTsTerm)
+            .Where(t => t is not null)
+            .Cast<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return terms.Count == 0 ? null : string.Join(" | ", terms);
+    }
+
     public void ParseGlossary(string? markdown)
     {
         if (string.IsNullOrWhiteSpace(markdown))
