@@ -225,7 +225,14 @@ public sealed class GlobalWikiService
                 : request.DigestOnly ? DefaultDigestBudgetChars : DefaultBudgetChars;
 
         var matchedDocs = (await _store
-                .SearchAsync(appId, request.Query, asOf, request.SourceId, topK, cancellationToken)
+                .SearchAsync(
+                    appId,
+                    request.Query,
+                    asOf,
+                    request.SourceId,
+                    topK,
+                    request.DigestOnly,
+                    cancellationToken)
                 .ConfigureAwait(false))
             .Where(d => !GlobalWikiCatalog.IsGlossaryDocument(d.DocumentId))
             .ToList();
@@ -250,7 +257,11 @@ public sealed class GlobalWikiService
         if (matchedDocs.Count > 0)
         {
             var lexicon = GlobalWikiAliasLexicon.ForApp(appId);
-            var rescored = GlobalWikiScoring.ScoreMatches(matchedDocs, request.Query, lexicon).ToList();
+            var rescored = GlobalWikiScoring.ScoreMatches(
+                matchedDocs,
+                request.Query,
+                lexicon,
+                request.DigestOnly).ToList();
             matchedDocs = rescored.Select(x => x.Document).ToList();
             matches = rescored
                 .Select(m => new GlobalWikiMatch

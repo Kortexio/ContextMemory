@@ -326,6 +326,39 @@ public sealed class GlobalWikiServiceTests
     }
 
     [Fact]
+    public async Task Query_DigestOnly_DoesNotMatchBodyOnlyTerms()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cm-global-wiki-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var service = CreateService(root);
+            const string secretBody = "SECRET_BODY_ONLY_DIGEST_ISOLATION";
+            await service.UpsertAsync("demo", "body-only", new GlobalWikiUpsertRequest
+            {
+                Title = "Body only",
+                Content = $"# Body\n\n{secretBody}",
+                Summary = "Keywords: public, fleet\nQuestions: fleet policy overview?",
+                SourceId = "confluence:DOCS"
+            });
+
+            var result = await service.QueryAsync("demo", new GlobalWikiQueryRequest
+            {
+                Query = secretBody,
+                TopK = 5,
+                BudgetChars = 2000,
+                DigestOnly = true
+            });
+
+            Assert.DoesNotContain(result.Matches, m => m.DocumentId == "body-only");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Query_PacksMatchedDocumentBody_BeforeFillerIndexPages()
     {
         var root = Path.Combine(Path.GetTempPath(), "cm-global-wiki-" + Guid.NewGuid().ToString("N"));
@@ -379,7 +412,7 @@ public sealed class GlobalWikiServiceTests
     }
 
     [Fact]
-    public void NormalizeDigest_EnforcesKeywordsLine_AndMaxSevenLines()
+    public void NormalizeDigest_EnforcesKeywordsLine_AndMaxEightLines()
     {
         var raw =
             """
@@ -390,15 +423,16 @@ public sealed class GlobalWikiServiceTests
             Extra 3
             Extra 4
             Extra 5
-            Extra 6 should drop
+            Extra 6
+            Extra 7 should drop
             """;
 
         var normalized = GlobalWikiDigestGenerator.NormalizeDigest(raw, "PAC-668", "Billing");
         var lines = normalized.Split('\n');
-        Assert.Equal(7, lines.Length);
+        Assert.Equal(8, lines.Length);
         Assert.StartsWith("Keywords:", lines[0]);
         Assert.Contains("never reopen closed batches", normalized);
-        Assert.DoesNotContain("Extra 6 should drop", normalized);
+        Assert.DoesNotContain("Extra 7 should drop", normalized);
     }
 
     [Fact]
