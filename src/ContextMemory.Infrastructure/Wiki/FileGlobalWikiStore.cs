@@ -75,6 +75,7 @@ public sealed class FileGlobalWikiStore : IGlobalWikiStore
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            GlobalWikiAliasLexicon.Invalidate(appId);
             EnsureDirs(appId, documentId);
 
             var hash = GlobalWikiSlug.ComputeContentHash(request.Content);
@@ -274,6 +275,7 @@ public sealed class FileGlobalWikiStore : IGlobalWikiStore
         if (File.Exists(pointer))
             File.Delete(pointer);
         await RebuildIndexAsync(appId, cancellationToken).ConfigureAwait(false);
+        GlobalWikiAliasLexicon.Invalidate(appId);
         return true;
     }
 
@@ -299,15 +301,18 @@ public sealed class FileGlobalWikiStore : IGlobalWikiStore
         DateTimeOffset? asOf = null,
         string? sourceId = null,
         int topK = 50,
+        bool digestOnly = false,
         CancellationToken cancellationToken = default)
     {
         var docs = await GetAllForQueryAsync(appId, sourceId, asOf, cancellationToken).ConfigureAwait(false);
-        var index = await ReadIndexAsync(appId, cancellationToken).ConfigureAwait(false);
-        var tokens = Tokenize(query);
+        var index = await ReadIndexAsync(appId, digestOnly, cancellationToken).ConfigureAwait(false);
+        var lexicon = GlobalWikiAliasLexicon.FromDocuments(docs);
+        GlobalWikiAliasLexicon.Remember(appId, lexicon);
+        var expansion = lexicon.Expand(query);
+        var tokens = expansion.IndexTokens.ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (tokens.Count == 0)
-            return docs.Take(Math.Max(1, topK)).ToList();
+            return [];
 
-        // Prefer inverted index postings when available, then fall back to full scoring set.
         HashSet<string>? candidateIds = null;
         if (index is { Count: > 0 })
         {
@@ -324,9 +329,12 @@ public sealed class FileGlobalWikiStore : IGlobalWikiStore
 
         var pool = candidateIds is { Count: > 0 }
             ? docs.Where(d => candidateIds.Contains(d.DocumentId)).ToList()
-            : docs;
+            : [];
 
-        return GlobalWikiScoring.ScoreMatches(pool, query)
+        if (pool.Count == 0)
+            return [];
+
+        return GlobalWikiScoring.ScoreMatches(pool, query, lexicon, digestOnly)
             .Take(Math.Clamp(topK, 1, 200))
             .Select(x => x.Document)
             .ToList();
@@ -443,42 +451,63 @@ public sealed class FileGlobalWikiStore : IGlobalWikiStore
     private async Task RebuildIndexAsync(string appId, CancellationToken cancellationToken)
     {
         var docs = await GetAllForQueryAsync(appId, sourceId: null, asOf: null, cancellationToken).ConfigureAwait(false);
-        var index = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var fullIndex = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var digestIndex = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var doc in docs)
         {
-            var text = $"{doc.DocumentId} {doc.Slug} {doc.Title} {doc.Summary} {doc.SourceId} {doc.Content}";
-            foreach (var token in Tokenize(text))
-            {
-                if (!index.TryGetValue(token, out var set))
-                {
-                    set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    index[token] = set;
-                }
-
-                set.Add(doc.DocumentId);
-            }
+            IndexDocumentTokens(fullIndex, doc.DocumentId, $"{doc.DocumentId} {doc.Slug} {doc.Title} {doc.Summary} {doc.SourceId} {doc.Content}");
+            IndexDocumentTokens(digestIndex, doc.DocumentId, GlobalWikiDigestFields.DigestIndexText(doc));
         }
 
+        Directory.CreateDirectory(GetAppDir(appId));
+        await WriteIndexFileAsync(GetIndexPath(appId), fullIndex, cancellationToken).ConfigureAwait(false);
+        await WriteIndexFileAsync(GetDigestIndexPath(appId), digestIndex, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void IndexDocumentTokens(
+        Dictionary<string, HashSet<string>> index,
+        string documentId,
+        string text)
+    {
+        foreach (var token in GlobalWikiScoring.Tokenize(text))
+        {
+            if (!index.TryGetValue(token, out var set))
+            {
+                set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                index[token] = set;
+            }
+
+            set.Add(documentId);
+        }
+    }
+
+    private static async Task WriteIndexFileAsync(
+        string path,
+        Dictionary<string, HashSet<string>> index,
+        CancellationToken cancellationToken)
+    {
         var serializable = index.ToDictionary(
             kv => kv.Key,
             kv => kv.Value.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList(),
             StringComparer.OrdinalIgnoreCase);
 
-        Directory.CreateDirectory(GetAppDir(appId));
-        await File.WriteAllTextAsync(
-                GetIndexPath(appId),
-                JsonSerializer.Serialize(serializable, JsonOptions),
-                cancellationToken)
+        await File.WriteAllTextAsync(path, JsonSerializer.Serialize(serializable, JsonOptions), cancellationToken)
             .ConfigureAwait(false);
     }
 
     private async Task<Dictionary<string, List<string>>?> ReadIndexAsync(
         string appId,
+        bool digestOnly,
         CancellationToken cancellationToken)
     {
-        var path = GetIndexPath(appId);
+        var path = digestOnly ? GetDigestIndexPath(appId) : GetIndexPath(appId);
         if (!File.Exists(path))
+        {
+            if (digestOnly)
+                return await ReadIndexAsync(appId, digestOnly: false, cancellationToken).ConfigureAwait(false);
             return null;
+        }
+
         try
         {
             var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
@@ -490,7 +519,8 @@ public sealed class FileGlobalWikiStore : IGlobalWikiStore
         }
     }
 
-    private static HashSet<string> Tokenize(string? text) => GlobalWikiScoring.Tokenize(text);
+    private string GetDigestIndexPath(string appId) =>
+        Path.Combine(GetAppDir(appId), "digest-index.json");
 
     private static bool MetadataEquals(Dictionary<string, string> a, Dictionary<string, string> b)
     {

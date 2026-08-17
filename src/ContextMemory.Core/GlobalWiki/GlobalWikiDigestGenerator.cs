@@ -21,11 +21,11 @@ public interface IGlobalWikiDigestGenerator
 }
 
 /// <summary>
-/// Uses the summary LLM (<see cref="AppRuntimeConfig.WikiLlmModel"/>) to build a keyword + ≤6-line digest.
+/// Uses the summary LLM (<see cref="AppRuntimeConfig.WikiLlmModel"/>) to build a keyword + ≤8-line digest.
 /// </summary>
 public sealed class GlobalWikiDigestGenerator : IGlobalWikiDigestGenerator
 {
-    public const int MaxLines = 6;
+    public const int MaxLines = 8;
     public const int MaxChars = 2_000;
 
     private readonly ILlmAdapterResolver _adapterResolver;
