@@ -82,6 +82,7 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
         CancellationToken cancellationToken = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        GlobalWikiAliasLexicon.Invalidate(appId);
         var hash = GlobalWikiSlug.ComputeContentHash(request.Content);
         var existing = await db.GlobalWikiDocuments
             .FirstOrDefaultAsync(
@@ -248,6 +249,7 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
         existing.ValidTo = now;
         existing.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        GlobalWikiAliasLexicon.Invalidate(appId);
         return true;
     }
 
@@ -290,31 +292,44 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
         var point = asOf ?? DateTimeOffset.UtcNow;
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
 
+        var lexicon = await LoadLexiconAsync(db, appId, point, cancellationToken).ConfigureAwait(false);
+        GlobalWikiAliasLexicon.Remember(appId, lexicon);
+        var expansion = lexicon.Expand(query);
+        var tsQuery = GlobalWikiAliasLexicon.ToPostgresTsQuery(expansion);
+
         List<GlobalWikiDocumentEntity> entities;
         try
         {
-            var tokens = GlobalWikiScoring.Tokenize(query);
-            if (tokens.Count == 0)
+            if (expansion.Groups.Count == 0)
             {
                 return (await GetAllForQueryAsync(appId, sourceId, asOf, cancellationToken).ConfigureAwait(false))
                     .Take(topK)
                     .ToList();
             }
 
-            // Use GIN-backed search_vector when present; plainto_tsquery is safer for user input.
+            if (string.IsNullOrWhiteSpace(tsQuery))
+            {
+                var docs = await GetAllForQueryAsync(appId, sourceId, asOf, cancellationToken).ConfigureAwait(false);
+                return GlobalWikiScoring.ScoreMatches(docs, query, lexicon)
+                    .Take(topK)
+                    .Select(x => x.Document)
+                    .ToList();
+            }
+
+            // Synonym groups as OR, AND across original query terms. Safer than raw user plainto_tsquery.
             var sql = """
                 SELECT * FROM global_wiki_documents
                 WHERE "AppId" = {0}
                   AND "ValidFrom" <= {1}
                   AND ("ValidTo" IS NULL OR "ValidTo" > {1})
                   AND ({2}::text IS NULL OR "SourceId" = {2})
-                  AND search_vector @@ plainto_tsquery('simple', {3})
-                ORDER BY ts_rank(search_vector, plainto_tsquery('simple', {3})) DESC
+                  AND search_vector @@ to_tsquery('simple', {3})
+                ORDER BY ts_rank(search_vector, to_tsquery('simple', {3})) DESC
                 LIMIT {4}
                 """;
 
             entities = await db.GlobalWikiDocuments
-                .FromSqlRaw(sql, appId, point, (object?)sourceId ?? DBNull.Value, query, topK)
+                .FromSqlRaw(sql, appId, point, (object?)sourceId ?? DBNull.Value, tsQuery, topK)
                 .AsNoTracking()
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
@@ -322,7 +337,7 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
         catch
         {
             var docs = await GetAllForQueryAsync(appId, sourceId, asOf, cancellationToken).ConfigureAwait(false);
-            return GlobalWikiScoring.ScoreMatches(docs, query)
+            return GlobalWikiScoring.ScoreMatches(docs, query, lexicon)
                 .Take(topK)
                 .Select(x => x.Document)
                 .ToList();
@@ -331,16 +346,55 @@ public sealed class PostgresGlobalWikiStore : IGlobalWikiStore
         if (entities.Count == 0)
         {
             var docs = await GetAllForQueryAsync(appId, sourceId, asOf, cancellationToken).ConfigureAwait(false);
-            return GlobalWikiScoring.ScoreMatches(docs, query)
+            return GlobalWikiScoring.ScoreMatches(docs, query, lexicon)
                 .Take(topK)
                 .Select(x => x.Document)
                 .ToList();
         }
 
-        return GlobalWikiScoring.ScoreMatches(entities.Select(ToDocument).ToList(), query)
+        return GlobalWikiScoring.ScoreMatches(entities.Select(ToDocument).ToList(), query, lexicon)
             .Take(topK)
             .Select(x => x.Document)
             .ToList();
+    }
+
+    private static async Task<GlobalWikiAliasLexicon> LoadLexiconAsync(
+        ContextMemoryDbContext db,
+        string appId,
+        DateTimeOffset point,
+        CancellationToken cancellationToken)
+    {
+        var rows = await db.GlobalWikiDocuments.AsNoTracking()
+            .Where(x => x.AppId == appId
+                        && x.ValidFrom <= point
+                        && (x.ValidTo == null || x.ValidTo > point))
+            .Select(x => new { x.DocumentId, x.Title, x.Summary })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var reserved = await db.GlobalWikiDocuments.AsNoTracking()
+            .Where(x => x.AppId == appId
+                        && x.ValidFrom <= point
+                        && (x.ValidTo == null || x.ValidTo > point)
+                        && (x.DocumentId == GlobalWikiCatalog.GlossaryDocumentId
+                            || x.DocumentId == GlobalWikiCatalog.DocumentId))
+            .Select(x => new { x.DocumentId, x.Content })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        string? glossary = reserved
+            .FirstOrDefault(r => GlobalWikiCatalog.IsGlossaryDocument(r.DocumentId))
+            ?.Content;
+        var harvest = rows
+            .Select(r => (r.Title, r.Summary))
+            .ToList();
+        var catalog = reserved
+            .FirstOrDefault(r => GlobalWikiCatalog.IsCatalogDocument(r.DocumentId))
+            ?.Content;
+        if (!string.IsNullOrWhiteSpace(catalog))
+            harvest.Add((GlobalWikiCatalog.Title, catalog));
+
+        return GlobalWikiAliasLexicon.FromHarvest(glossary, harvest);
     }
 
     public async Task<IReadOnlyList<GlobalWikiDocument>> ListRevisionsAsync(
