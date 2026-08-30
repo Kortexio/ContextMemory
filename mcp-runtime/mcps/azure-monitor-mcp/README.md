@@ -66,8 +66,14 @@ See [inbound-mcp-guide.md](../../../docs/inbound-mcp-guide.md) for MCP-first + s
 ## Local smoke
 
 ```bash
-node src/index.mjs
-# speak MCP Content-Length JSON-RPC on stdin (or use ContextMemory mcp/test)
+# NDJSON (same framing as ContextMemory mcp-runtime)
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}' \
+  | node src/index.mjs
+# expect a single-line JSON initialize result, then tools/list works the same way
 ```
 
 Zero npm dependencies (Node 18+ `fetch`).
+
+## Framing note
+
+ContextMemory `mcp-runtime` speaks **NDJSON** on stdio (not Content-Length). This server writes NDJSON and accepts both NDJSON and Content-Length on stdin so catalog rebuild / `mcp/test` does not hang on `initialize`.

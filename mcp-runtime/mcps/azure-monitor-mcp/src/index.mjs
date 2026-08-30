@@ -5,9 +5,10 @@
  *   AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
  *   LOG_ANALYTICS_WORKSPACE_ID (default workspace)
  *
- * Protocol: JSON-RPC 2.0 with Content-Length framing (MCP stdio).
+ * Protocol: JSON-RPC 2.0 over stdio.
+ * - Writes NDJSON (JSON + "\n") — required by ContextMemory mcp-runtime / McpStdioClient.
+ * - Reads NDJSON and Content-Length framing (dual) for local smoke / standard MCP clients.
  */
-import { createInterface } from "node:readline";
 
 const TOOLS = [
   {
@@ -239,10 +240,8 @@ async function callTool(name, args) {
 }
 
 function writeMessage(msg) {
-  const json = JSON.stringify(msg);
-  const payload = Buffer.from(json, "utf8");
-  const header = Buffer.from(`Content-Length: ${payload.length}\r\n\r\n`, "utf8");
-  process.stdout.write(Buffer.concat([header, payload]));
+  // mcp-runtime Session reads line-delimited JSON (createInterface + JSON.parse).
+  process.stdout.write(JSON.stringify(msg) + "\n");
 }
 
 function handleRequest(msg) {
@@ -259,7 +258,7 @@ function handleRequest(msg) {
       return reply({
         protocolVersion: "2024-11-05",
         capabilities: { tools: {} },
-        serverInfo: { name: "azure-monitor-mcp", version: "0.1.0" },
+        serverInfo: { name: "azure-monitor-mcp", version: "0.1.1" },
       });
     }
 
@@ -299,34 +298,63 @@ function handleRequest(msg) {
   }
 }
 
-/** Content-Length framed reader */
+function dispatchMessage(raw) {
+  try {
+    const msg = JSON.parse(raw);
+    if (msg.method) handleRequest(msg);
+  } catch (err) {
+    writeMessage({
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32700, message: `Parse error: ${err.message}` },
+    });
+  }
+}
+
+/** Dual reader: NDJSON (mcp-runtime) + Content-Length (spec / local clients). */
 let buffer = Buffer.alloc(0);
 process.stdin.on("data", (chunk) => {
   buffer = Buffer.concat([buffer, chunk]);
-  while (true) {
-    const headerEnd = buffer.indexOf("\r\n\r\n");
-    if (headerEnd < 0) break;
-    const header = buffer.slice(0, headerEnd).toString("utf8");
-    const match = /Content-Length:\s*(\d+)/i.exec(header);
-    if (!match) {
-      buffer = buffer.slice(headerEnd + 4);
+  while (buffer.length > 0) {
+    const asText = buffer.toString("utf8");
+    const trimmedStart = asText.match(/^\s*/)?.[0].length ?? 0;
+    const first = asText.slice(trimmedStart, trimmedStart + 1);
+
+    // Content-Length framing
+    if (/^content-length:/i.test(asText.slice(trimmedStart))) {
+      const headerEnd = buffer.indexOf("\r\n\r\n");
+      if (headerEnd < 0) break;
+      const header = buffer.slice(0, headerEnd).toString("utf8");
+      const match = /Content-Length:\s*(\d+)/i.exec(header);
+      if (!match) {
+        buffer = buffer.slice(headerEnd + 4);
+        continue;
+      }
+      const len = Number(match[1]);
+      const total = headerEnd + 4 + len;
+      if (buffer.length < total) break;
+      const body = buffer.slice(headerEnd + 4, total).toString("utf8");
+      buffer = buffer.slice(total);
+      dispatchMessage(body);
       continue;
     }
-    const len = Number(match[1]);
-    const total = headerEnd + 4 + len;
-    if (buffer.length < total) break;
-    const body = buffer.slice(headerEnd + 4, total).toString("utf8");
-    buffer = buffer.slice(total);
-    try {
-      const msg = JSON.parse(body);
-      if (msg.method) handleRequest(msg);
-    } catch (err) {
-      writeMessage({
-        jsonrpc: "2.0",
-        id: null,
-        error: { code: -32700, message: `Parse error: ${err.message}` },
-      });
+
+    // NDJSON / line-delimited JSON (ContextMemory mcp-runtime)
+    if (first === "{" || first === "[") {
+      const nl = buffer.indexOf(0x0a); // \n
+      if (nl < 0) break;
+      const line = buffer.slice(0, nl).toString("utf8").replace(/\r$/, "").trim();
+      buffer = buffer.slice(nl + 1);
+      if (line) dispatchMessage(line);
+      continue;
     }
+
+    // Skip leading junk / incomplete header wait
+    if (trimmedStart > 0) {
+      buffer = buffer.slice(trimmedStart);
+      continue;
+    }
+    break;
   }
 });
 
