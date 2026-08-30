@@ -66,7 +66,11 @@ public sealed class AgentContextCompactor : IAgentContextCompactor
         if (estimated <= maxTokens || messages.Count < 4)
             return null;
 
-        var historyId = $"history:{sessionId}:{iteration}:{Guid.NewGuid():N}"[..64];
+        // Keep under common FS/DB id limits without assuming the prefix is already >= 64 chars
+        // (short session ids like Jira keys produced ArgumentOutOfRange on ..[64]).
+        var historyId = $"history:{sessionId}:{iteration}:{Guid.NewGuid():N}";
+        if (historyId.Length > 64)
+            historyId = historyId[..64];
         var transcript = SerializeTranscript(messages);
 
         try

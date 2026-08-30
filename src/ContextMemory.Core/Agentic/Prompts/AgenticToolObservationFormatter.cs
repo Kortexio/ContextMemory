@@ -57,7 +57,9 @@ public static class AgenticToolObservationFormatter
             return string.IsNullOrWhiteSpace(artifactId) ? payload : payload + pointer;
         }
 
-        var previewLen = Math.Max(64, Math.Min(maxChars - 120, maxChars));
+        // previewLen must never exceed payload.Length (maxChars can be < 64 + pointer overhead).
+        var previewLen = Math.Clamp(maxChars - 120, 1, payload.Length);
+        previewLen = Math.Min(previewLen, Math.Max(1, payload.Length - 1));
         var preview = payload[..previewLen];
         return preview
                + $"\n\n…[truncated {payload.Length - previewLen} chars; artifactId={id} "

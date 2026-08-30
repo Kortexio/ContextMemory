@@ -188,6 +188,7 @@ public static class SessionDiscoveryTools
         if (trimmed.Length <= maxChars)
             return trimmed + " (tool_describe for full schema)";
 
-        return trimmed[..Math.Max(40, maxChars - 32)].TrimEnd() + "… (tool_describe for full schema)";
+        var keep = Math.Clamp(maxChars - 32, 1, trimmed.Length);
+        return trimmed[..keep].TrimEnd() + "… (tool_describe for full schema)";
     }
 }

@@ -123,7 +123,8 @@ public static class SessionWikiCompiler
                 if (sb.Length > 0)
                     sb.Append("\n\n");
                 sb.Append(header);
-                sb.Append(body[..availableForBody].TrimEnd());
+                var take = Math.Min(availableForBody, body.Length);
+                sb.Append(body[..take].TrimEnd());
                 sb.Append(PageTruncatedSuffix);
                 remaining = 0;
                 included++;
