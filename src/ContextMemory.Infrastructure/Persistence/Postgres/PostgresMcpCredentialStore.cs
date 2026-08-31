@@ -38,7 +38,36 @@ public sealed class PostgresMcpCredentialStore : IMcpCredentialStore
         var payload = JsonSerializer.Deserialize<McpCredentialSecretPayload>(entity.SecretJson, JsonOptions)
                       ?? new McpCredentialSecretPayload();
 
-        return new McpCredentialRecord
+        return ToRecord(entity, payload);
+    }
+
+    public async Task<IReadOnlyList<McpCredentialRecord>> ListAsync(
+        string appId,
+        string? integrationName = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var query = db.McpCredentials.AsNoTracking().Where(x => x.AppId == appId);
+        if (!string.IsNullOrWhiteSpace(integrationName))
+            query = query.Where(x => x.IntegrationName == integrationName);
+
+        var rows = await query
+            .OrderBy(x => x.IntegrationName)
+            .ThenBy(x => x.CredentialRef)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows.Select(entity =>
+            {
+                var payload = JsonSerializer.Deserialize<McpCredentialSecretPayload>(entity.SecretJson, JsonOptions)
+                              ?? new McpCredentialSecretPayload();
+                return ToRecord(entity, payload);
+            })
+            .ToList();
+    }
+
+    private static McpCredentialRecord ToRecord(McpCredentialEntity entity, McpCredentialSecretPayload payload) =>
+        new()
         {
             AppId = entity.AppId,
             IntegrationName = entity.IntegrationName,
@@ -51,7 +80,6 @@ public sealed class PostgresMcpCredentialStore : IMcpCredentialStore
             Env = payload.Env,
             UpdatedAt = entity.UpdatedAt
         };
-    }
 
     public async Task UpsertAsync(McpCredentialRecord record, CancellationToken cancellationToken = default)
     {

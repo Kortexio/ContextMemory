@@ -190,6 +190,16 @@ public class CloudIntegrationTests : IClassFixture<ContextMemoryWebApplicationFa
         var credResponse = await _client.SendAsync(cred);
         Assert.Equal(HttpStatusCode.NoContent, credResponse.StatusCode);
 
+        using var listed = new HttpRequestMessage(HttpMethod.Get, "/admin/apps/demo-dev/mcp/credentials/zuora-mcp");
+        listed.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-master-key");
+        var listedResponse = await _client.SendAsync(listed);
+        Assert.Equal(HttpStatusCode.OK, listedResponse.StatusCode);
+        var listedBody = await listedResponse.Content.ReadFromJsonAsync<List<McpCredentialAdminDto>>();
+        Assert.NotNull(listedBody);
+        var stored = Assert.Single(listedBody!, x => x.CredentialRef == "zuora-prod");
+        Assert.Equal("bearer", stored.AuthMode);
+        Assert.Equal("secret", stored.BearerToken);
+
         using var sync = new HttpRequestMessage(HttpMethod.Post, "/admin/apps/demo-dev/mcp/catalog/rebuild");
         sync.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-master-key");
         sync.Content = JsonContent.Create(new McpCatalogSyncRequest { IntegrationName = "zuora-mcp" });

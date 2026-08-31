@@ -36,6 +36,34 @@ public sealed class FileMcpCredentialStore : IMcpCredentialStore
         return JsonSerializer.Deserialize<McpCredentialRecord>(json, JsonOptions);
     }
 
+    public async Task<IReadOnlyList<McpCredentialRecord>> ListAsync(
+        string appId,
+        string? integrationName = null,
+        CancellationToken cancellationToken = default)
+    {
+        var dir = GetAppDir(appId);
+        if (!Directory.Exists(dir))
+            return [];
+
+        var records = new List<McpCredentialRecord>();
+        foreach (var path in Directory.EnumerateFiles(dir, "*.json"))
+        {
+            var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+            var record = JsonSerializer.Deserialize<McpCredentialRecord>(json, JsonOptions);
+            if (record is null)
+                continue;
+            if (!string.IsNullOrWhiteSpace(integrationName)
+                && !string.Equals(record.IntegrationName, integrationName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            records.Add(record);
+        }
+
+        return records
+            .OrderBy(r => r.IntegrationName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.CredentialRef, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     public async Task UpsertAsync(McpCredentialRecord record, CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(GetAppDir(record.AppId));

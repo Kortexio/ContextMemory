@@ -115,6 +115,18 @@ public sealed class SandboxFallbackEnvResolverTests
             return Task.FromResult(record);
         }
 
+        public Task<IReadOnlyList<McpCredentialRecord>> ListAsync(
+            string appId,
+            string? integrationName = null,
+            CancellationToken cancellationToken = default)
+        {
+            var rows = _map.Values.Where(r =>
+                string.Equals(r.AppId, appId, StringComparison.OrdinalIgnoreCase)
+                && (string.IsNullOrWhiteSpace(integrationName)
+                    || string.Equals(r.IntegrationName, integrationName, StringComparison.OrdinalIgnoreCase)));
+            return Task.FromResult<IReadOnlyList<McpCredentialRecord>>(rows.ToList());
+        }
+
         public Task UpsertAsync(McpCredentialRecord record, CancellationToken cancellationToken = default)
         {
             Put(record);

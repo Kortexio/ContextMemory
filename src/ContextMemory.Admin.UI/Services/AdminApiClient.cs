@@ -94,6 +94,18 @@ public sealed class AdminApiClient
         return result ?? [];
     }
 
+    public async Task<IReadOnlyList<McpCredentialAdminDto>> GetMcpCredentialsAsync(
+        string appId,
+        string? integrationName = null,
+        CancellationToken cancellationToken = default)
+    {
+        var path = string.IsNullOrWhiteSpace(integrationName)
+            ? $"/admin/apps/{Uri.EscapeDataString(appId)}/mcp/credentials"
+            : $"/admin/apps/{Uri.EscapeDataString(appId)}/mcp/credentials/{Uri.EscapeDataString(integrationName)}";
+        var result = await GetAsync<List<McpCredentialAdminDto>>(path, cancellationToken).ConfigureAwait(false);
+        return result ?? [];
+    }
+
     public async Task UpsertMcpCredentialAsync(
         string appId,
         string integrationName,

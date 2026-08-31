@@ -663,6 +663,12 @@ public sealed class McpJsonRpcClientTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult<McpCredentialRecord?>(null);
 
+        public Task<IReadOnlyList<McpCredentialRecord>> ListAsync(
+            string appId,
+            string? integrationName = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<McpCredentialRecord>>([]);
+
         public Task UpsertAsync(McpCredentialRecord record, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
     }

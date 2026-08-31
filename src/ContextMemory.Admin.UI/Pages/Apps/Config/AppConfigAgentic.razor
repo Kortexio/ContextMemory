@@ -28,7 +28,7 @@ else if (LoadError is not null)
 else
 {
     <EditForm Model="_agentic" OnValidSubmit="SaveAsync">
-        <AgenticConfigEditor Model="_agentic" />
+        <AgenticConfigEditor Model="_agentic" AppId="@AppId" />
 
         @if (Message is not null) { <div class="alert alert-success">@Message</div> }
         @if (Error is not null) { <div class="alert alert-danger">@Error</div> }

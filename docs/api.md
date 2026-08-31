@@ -22,6 +22,8 @@
 | `POST /apps/{id}/mcp/catalog/rebuild` | Refresh MCP tool catalog (HTTP + stdio) |
 | `POST /apps/{id}/mcp/test/{name}` | Probe an MCP server |
 | `POST /apps/{id}/mcp/credentials/{name}` | Upsert MCP credentials |
+| `GET /admin/apps/{id}/mcp/credentials` | List stored MCP secrets (Master Key; values unmasked) |
+| `GET /admin/apps/{id}/mcp/credentials/{name}` | MCP secrets for one integration (Master Key) |
 | `GET /apps/{id}/config` | Runtime config (auth with app API key) |
 | `PATCH /admin/apps/{id}/config` | Update config (Master Key), including `GlobalWikiEnabled` |
 | `GET /admin/agentic/catalog` | Platform skills + guardrail packs |

@@ -30,6 +30,39 @@ public sealed class McpCredentialUpsertRequest
     public Dictionary<string, string>? Env { get; init; }
 }
 
+public sealed class McpCredentialAdminDto
+{
+    [JsonPropertyName("appId")]
+    public string AppId { get; init; } = string.Empty;
+
+    [JsonPropertyName("integrationName")]
+    public string IntegrationName { get; init; } = string.Empty;
+
+    [JsonPropertyName("credentialRef")]
+    public string CredentialRef { get; init; } = string.Empty;
+
+    [JsonPropertyName("authMode")]
+    public string AuthMode { get; init; } = string.Empty;
+
+    [JsonPropertyName("bearerToken")]
+    public string? BearerToken { get; init; }
+
+    [JsonPropertyName("apiKey")]
+    public string? ApiKey { get; init; }
+
+    [JsonPropertyName("headerName")]
+    public string? HeaderName { get; init; }
+
+    [JsonPropertyName("oauth")]
+    public McpOAuthConfig? OAuth { get; init; }
+
+    [JsonPropertyName("env")]
+    public Dictionary<string, string>? Env { get; init; }
+
+    [JsonPropertyName("updatedAt")]
+    public DateTimeOffset UpdatedAt { get; init; }
+}
+
 public sealed class McpCatalogSyncRequest
 {
     [JsonPropertyName("integrationName")]

@@ -204,6 +204,111 @@
             </FieldHelp>
         </div>
 
+        @for (var i = 0; i < Model.Tools.Integrations.Count; i++)
+        {
+            var index = i;
+            <div class="border rounded p-2 mb-2">
+                <div class="form-row">
+                    <div class="col-md-3 form-group mb-2">
+                        <label>Name</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].Name" />
+                    </div>
+                    <div class="col-md-2 form-group mb-2">
+                        <label>Transport</label>
+                        <InputSelect class="form-control form-control-sm"
+                                    @bind-Value="Model.Tools.Integrations[index].Transport">
+                            <option value="http">http</option>
+                            <option value="stdio">stdio</option>
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-6 form-group mb-2">
+                        <label>@(Model.Tools.Integrations[index].Transport == "stdio" ? "Command" : "URL")</label>
+                        @if (Model.Tools.Integrations[index].Transport == "stdio")
+                        {
+                            <InputText class="form-control form-control-sm"
+                                       @bind-Value="Model.Tools.Integrations[index].Command"
+                                       placeholder="node / npx / python" />
+                        }
+                        else
+                        {
+                            <InputText class="form-control form-control-sm"
+                                       @bind-Value="Model.Tools.Integrations[index].Url"
+                                       placeholder="https://mcp.example.com" />
+                        }
+                    </div>
+                    <div class="col-md-1 d-flex align-items-end mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                @onclick="() => RemoveIntegration(index)">×</button>
+                    </div>
+                </div>
+                @if (Model.Tools.Integrations[index].Transport == "stdio")
+                {
+                    <div class="form-row">
+                        <div class="col-md-8 form-group mb-2">
+                            <label>Args (comma-separated)</label>
+                            <InputText class="form-control form-control-sm"
+                                       @bind-Value="Model.Tools.Integrations[index].ArgsText"
+                                       placeholder="-y, package-name" />
+                        </div>
+                        <div class="col-md-4 form-group mb-2">
+                            <label>Working directory</label>
+                            <InputText class="form-control form-control-sm"
+                                       @bind-Value="Model.Tools.Integrations[index].WorkingDirectory" />
+                        </div>
+                    </div>
+                }
+                <div class="form-row">
+                    <div class="col-md-4 form-group mb-2">
+                        <label>Credential ref</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].CredentialRef"
+                                   placeholder="jira-prod" />
+                        <FieldHelp>Pointer into stored secrets (not the secret itself).</FieldHelp>
+                    </div>
+                    <div class="col-md-4 form-group mb-2">
+                        <label>Timeout (s)</label>
+                        <InputNumber class="form-control form-control-sm"
+                                     @bind-Value="Model.Tools.Integrations[index].TimeoutSeconds" />
+                    </div>
+                    <div class="col-md-4 form-group mb-2">
+                        <label>Description</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].Description" />
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="col-md-6 form-group mb-2">
+                        <label>Tool allowlist (comma-separated)</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].ToolAllowlistText" />
+                    </div>
+                    <div class="col-md-6 form-group mb-2">
+                        <label>Tool denylist (comma-separated)</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].ToolDenylistText" />
+                    </div>
+                </div>
+                <div class="form-check mt-2">
+                    <InputCheckbox class="form-check-input"
+                                   @bind-Value="Model.Tools.Integrations[index].Enabled" />
+                    <label class="form-check-label">enabled</label>
+                </div>
+                <div class="form-check mt-2 mb-2">
+                    <InputCheckbox class="form-check-input"
+                                   @bind-Value="Model.Tools.Integrations[index].AllowEgress" />
+                    <label class="form-check-label">allowEgress</label>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(AppId))
+                {
+                    <McpSecretsPanel AppId="@AppId"
+                                     IntegrationName="@Model.Tools.Integrations[index].Name"
+                                     CredentialRef="@Model.Tools.Integrations[index].CredentialRef" />
+                }
+            </div>
+        }
+        <button type="button" class="btn btn-sm btn-outline-secondary mb-3" @onclick="AddIntegration">+ MCP server</button>
+
         <h6 class="mt-4">HTTP tools</h6>
         <FieldHelp>
             Built-in <code>fetch_url</code>, <code>http_request</code>, <code>web_search</code>.
@@ -303,150 +408,6 @@
             <InputCheckbox class="form-check-input" id="canvasEnabled" @bind-Value="Model.Tools.Canvas.Enabled" />
             <label class="form-check-label" for="canvasEnabled">Enable canvas_write / canvas_read (Admin Chat Lab panel)</label>
         </div>
-
-        @for (var i = 0; i < Model.Tools.Integrations.Count; i++)
-        {
-            var index = i;
-            <div class="border rounded p-2 mb-2">
-                <div class="form-row">
-                    <div class="col-md-3 form-group mb-2">
-                        <label>Name</label>
-                        <InputText class="form-control form-control-sm"
-                                   @bind-Value="Model.Tools.Integrations[index].Name" />
-                    </div>
-                    <div class="col-md-2 form-group mb-2">
-                        <label>Transport</label>
-                        <InputSelect class="form-control form-control-sm"
-                                    @bind-Value="Model.Tools.Integrations[index].Transport">
-                            <option value="http">http</option>
-                            <option value="stdio">stdio</option>
-                        </InputSelect>
-                    </div>
-                    <div class="col-md-4 form-group mb-2">
-                        <label>@(Model.Tools.Integrations[index].Transport == "stdio" ? "Command" : "URL")</label>
-                        @if (Model.Tools.Integrations[index].Transport == "stdio")
-                        {
-                            <InputText class="form-control form-control-sm"
-                                       @bind-Value="Model.Tools.Integrations[index].Command"
-                                       placeholder="node / npx / python" />
-                        }
-                        else
-                        {
-                            <InputText class="form-control form-control-sm"
-                                       @bind-Value="Model.Tools.Integrations[index].Url"
-                                       placeholder="https://mcp.example.com" />
-                        }
-                    </div>
-                    <div class="col-md-2 form-group mb-2">
-                        <label>Auth mode</label>
-                        <InputSelect class="form-control form-control-sm"
-                                    @bind-Value="Model.Tools.Integrations[index].AuthMode">
-                            <option value="">none</option>
-                            <option value="bearer">bearer</option>
-                            <option value="api-key">api-key</option>
-                            <option value="oauth-per-tenant">oauth-per-tenant</option>
-                        </InputSelect>
-                    </div>
-                    <div class="col-md-1 d-flex align-items-end mb-2">
-                        <button type="button" class="btn btn-sm btn-outline-danger"
-                                @onclick="() => RemoveIntegration(index)">×</button>
-                    </div>
-                </div>
-                @if (Model.Tools.Integrations[index].Transport == "stdio")
-                {
-                    <div class="form-row">
-                        <div class="col-md-8 form-group mb-2">
-                            <label>Args (comma-separated)</label>
-                            <InputText class="form-control form-control-sm"
-                                       @bind-Value="Model.Tools.Integrations[index].ArgsText"
-                                       placeholder="-y, package-name" />
-                        </div>
-                        <div class="col-md-4 form-group mb-2">
-                            <label>Working directory</label>
-                            <InputText class="form-control form-control-sm"
-                                       @bind-Value="Model.Tools.Integrations[index].WorkingDirectory" />
-                        </div>
-                    </div>
-                    <div class="form-group mb-2">
-                        <label>Env (KEY=value per line; non-secret)</label>
-                        <InputTextArea class="form-control form-control-sm" rows="3"
-                                       @bind-Value="Model.Tools.Integrations[index].EnvText"
-                                       placeholder="API_BASE_URL=https://example.com" />
-                    </div>
-                }
-                <div class="form-row">
-                    <div class="col-md-4 form-group mb-2">
-                        <label>Credential ref</label>
-                        <InputText class="form-control form-control-sm"
-                                   @bind-Value="Model.Tools.Integrations[index].CredentialRef"
-                                   placeholder="jira-prod" />
-                        <FieldHelp>Secrets live outside ConfigJson.</FieldHelp>
-                    </div>
-                    <div class="col-md-4 form-group mb-2">
-                        <label>Timeout (s)</label>
-                        <InputNumber class="form-control form-control-sm"
-                                     @bind-Value="Model.Tools.Integrations[index].TimeoutSeconds" />
-                    </div>
-                    <div class="col-md-4 form-group mb-2">
-                        <label>Description</label>
-                        <InputText class="form-control form-control-sm"
-                                   @bind-Value="Model.Tools.Integrations[index].Description" />
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="col-md-6 form-group mb-2">
-                        <label>Tool allowlist (comma-separated)</label>
-                        <InputText class="form-control form-control-sm"
-                                   @bind-Value="Model.Tools.Integrations[index].ToolAllowlistText" />
-                    </div>
-                    <div class="col-md-6 form-group mb-2">
-                        <label>Tool denylist (comma-separated)</label>
-                        <InputText class="form-control form-control-sm"
-                                   @bind-Value="Model.Tools.Integrations[index].ToolDenylistText" />
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="col-md-6 form-group mb-0">
-                        <label>Auth token (legacy inline; prefer credentialRef)</label>
-                        <InputText class="form-control form-control-sm" type="password"
-                                   @bind-Value="Model.Tools.Integrations[index].AuthToken" />
-                    </div>
-                    <div class="col-md-6 form-group mb-0">
-                        <label>OAuth token URL</label>
-                        <InputText class="form-control form-control-sm"
-                                   @bind-Value="Model.Tools.Integrations[index].OAuth!.TokenUrl" />
-                    </div>
-                </div>
-                <div class="form-row mt-2">
-                    <div class="col-md-4 form-group mb-0">
-                        <label>OAuth client ID</label>
-                        <InputText class="form-control form-control-sm"
-                                   @bind-Value="Model.Tools.Integrations[index].OAuth!.ClientId" />
-                    </div>
-                    <div class="col-md-4 form-group mb-0">
-                        <label>OAuth client secret</label>
-                        <InputText class="form-control form-control-sm" type="password"
-                                   @bind-Value="Model.Tools.Integrations[index].OAuth!.ClientSecret" />
-                    </div>
-                    <div class="col-md-4 form-group mb-0">
-                        <label>OAuth scope</label>
-                        <InputText class="form-control form-control-sm"
-                                   @bind-Value="Model.Tools.Integrations[index].OAuth!.Scope" />
-                    </div>
-                </div>
-                <div class="form-check mt-2">
-                    <InputCheckbox class="form-check-input"
-                                   @bind-Value="Model.Tools.Integrations[index].Enabled" />
-                    <label class="form-check-label">enabled</label>
-                </div>
-                <div class="form-check mt-2">
-                    <InputCheckbox class="form-check-input"
-                                   @bind-Value="Model.Tools.Integrations[index].AllowEgress" />
-                    <label class="form-check-label">allowEgress</label>
-                </div>
-            </div>
-        }
-        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="AddIntegration">+ MCP server</button>
     </div>
 </div>
 
@@ -465,6 +426,7 @@
         "}";
 
     [Parameter] public AgenticConfigForm Model { get; set; } = new();
+    [Parameter] public string AppId { get; set; } = string.Empty;
 
     private string ConfirmationKeywordsText
     {

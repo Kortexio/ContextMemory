@@ -156,9 +156,12 @@ internal sealed class ContextMemoryHeadersOperationFilter : Swashbuckle.AspNetCo
             ["admin/apps/{appid}/config"] = (
                 "Patch app config (admin)",
                 "Updates tenant runtime configuration. Requires master key."),
-            ["admin/apps/{appid}/credentials"] = (
-                "App credentials (admin)",
-                "Returns API key metadata. Requires master key."),
+            ["admin/apps/{appid}/mcp/credentials"] = (
+                "List MCP credentials (admin)",
+                "Returns stored MCP secrets for the tenant. Requires master key. Values are unmasked."),
+            ["admin/apps/{appid}/mcp/credentials/{name}"] = (
+                "MCP credentials for integration (admin)",
+                "Get or upsert MCP secrets for one integration. GET returns values unmasked. Requires master key."),
             ["admin/apps/{appid}/rotate-api-key"] = (
                 "Rotate API key (admin)",
                 "Issues a new API key for the tenant. Requires master key."),

@@ -16,8 +16,57 @@ public static class McpEndpoint
         app.MapGet("/admin/apps/{appId}/mcp/servers", GetServersAsync);
         app.MapPost("/admin/apps/{appId}/mcp/catalog/rebuild", RebuildCatalogAsync);
         app.MapPost("/admin/apps/{appId}/mcp/test/{name}", TestServerAsync);
+        app.MapGet("/admin/apps/{appId}/mcp/credentials", ListCredentialsAsync);
+        app.MapGet("/admin/apps/{appId}/mcp/credentials/{name}", GetCredentialsAsync);
         app.MapPost("/admin/apps/{appId}/mcp/credentials/{name}", UpsertCredentialAsync);
     }
+
+    private static async Task<IResult> ListCredentialsAsync(
+        string appId,
+        IMcpCredentialStore credentialStore,
+        CancellationToken cancellationToken)
+    {
+        var records = await credentialStore
+            .ListAsync(appId, integrationName: null, cancellationToken)
+            .ConfigureAwait(false);
+        return Results.Json(records.Select(ToAdminDto).ToList());
+    }
+
+    private static async Task<IResult> GetCredentialsAsync(
+        string appId,
+        string name,
+        IMcpCredentialStore credentialStore,
+        CancellationToken cancellationToken)
+    {
+        var records = await credentialStore
+            .ListAsync(appId, name, cancellationToken)
+            .ConfigureAwait(false);
+        return Results.Json(records.Select(ToAdminDto).ToList());
+    }
+
+    private static McpCredentialAdminDto ToAdminDto(Core.Agentic.Mcp.McpCredentialRecord record) =>
+        new()
+        {
+            AppId = record.AppId,
+            IntegrationName = record.IntegrationName,
+            CredentialRef = record.CredentialRef,
+            AuthMode = record.AuthMode,
+            BearerToken = record.BearerToken,
+            ApiKey = record.ApiKey,
+            HeaderName = record.HeaderName,
+            OAuth = record.OAuth is null
+                ? null
+                : new McpOAuthConfig
+                {
+                    TokenUrl = record.OAuth.TokenUrl,
+                    ClientId = record.OAuth.ClientId,
+                    ClientSecret = record.OAuth.ClientSecret,
+                    Scope = record.OAuth.Scope,
+                    Audience = record.OAuth.Audience
+                },
+            Env = record.Env,
+            UpdatedAt = record.UpdatedAt
+        };
 
     private static async Task<IResult> GetServersAsync(
         HttpContext httpContext,
