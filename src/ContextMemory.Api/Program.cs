@@ -52,6 +52,7 @@ app.UseContextMemorySwagger();
 app.UseCors("AdminWebCors");
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseMiddleware<ApiVersionMiddleware>();
 app.UseMiddleware<AuthMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();
 app.UseMiddleware<TelemetryMiddleware>();

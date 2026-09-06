@@ -19,6 +19,7 @@ public sealed class ChatRequestEnricher : IChatRequestEnricher
     private readonly WebSearchEnricher _webSearchEnricher;
     private readonly ISystemPromptBuilder _systemPromptBuilder;
     private readonly GlobalWikiService _globalWikiService;
+    private readonly ILlmModelRouter _modelRouter;
     private readonly ContextMemoryOptions _options;
     private readonly ILogger<ChatRequestEnricher> _logger;
 
@@ -28,6 +29,7 @@ public sealed class ChatRequestEnricher : IChatRequestEnricher
         WebSearchEnricher webSearchEnricher,
         ISystemPromptBuilder systemPromptBuilder,
         GlobalWikiService globalWikiService,
+        ILlmModelRouter modelRouter,
         IOptions<ContextMemoryOptions> options,
         ILogger<ChatRequestEnricher> logger)
     {
@@ -36,6 +38,7 @@ public sealed class ChatRequestEnricher : IChatRequestEnricher
         _webSearchEnricher = webSearchEnricher;
         _systemPromptBuilder = systemPromptBuilder;
         _globalWikiService = globalWikiService;
+        _modelRouter = modelRouter;
         _options = options.Value;
         _logger = logger;
     }
@@ -115,7 +118,17 @@ public sealed class ChatRequestEnricher : IChatRequestEnricher
         if (lastUser is not null && !MessageAlreadyInHistory(snapshot.Messages, lastUser))
             messages.Add(lastUser);
 
-        var model = string.IsNullOrWhiteSpace(request.Model) ? runtimeConfig.LlmModel : request.Model;
+        var configForRouting = string.IsNullOrWhiteSpace(request.Model)
+            ? runtimeConfig
+            : runtimeConfig with { LlmModel = request.Model.Trim() };
+        var requiresVision = messages.Any(m => m.Images is { Count: > 0 });
+        var promptTokensEstimate = TokenEstimator.Estimate(messages);
+        var routed = _modelRouter.Route(new ModelRoutingRequest(
+            LlmTaskType.Chat,
+            configForRouting,
+            RequiresVision: requiresVision,
+            EstimatedTokens: promptTokensEstimate));
+        var model = routed.Model;
         var mergedOptions = LlmGenerationConfig.MergeOptions(runtimeConfig.LlmOptions, request.Options);
         var enriched = request with
         {
@@ -128,7 +141,7 @@ public sealed class ChatRequestEnricher : IChatRequestEnricher
             Think = runtimeConfig.LlmThinkEnabled
         };
 
-        var prepared = (enriched, lastUser, TokenEstimator.Estimate(messages));
+        var prepared = (enriched, lastUser, promptTokensEstimate);
         turnContext.Prepared = prepared;
         return prepared;
     }

@@ -15,5 +15,6 @@ Short entry point. Start at the [README](../README.md) for the 5-minute Cursor w
 | [hitl.md](hitl.md) | Human-in-the-loop |
 | [ops.md](ops.md) | Persistence, security, troubleshooting |
 | [license-and-support.md](license-and-support.md) | License & contributing |
+| [blueprint-01-upstream.md](blueprint-01-upstream.md) | Blueprint 01 upstream enrichments (CM-1…CM-7) |
 | [aha-demo.html](aha-demo.html) | 20s GIF storyboard |
 

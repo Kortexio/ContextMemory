@@ -19,8 +19,19 @@ public static class SwaggerServiceCollectionExtensions
                     - `X-App-Id` and `X-User-Id` headers
                     - `Authorization: Bearer {app-api-key}`
 
+                    Optional: `X-Api-Version` / `X-Context-Memory-Api-Version` (`v1` | `v2`).
                     Admin and app registration use `Authorization: Bearer {master-key}`.
                     Legacy Ollama routes `/api/chat` and `/api/generate` remain available.
+                    """
+            });
+
+            options.SwaggerDoc("v2", new OpenApiInfo
+            {
+                Title = "ContextMemory Middleware API",
+                Version = "v2",
+                Description = """
+                    API v2 surface for future contract evolution.
+                    Today `POST /v2/chat/completions` mirrors v1 behaviour.
                     """
             });
 
@@ -64,6 +75,7 @@ public static class SwaggerServiceCollectionExtensions
         app.UseSwaggerUI(options =>
         {
             options.SwaggerEndpoint("/swagger/v1/swagger.json", "ContextMemory API v1");
+            options.SwaggerEndpoint("/swagger/v2/swagger.json", "ContextMemory API v2");
             options.RoutePrefix = "swagger";
             options.DocumentTitle = "ContextMemory API";
         });
@@ -121,8 +133,11 @@ internal sealed class ContextMemoryHeadersOperationFilter : Swashbuckle.AspNetCo
         new(StringComparer.OrdinalIgnoreCase)
         {
             ["v1/chat/completions"] = (
-                "Chat completions (OpenAI-compatible)",
+                "Chat completions (OpenAI-compatible, v1)",
                 "OpenAI-compatible chat with session wiki enrichment, optional SSE streaming, web search, and agentic tools. Preferred public API."),
+            ["v2/chat/completions"] = (
+                "Chat completions (OpenAI-compatible, v2)",
+                "API v2 chat completions. Currently mirrors v1; reserved for future breaking changes."),
             ["v1/models"] = (
                 "List models (OpenAI-compatible)",
                 "Returns the tenant's configured LLM model id in OpenAI /v1/models shape."),

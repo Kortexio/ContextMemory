@@ -23,4 +23,16 @@ public interface IAgentOrchestrator
         OllamaRequest enrichedRequest,
         AppRuntimeConfig runtimeConfig,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resumes a previously snapshotted agent run (CM-4 resumable runs).
+    /// </summary>
+    Task<AgentResult> ResumeAsync(
+        string appId,
+        string userId,
+        string sessionId,
+        string runId,
+        OllamaRequest enrichedRequest,
+        AppRuntimeConfig runtimeConfig,
+        CancellationToken cancellationToken = default);
 }

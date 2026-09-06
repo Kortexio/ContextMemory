@@ -3,6 +3,7 @@ using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 using ContextMemory.Core.Session;
+using ContextMemory.Core.Agentic;
 using Microsoft.Extensions.Options;
 
 namespace ContextMemory.Core.Engine;
@@ -10,11 +11,16 @@ namespace ContextMemory.Core.Engine;
 public sealed class SystemPromptBuilder : ISystemPromptBuilder
 {
     private readonly ITelemetryCollector _telemetry;
+    private readonly IContextPolicyGate _contextPolicyGate;
     private readonly ContextMemoryOptions _options;
 
-    public SystemPromptBuilder(ITelemetryCollector telemetry, IOptions<ContextMemoryOptions> options)
+    public SystemPromptBuilder(
+        ITelemetryCollector telemetry,
+        IContextPolicyGate contextPolicyGate,
+        IOptions<ContextMemoryOptions> options)
     {
         _telemetry = telemetry;
+        _contextPolicyGate = contextPolicyGate;
         _options = options.Value;
     }
 
@@ -29,6 +35,9 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
     {
         var lang = config.DefaultLanguage;
         var parts = new List<string>();
+        var contextPolicy = PolicyLayersFactory
+            .FromGuardrails(config.ResolvedPolicy, config.Agentic.Guardrails)
+            .Context;
 
         if (!string.IsNullOrWhiteSpace(config.BasePersona))
             parts.Add(config.BasePersona.Trim());
@@ -58,6 +67,8 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
             compiled.TotalPages,
             compiled.Truncated);
 
+        var wikiContent = _contextPolicyGate.FilterPromptSection(compiled.Content, contextPolicy);
+
         var hasWebContext = !string.IsNullOrWhiteSpace(webContextMarkdown);
         parts.Add(
             TenantLocale.Select(
@@ -70,7 +81,7 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
                     : string.Empty)
                 + "Recent dialogue is in the user/assistant messages in this request — "
                 + "do not assume missing history just because the index has no pages yet.\n\n"
-                + compiled.Content,
+                + wikiContent,
                 "## Memória compilada desta sessão (wiki)\n"
                 + "A wiki contém conhecimento compilado (factos, decisões) — pode estar desactualizada. "
                 + "Etiqueta factos da wiki com `[wiki]`. "
@@ -79,10 +90,11 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
                     : string.Empty)
                 + "O diálogo recente está nas mensagens user/assistant deste pedido — "
                 + "não concluas ausência de histórico só porque o índice ainda não tem páginas.\n\n"
-                + compiled.Content));
+                + wikiContent));
 
         if (!string.IsNullOrWhiteSpace(globalDigestsMarkdown))
         {
+            var digests = _contextPolicyGate.FilterPromptSection(globalDigestsMarkdown.Trim(), contextPolicy);
             parts.Add(
                 TenantLocale.Select(
                     lang,
@@ -90,12 +102,12 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
                     + "These are short digests from the app knowledge base (not full documents). "
                     + "Tag facts with `[global-wiki]`. "
                     + "Use `wiki_search` only when you need the full document body.\n\n"
-                    + globalDigestsMarkdown.Trim(),
+                    + digests,
                     "## Memória global (digests)\n"
                     + "Sumários curtos da base de conhecimento da app (não documentos completos). "
                     + "Etiqueta factos com `[global-wiki]`. "
                     + "Usa `wiki_search` só quando precisares do corpo completo.\n\n"
-                    + globalDigestsMarkdown.Trim()));
+                    + digests));
         }
 
         if (hasWebContext)

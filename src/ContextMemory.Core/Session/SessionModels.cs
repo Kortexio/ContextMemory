@@ -5,6 +5,7 @@ namespace ContextMemory.Core.Session;
 public sealed class SessionSnapshot
 {
     public required string SessionPath { get; init; }
+    public SessionState State { get; init; } = SessionState.Active;
     public string IndexMd { get; init; } = string.Empty;
     public string LogMd { get; init; } = string.Empty;
     public string SchemaMd { get; init; } = string.Empty;
@@ -12,6 +13,8 @@ public sealed class SessionSnapshot
     public IReadOnlyDictionary<string, DateTimeOffset> PageLastModified { get; init; } =
         new Dictionary<string, DateTimeOffset>();
     public IReadOnlyList<OllamaMessage> Messages { get; init; } = [];
+    /// <summary>Explicit working memory for the active task (CM-2).</summary>
+    public WorkingMemory? WorkingMemory { get; init; }
 }
 
 public sealed class SessionWikiUpdate

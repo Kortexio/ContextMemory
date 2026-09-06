@@ -15,6 +15,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
     private readonly IAgenticPendingStore _pendingStore;
     private readonly ISessionStore _sessionStore;
     private readonly ISessionArtifactStore _artifactStore;
+    private readonly IExecutionPolicyEvaluator _executionPolicy;
     private readonly ContextMemoryOptions _options;
 
     public AgentToolCallProcessor(
@@ -23,6 +24,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
         IAgenticPendingStore pendingStore,
         ISessionStore sessionStore,
         ISessionArtifactStore artifactStore,
+        IExecutionPolicyEvaluator executionPolicy,
         IOptions<ContextMemoryOptions> options)
     {
         _toolExecutors = toolExecutors;
@@ -30,6 +32,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
         _pendingStore = pendingStore;
         _sessionStore = sessionStore;
         _artifactStore = artifactStore;
+        _executionPolicy = executionPolicy;
         _options = options.Value;
     }
 
@@ -46,6 +49,80 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
         bool skipConfirmation,
         CancellationToken cancellationToken = default)
     {
+        var executionPolicy = PolicyLayersFactory
+            .FromGuardrails(runtimeConfig.ResolvedPolicy, runtimeConfig.Agentic.Guardrails)
+            .Execution;
+        var execDecision = _executionPolicy.EvaluateTool(
+            toolCall.Function.Name,
+            toolCall.Function.Arguments,
+            executionPolicy);
+
+        if (execDecision == ExecutionPolicyDecision.Deny)
+        {
+            var denied = new ToolExecutionResult
+            {
+                Output = "Tool denied by execution policy.",
+                ExitCode = 1
+            };
+            messages.Add(new OllamaMessage
+            {
+                Role = "tool",
+                Content = AgenticToolObservationFormatter.Format(
+                    toolCall.Function.Name, denied, runtimeConfig)
+            });
+            steps.Add(new AgentExecutionStep
+            {
+                Iteration = iteration,
+                ToolName = toolCall.Function.Name,
+                Arguments = toolCall.Function.Arguments,
+                Output = denied.Output ?? string.Empty,
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero,
+                Summary = "ExecutionPolicy denied"
+            });
+            return new AgentToolCallOutcome { Result = denied };
+        }
+
+        if (execDecision == ExecutionPolicyDecision.RequireConfirm && !skipConfirmation)
+        {
+            var matched = ExecutionPolicyEvaluator.FindConfirmationMatch(
+                toolCall.Function.Name,
+                toolCall.Function.Arguments,
+                executionPolicy.RequireConfirmationFor) ?? "execution-policy";
+            var pending = new AgenticPendingState
+            {
+                PendingId = Guid.NewGuid().ToString("N")[..12],
+                ToolName = toolCall.Function.Name,
+                Arguments = toolCall.Function.Arguments,
+                MatchedKeyword = matched,
+                DefaultLanguage = runtimeConfig.DefaultLanguage,
+                Iteration = iteration,
+                Steps = steps.ToList(),
+                Messages = messages.ToList()
+            };
+
+            await AgenticConfirmationCheckpoint
+                .WritePendingAsync(_sessionStore, appId, userId, sessionId, pending, cancellationToken)
+                .ConfigureAwait(false);
+            await _pendingStore
+                .SaveAsync(appId, userId, sessionId, pending, cancellationToken)
+                .ConfigureAwait(false);
+
+            Report(report, new AgenticProgressEvent
+            {
+                Phase = AgenticProgressPhase.AwaitingConfirmation,
+                Iteration = iteration,
+                ToolName = toolCall.Function.Name,
+                Detail = AgenticConfirmationParser.BuildConfirmationPrompt(pending)
+            });
+
+            return new AgentToolCallOutcome
+            {
+                AwaitingConfirmation = BuildAwaitingConfirmationResult(pending)
+            };
+        }
+
         if (!skipConfirmation)
         {
             if (RequiresMcpConfirmation(toolCall, runtimeConfig))

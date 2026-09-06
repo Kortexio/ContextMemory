@@ -8,10 +8,14 @@ namespace ContextMemory.Core.Agentic;
 public sealed class AgenticToolRegistryService : IAgenticToolRegistry
 {
     private readonly IMcpToolCatalog _mcpCatalog;
+    private readonly ICapabilityPolicyFilter _capabilityFilter;
 
-    public AgenticToolRegistryService(IMcpToolCatalog mcpCatalog)
+    public AgenticToolRegistryService(
+        IMcpToolCatalog mcpCatalog,
+        ICapabilityPolicyFilter capabilityFilter)
     {
         _mcpCatalog = mcpCatalog;
+        _capabilityFilter = capabilityFilter;
     }
 
     public async Task<IReadOnlyList<OllamaTool>> BuildToolsAsync(
@@ -62,7 +66,10 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
                     openParameters)));
         }
 
-        return tools;
+        var capability = PolicyLayersFactory
+            .FromGuardrails(runtimeConfig.ResolvedPolicy, runtimeConfig.Agentic.Guardrails)
+            .Capability;
+        return _capabilityFilter.FilterTools(tools, capability);
     }
 
     public async Task<string> BuildToolNamesSummaryAsync(

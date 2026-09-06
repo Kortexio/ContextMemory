@@ -13,12 +13,15 @@ namespace ContextMemory.Core.Agentic;
 
 public sealed class AgentLoopRunner : IAgentLoopRunner
 {
+    private static readonly AgentRetryPolicy TransientLlmRetry = new() { MaxAttempts = 3, BaseDelayMs = 250 };
+
     private readonly ILlmAdapterResolver _adapterResolver;
     private readonly IAgentValidator _validator;
     private readonly IAgentToolCallProcessor _toolCallProcessor;
     private readonly ISessionStore _sessionStore;
     private readonly IAgenticPendingStore _pendingStore;
     private readonly IAgentContextCompactor _contextCompactor;
+    private readonly IAgentStateMachine _stateMachine;
     private readonly ILogger<AgentLoopRunner> _logger;
     private readonly ContextMemoryOptions _options;
 
@@ -29,6 +32,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
         ISessionStore sessionStore,
         IAgenticPendingStore pendingStore,
         IAgentContextCompactor contextCompactor,
+        IAgentStateMachine stateMachine,
         ILogger<AgentLoopRunner> logger,
         IOptions<ContextMemoryOptions> options)
     {
@@ -38,6 +42,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
         _sessionStore = sessionStore;
         _pendingStore = pendingStore;
         _contextCompactor = contextCompactor;
+        _stateMachine = stateMachine;
         _logger = logger;
         _options = options.Value;
     }
@@ -57,6 +62,14 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
         var promotedProseToolCalls = 0;
         var schemaRepairLevel = "none";
         var resolvedProfile = AgenticPromptProfileResolver.Resolve(request.RuntimeConfig).ToString();
+
+        var trace = AgentTrace.Start(
+            request.AppId,
+            request.UserId,
+            request.SessionId,
+            request.RuntimeConfig.LlmModel);
+        var loopState = AgentLoopState.Created;
+        loopState = ApplyTransition(loopState, AgentLoopEvent.Start, trace);
 
         if (request.Tools.Count > 0
             && !string.IsNullOrWhiteSpace(request.EnrichedRequest.Format)
@@ -84,10 +97,14 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     loopSw.ElapsedMilliseconds,
                     iteration);
 
+                loopState = ApplyTransition(loopState, AgentLoopEvent.Fail, trace);
+                trace.Complete(AgentRunState.Failed);
+
                 var timeoutResult = AttachDiscovery(
                     BuildTimeoutResult(lastAnswer, steps, iteration, request.RuntimeConfig.DefaultLanguage),
                     messages, steps, staticPromptChars, compactionCount, llmCalls,
-                    promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel);
+                    promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel)
+                    .WithTrace(trace);
                 Report(request.Report, new AgenticProgressEvent
                 {
                     Phase = AgenticProgressPhase.TimedOut,
@@ -113,6 +130,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             if (compaction is not null)
             {
                 compactionCount++;
+                loopState = ApplyTransition(loopState, AgentLoopEvent.Compact, trace);
                 Report(request.Report, new AgenticProgressEvent
                 {
                     Phase = AgenticProgressPhase.Compacting,
@@ -122,12 +140,12 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 });
             }
 
+            loopState = ApplyTransition(loopState, AgentLoopEvent.LlmRequest, trace);
             Report(request.Report, new AgenticProgressEvent
             {
                 Phase = AgenticProgressPhase.LlmRequest,
                 Iteration = iteration + 1
             });
-
             var toolsForRequest = request.Tools.Count > 0 ? request.Tools.ToList() : null;
             if (toolsForRequest is not null && capabilities.SanitizeSchemasAggressively)
             {
@@ -171,7 +189,8 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             var skipProsePromotion = false;
             try
             {
-                response = await adapter.ChatAsync(llmRequest, cancellationToken).ConfigureAwait(false);
+                response = await ChatWithTransientRetryAsync(adapter, llmRequest, request.AppId, cancellationToken)
+                    .ConfigureAwait(false);
                 llmCalls++;
             }
             catch (HttpRequestException ex) when (IsOllamaToolXmlParseError(ex) && toolsForRequest is { Count: > 0 })
@@ -189,7 +208,8 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     McpServers = null,
                     ToolChoice = null
                 };
-                response = await adapter.ChatAsync(fallbackRequest, cancellationToken).ConfigureAwait(false);
+                response = await ChatWithTransientRetryAsync(adapter, fallbackRequest, request.AppId, cancellationToken)
+                    .ConfigureAwait(false);
                 llmCalls++;
                 useClientSideTools = true;
             }
@@ -199,6 +219,8 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     ex,
                     "LLM chat template rejected messages for {AppId} (Qwen/Bonsai-style Jinja). Ensure a user message exists and avoid dual system roles; consider patching the model TEMPLATE.",
                     request.AppId);
+                loopState = ApplyTransition(loopState, AgentLoopEvent.Fail, trace);
+                trace.Complete(AgentRunState.Failed);
                 throw new InvalidOperationException(
                     "O modelo rejeitou o chat template (ex. 'No user query found in messages'). "
                     + "Confirma que existe uma mensagem user e um único system; packs Qwen/Bonsai estritos podem precisar de TEMPLATE patch.",
@@ -211,6 +233,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     "LLM rejected tool grammars for {AppId}; applying graduated schema repair",
                     request.AppId);
 
+                loopState = ApplyTransition(loopState, AgentLoopEvent.Recover, trace);
                 response = await ChatWithGraduatedRepairAsync(
                         adapter,
                         llmRequest,
@@ -219,6 +242,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                         () => llmCalls++,
                         cancellationToken)
                     .ConfigureAwait(false);
+                loopState = ApplyTransition(loopState, AgentLoopEvent.LlmRequest, trace);
             }
             catch (HttpRequestException ex) when (IsHttpBadRequest(ex))
             {
@@ -229,6 +253,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     request.AppId,
                     bodyPreview);
 
+                loopState = ApplyTransition(loopState, AgentLoopEvent.Recover, trace);
                 var recoveryRequest = llmRequest with
                 {
                     Messages = ClientSideToolCalling.FlattenForClientSideWire(messages),
@@ -240,10 +265,12 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
                 try
                 {
-                    response = await adapter.ChatAsync(recoveryRequest, cancellationToken).ConfigureAwait(false);
+                    response = await ChatWithTransientRetryAsync(adapter, recoveryRequest, request.AppId, cancellationToken)
+                        .ConfigureAwait(false);
                     llmCalls++;
                     useClientSideTools = true;
                     skipProsePromotion = true;
+                    loopState = ApplyTransition(loopState, AgentLoopEvent.LlmRequest, trace);
                 }
                 catch (HttpRequestException recoveryEx) when (IsHttpBadRequest(recoveryEx))
                 {
@@ -255,10 +282,13 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
                     if (!string.IsNullOrWhiteSpace(lastAnswer))
                     {
+                        loopState = ApplyTransition(loopState, AgentLoopEvent.Complete, trace);
+                        trace.Complete(AgentRunState.Completed);
                         var partial = AttachDiscovery(
                             AgentResult.Succeeded(lastAnswer, steps, iteration + 1),
                             messages, steps, staticPromptChars, compactionCount, llmCalls,
-                            promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel);
+                            promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel)
+                            .WithTrace(trace);
                         Report(request.Report, new AgenticProgressEvent
                         {
                             Phase = AgenticProgressPhase.Completed,
@@ -268,6 +298,8 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                         return partial;
                     }
 
+                    loopState = ApplyTransition(loopState, AgentLoopEvent.Fail, trace);
+                    trace.Complete(AgentRunState.Failed);
                     throw;
                 }
             }
@@ -341,10 +373,13 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 {
                     if (loopSw.Elapsed >= loopTimeout)
                     {
+                        loopState = ApplyTransition(loopState, AgentLoopEvent.Fail, trace);
+                        trace.Complete(AgentRunState.Failed);
                         var timeoutResult = AttachDiscovery(
                             BuildTimeoutResult(lastAnswer, steps, iteration + 1, request.RuntimeConfig.DefaultLanguage),
                             messages, steps, staticPromptChars, compactionCount, llmCalls,
-                            promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel);
+                            promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel)
+                            .WithTrace(trace);
                         Report(request.Report, new AgenticProgressEvent
                         {
                             Phase = AgenticProgressPhase.TimedOut,
@@ -354,6 +389,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                         return timeoutResult;
                     }
 
+                    loopState = ApplyTransition(loopState, AgentLoopEvent.ToolCall, trace);
                     var toolOutcome = await _toolCallProcessor
                         .ProcessAsync(
                             toolCall,
@@ -371,11 +407,16 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
                     if (toolOutcome.AwaitingConfirmation is not null)
                     {
+                        loopState = ApplyTransition(loopState, AgentLoopEvent.AwaitHuman, trace);
+                        trace.Complete(AgentRunState.AwaitingHuman);
                         return AttachDiscovery(
                             toolOutcome.AwaitingConfirmation,
                             messages, steps, staticPromptChars, compactionCount, llmCalls,
-                            promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel);
+                            promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel)
+                            .WithTrace(trace);
                     }
+
+                    loopState = ApplyTransition(loopState, AgentLoopEvent.ToolResult, trace);
                 }
 
                 continue;
@@ -384,6 +425,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             lastAnswer = OllamaLlmText.NormalizeAssistantContent(
                 OllamaLlmText.GetMessageContent(assistantMessage));
 
+            loopState = ApplyTransition(loopState, AgentLoopEvent.Validate, trace);
             Report(request.Report, new AgenticProgressEvent { Phase = AgenticProgressPhase.Validating });
 
             var validation = await _validator.ValidateAsync(
@@ -399,10 +441,13 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
             if (validation.IsValid)
             {
+                loopState = ApplyTransition(loopState, AgentLoopEvent.Complete, trace);
+                trace.Complete(AgentRunState.Completed);
                 var success = AttachDiscovery(
                     AgentResult.Succeeded(lastAnswer, steps, iteration + 1),
                     messages, steps, staticPromptChars, compactionCount, llmCalls,
-                    promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel);
+                    promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel)
+                    .WithTrace(trace);
                 Report(request.Report, new AgenticProgressEvent
                 {
                     Phase = AgenticProgressPhase.Completed,
@@ -414,6 +459,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
             // Next turn: prefer forcing a tool call when the model answered without evidence.
             requireToolChoice = request.Tools.Count > 0;
+            loopState = ApplyTransition(loopState, AgentLoopEvent.ValidationRejected, trace);
 
             Report(request.Report, new AgenticProgressEvent
             {
@@ -436,6 +482,8 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
         if (request.RuntimeConfig.Agentic.Guardrails.HumanReviewOnMaxIterations)
         {
+            loopState = ApplyTransition(loopState, AgentLoopEvent.AwaitHuman, trace);
+            trace.Complete(AgentRunState.AwaitingHuman);
             var review = await RequestHumanReviewAsync(
                     request.AppId,
                     request.UserId,
@@ -450,7 +498,8 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 .ConfigureAwait(false);
             return AttachDiscovery(
                 review, messages, steps, staticPromptChars, compactionCount, llmCalls,
-                promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel);
+                promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel)
+                .WithTrace(trace);
         }
 
         Report(request.Report, new AgenticProgressEvent
@@ -459,10 +508,69 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             Detail = AgenticMessages.MaxIterationsReached(maxIterations, request.RuntimeConfig.DefaultLanguage)
         });
 
+        loopState = ApplyTransition(loopState, AgentLoopEvent.Fail, trace);
+        trace.Complete(AgentRunState.Failed);
         return AttachDiscovery(
             AgentResult.LimitReached(fallback, steps, maxIterations),
             messages, steps, staticPromptChars, compactionCount, llmCalls,
-            promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel);
+            promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel)
+            .WithTrace(trace);
+    }
+
+    private async Task<OllamaResponse> ChatWithTransientRetryAsync(
+        ILlmAdapter adapter,
+        OllamaRequest llmRequest,
+        string appId,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastTransient = null;
+        for (var attempt = 1; attempt <= TransientLlmRetry.MaxAttempts; attempt++)
+        {
+            try
+            {
+                return await adapter.ChatAsync(llmRequest, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (
+                TransientLlmRetry.ShouldRetry(ex, attempt, TransientLlmRetry.MaxAttempts, cancellationToken)
+                && ex is HttpRequestException httpEx
+                && !IsSpecialCasedLlmHttpError(httpEx))
+            {
+                lastTransient = ex;
+                _logger.LogWarning(
+                    ex,
+                    "Transient LLM HTTP failure for {AppId} (attempt {Attempt}/{Max}); retrying after {DelayMs}ms",
+                    appId,
+                    attempt,
+                    TransientLlmRetry.MaxAttempts,
+                    TransientLlmRetry.GetDelay(attempt).TotalMilliseconds);
+                await Task.Delay(TransientLlmRetry.GetDelay(attempt), cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        throw lastTransient ?? new InvalidOperationException("Transient LLM retry exhausted without capturing an exception.");
+    }
+
+    private static bool IsSpecialCasedLlmHttpError(HttpRequestException ex) =>
+        IsOllamaToolXmlParseError(ex)
+        || IsStrictChatTemplateError(ex)
+        || IsLlmGrammarError(ex)
+        || IsHttpBadRequest(ex);
+
+    private AgentLoopState ApplyTransition(AgentLoopState current, AgentLoopEvent evt, AgentTrace trace)
+    {
+        var result = _stateMachine.Transition(current, evt);
+        if (!result.IsValid)
+        {
+            _logger.LogDebug(
+                "Agent state transition skipped: {Current} + {Event} ({Error})",
+                current,
+                evt,
+                result.Error);
+            return current;
+        }
+
+        trace.LoopState = result.State;
+        return result.State;
     }
 
     private async Task<OllamaResponse> ChatWithGraduatedRepairAsync(

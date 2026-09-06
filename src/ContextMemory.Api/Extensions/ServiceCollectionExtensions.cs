@@ -1,8 +1,10 @@
 using ContextMemory.Core.Agentic;
+using ContextMemory.Core.Agentic.Subagent;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Engine;
 using ContextMemory.Core.GlobalWiki;
+using ContextMemory.Core.Models;
 using ContextMemory.Core.Persistence;
 using ContextMemory.Core.Profile;
 using ContextMemory.Infrastructure.Profile;
@@ -51,6 +53,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<WebSearchFreshnessEvaluator>();
         services.AddSingleton<WebSearchEnricher>();
         services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
+        services.AddSingleton<IContextBudgetAllocator, ContextBudgetAllocator>();
+        services.AddSingleton<IContextRetrievalPlanner, ContextRetrievalPlanner>();
+        services.AddSingleton<ILlmModelRegistry, LlmModelRegistry>();
+        services.AddSingleton<ILlmModelRouter, LlmModelRouter>();
         services.AddSingleton<IChatRequestEnricher, ChatRequestEnricher>();
         services.AddSingleton<IChatPostProcessor, ChatPostProcessor>();
         services.AddSingleton<IAgenticUsageCharger, AgenticUsageCharger>();
@@ -62,11 +68,18 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentValidator, HybridAgentValidator>();
         services.AddSingleton<IAgentExecutionLogger, AgentExecutionLogger>();
         services.AddSingleton<IAgenticPolicyPackResolver, AgenticPolicyPackResolver>();
+        services.AddSingleton<IExecutionPolicyEvaluator, ExecutionPolicyEvaluator>();
+        services.AddSingleton<ICapabilityPolicyFilter, CapabilityPolicyFilter>();
+        services.AddSingleton<IContextPolicyGate, ContextPolicyGate>();
+        services.AddSingleton<SecretClassifier>();
 
         services.AddSingleton<IAgentConfirmationFlow, AgentConfirmationFlow>();
         services.AddSingleton<IAgentToolCallProcessor, AgentToolCallProcessor>();
         services.AddSingleton<IAgentContextCompactor, AgentContextCompactor>();
+        services.AddSingleton<IAgentStateMachine, AgentStateMachine>();
+        services.AddSingleton<IAgentRunStore, ArtifactAgentRunStore>();
         services.AddSingleton<IAgentLoopRunner, AgentLoopRunner>();
+        services.AddSingleton<ISubagentOrchestrator, SubagentOrchestrator>();
         services.AddScoped<IAgenticToolRegistry, AgenticToolRegistryService>();
         services.AddScoped<IAgentOrchestrator, AgentOrchestrator>();
 

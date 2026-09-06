@@ -90,7 +90,13 @@ public static class SessionWikiCompiler
             .Select(p => new PageCandidate(
                 p.Key,
                 p.Value,
-                ScorePage(p.Key, p.Value, snapshot.IndexMd, queryTokens, snapshot.PageLastModified)))
+                ScorePage(
+                    p.Key,
+                    p.Value,
+                    snapshot.IndexMd,
+                    queryTokens,
+                    snapshot.PageLastModified,
+                    InferImportance(p.Key, p.Value, snapshot.WorkingMemory))))
             .OrderByDescending(p => p.Score)
             .ThenBy(p => p.Content.Length)
             .ToList();
@@ -177,12 +183,17 @@ public static class SessionWikiCompiler
         return string.Join('\n', kept).TrimEnd();
     }
 
-    private static double ScorePage(
+    /// <summary>
+    /// Scores a wiki page for injection ranking. Optional <paramref name="importance"/>
+    /// boosts Critical/Important pages without changing the call signature for existing callers.
+    /// </summary>
+    internal static double ScorePage(
         string name,
         string content,
         string indexMd,
         HashSet<string> queryTokens,
-        IReadOnlyDictionary<string, DateTimeOffset> lastModified)
+        IReadOnlyDictionary<string, DateTimeOffset> lastModified,
+        MemoryImportance? importance = null)
     {
         var score = 0.0;
 
@@ -202,7 +213,59 @@ public static class SessionWikiCompiler
             score += Math.Max(0, 48 - ageHours) / 4;
         }
 
+        score += ImportanceBoost(importance);
         return score;
+    }
+
+    internal static double ImportanceBoost(MemoryImportance? importance) => importance switch
+    {
+        MemoryImportance.Critical => 40,
+        MemoryImportance.Important => 20,
+        MemoryImportance.Recoverable => 5,
+        MemoryImportance.Discardable => -5,
+        _ => 0
+    };
+
+    /// <summary>
+    /// Infers importance from working-memory keys or page metadata markers
+    /// (<c>[critical]</c>, <c>importance: important</c>, etc.).
+    /// </summary>
+    internal static MemoryImportance? InferImportance(
+        string pageName,
+        string content,
+        WorkingMemory? workingMemory = null)
+    {
+        if (workingMemory?.Items is { Count: > 0 })
+        {
+            var match = workingMemory.Items.FirstOrDefault(i =>
+                string.Equals(i.Key, pageName, StringComparison.OrdinalIgnoreCase)
+                || content.Contains(i.Key, StringComparison.OrdinalIgnoreCase));
+            if (match is not null)
+                return match.Importance;
+        }
+
+        var head = content.Length <= 800 ? content : content[..800];
+        var lower = $"{pageName}\n{head}".ToLowerInvariant();
+
+        if (lower.Contains("[critical]", StringComparison.Ordinal)
+            || lower.Contains("importance: critical", StringComparison.Ordinal)
+            || lower.Contains("importance:critical", StringComparison.Ordinal))
+            return MemoryImportance.Critical;
+
+        if (lower.Contains("[important]", StringComparison.Ordinal)
+            || lower.Contains("importance: important", StringComparison.Ordinal)
+            || lower.Contains("importance:important", StringComparison.Ordinal))
+            return MemoryImportance.Important;
+
+        if (lower.Contains("[recoverable]", StringComparison.Ordinal)
+            || lower.Contains("importance: recoverable", StringComparison.Ordinal))
+            return MemoryImportance.Recoverable;
+
+        if (lower.Contains("[discardable]", StringComparison.Ordinal)
+            || lower.Contains("importance: discardable", StringComparison.Ordinal))
+            return MemoryImportance.Discardable;
+
+        return null;
     }
 
     private static HashSet<string> Tokenize(string? text)

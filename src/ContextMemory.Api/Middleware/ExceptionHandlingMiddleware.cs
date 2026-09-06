@@ -42,9 +42,42 @@ public sealed class ExceptionHandlingMiddleware
         context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/json";
 
-        var body = new { error = message };
-        if (statusCode >= StatusCodes.Status500InternalServerError && !_environment.IsDevelopment())
-            body = new { error = "An unexpected error occurred." };
+        object body;
+        if (exception is ContextMemoryErrorException cmEx)
+        {
+            var error = cmEx.Error;
+            if (string.IsNullOrWhiteSpace(error.TraceId))
+            {
+                error = ContextMemoryError.Create(
+                    error.Code,
+                    error.Message,
+                    error.Detail,
+                    context.TraceIdentifier,
+                    error.Metadata);
+            }
+
+            body = new { error };
+        }
+        else if (statusCode >= StatusCodes.Status500InternalServerError && !_environment.IsDevelopment())
+        {
+            body = new
+            {
+                error = ContextMemoryError.Create(
+                    ContextMemoryErrorCodes.Unknown,
+                    "An unexpected error occurred.",
+                    traceId: context.TraceIdentifier)
+            };
+        }
+        else
+        {
+            body = new
+            {
+                error = ContextMemoryError.Create(
+                    MapErrorCode(exception),
+                    message,
+                    traceId: context.TraceIdentifier)
+            };
+        }
 
         await context.Response.WriteAsJsonAsync(body).ConfigureAwait(false);
     }
@@ -52,9 +85,20 @@ public sealed class ExceptionHandlingMiddleware
     private static (int StatusCode, string Message, LogLevel LogLevel) MapException(Exception exception) =>
         exception switch
         {
+            ContextMemoryErrorException ex => (ex.StatusCode, ex.Message, LogLevel.Debug),
             AppNotFoundException ex => (StatusCodes.Status404NotFound, ex.Message, LogLevel.Debug),
             AppAlreadyExistsException ex => (StatusCodes.Status409Conflict, ex.Message, LogLevel.Debug),
             ArgumentException ex => (StatusCodes.Status400BadRequest, ex.Message, LogLevel.Debug),
             _ => (StatusCodes.Status500InternalServerError, exception.Message, LogLevel.Error)
+        };
+
+    private static string MapErrorCode(Exception exception) =>
+        exception switch
+        {
+            AppNotFoundException => ContextMemoryErrorCodes.NotFound,
+            AppAlreadyExistsException => ContextMemoryErrorCodes.Conflict,
+            ArgumentException => ContextMemoryErrorCodes.Validation,
+            TimeoutException => ContextMemoryErrorCodes.Timeout,
+            _ => ContextMemoryErrorCodes.Unknown
         };
 }

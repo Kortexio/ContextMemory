@@ -62,4 +62,12 @@ public interface IAgenticPolicyPackResolver
     Task<AppRuntimeConfig> ResolveAsync(
         AppRuntimeConfig runtimeConfig,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resolves the catalog policy and builds layered Context/Capability/Execution policies
+    /// from <see cref="Agentic.AgenticGuardrailsConfig"/> defaults.
+    /// </summary>
+    Task<ResolvedPolicies> ResolvePoliciesAsync(
+        AppRuntimeConfig runtimeConfig,
+        CancellationToken cancellationToken = default);
 }
