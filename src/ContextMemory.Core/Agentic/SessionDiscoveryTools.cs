@@ -135,14 +135,23 @@ public static class SessionDiscoveryTools
                 })),
             new OllamaTool("function", new OllamaFunction(
                 DelegateTask,
-                "Spawn a depth-1 subagent in an isolated child session. Returns summary + artifactId with full transcript.",
+                "Spawn a subagent in an isolated child session (max depth from guardrails, default 2). Returns summary + artifactId. Set parallel=true with tasks[] to run up to maxParallelSubagents concurrently.",
                 new
                 {
                     type = "object",
                     properties = new
                     {
                         task = new { type = "string", description = "Clear objective for the subagent" },
-                        maxIterations = new { type = "integer", description = "Cap iterations for the child (default 4, max 8)" }
+                        maxIterations = new { type = "integer", description = "Cap iterations for the child (default 4, max 8)" },
+                        role = new { type = "string", description = "Researcher|Analyst|Reviewer|General|Coder|Tester" },
+                        depth = new { type = "integer", description = "Optional max depth override (capped by guardrails.maxSubagentDepth)" },
+                        parallel = new { type = "boolean", description = "When true, run tasks[] in parallel" },
+                        tasks = new
+                        {
+                            type = "array",
+                            description = "Parallel objectives: [{ task, role?, maxIterations? }, ...] or string[]",
+                            items = new { type = "object" }
+                        }
                     },
                     required = new[] { "task" }
                 })),

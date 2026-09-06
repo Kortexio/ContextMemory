@@ -94,4 +94,14 @@ public sealed class AgenticPolicyPackResolver : IAgenticPolicyPackResolver
             }
         };
     }
+
+    public async Task<ResolvedPolicies> ResolvePoliciesAsync(
+        AppRuntimeConfig runtimeConfig,
+        CancellationToken cancellationToken = default)
+    {
+        var resolved = await ResolveAsync(runtimeConfig, cancellationToken).ConfigureAwait(false);
+        return PolicyLayersFactory.FromGuardrails(
+            resolved.ResolvedPolicy,
+            resolved.Agentic.Guardrails);
+    }
 }

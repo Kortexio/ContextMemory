@@ -334,6 +334,14 @@ public record AgenticGuardrailsConfig
 
     [JsonPropertyName("humanReviewOnMaxIterations")]
     public bool HumanReviewOnMaxIterations { get; init; } = true;
+
+    /// <summary>Max nesting depth for <c>delegate_task</c> subagents (CM-6a default: 2).</summary>
+    [JsonPropertyName("maxSubagentDepth")]
+    public int MaxSubagentDepth { get; init; } = 2;
+
+    /// <summary>Max concurrent subagents for parallel <c>delegate_task</c> (CM-6a default: 3).</summary>
+    [JsonPropertyName("maxParallelSubagents")]
+    public int MaxParallelSubagents { get; init; } = 3;
 }
 
 public sealed class AgentResult
@@ -348,6 +356,8 @@ public sealed class AgentResult
     public string? PendingConfirmationId { get; init; }
     public string? PendingKind { get; init; }
     public DiscoveryTelemetry? Discovery { get; init; }
+    public AgentTrace? Trace { get; init; }
+    public AgentRunState RunState { get; init; } = AgentRunState.Completed;
 
     public AgentResult WithDiscovery(DiscoveryTelemetry? discovery) =>
         new()
@@ -361,7 +371,26 @@ public sealed class AgentResult
             AwaitingConfirmation = AwaitingConfirmation,
             PendingConfirmationId = PendingConfirmationId,
             PendingKind = PendingKind,
-            Discovery = discovery
+            Discovery = discovery,
+            Trace = Trace,
+            RunState = RunState
+        };
+
+    public AgentResult WithTrace(AgentTrace? trace) =>
+        new()
+        {
+            FinalAnswer = FinalAnswer,
+            Steps = Steps,
+            Iterations = Iterations,
+            MaxIterationsReached = MaxIterationsReached,
+            TimedOut = TimedOut,
+            Success = Success,
+            AwaitingConfirmation = AwaitingConfirmation,
+            PendingConfirmationId = PendingConfirmationId,
+            PendingKind = PendingKind,
+            Discovery = Discovery,
+            Trace = trace,
+            RunState = RunState
         };
 
     public static AgentResult Succeeded(string answer, IReadOnlyList<AgentExecutionStep> steps, int iterations) =>

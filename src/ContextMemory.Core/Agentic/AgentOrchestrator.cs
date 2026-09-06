@@ -13,6 +13,7 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
     private readonly IAgentToolCallProcessor _toolCallProcessor;
     private readonly IAgentLoopRunner _loopRunner;
     private readonly IAgenticPolicyPackResolver _policyResolver;
+    private readonly IAgentRunStore _runStore;
     private readonly ILogger<AgentOrchestrator> _logger;
 
     public AgentOrchestrator(
@@ -21,6 +22,7 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
         IAgentToolCallProcessor toolCallProcessor,
         IAgentLoopRunner loopRunner,
         IAgenticPolicyPackResolver policyResolver,
+        IAgentRunStore runStore,
         ILogger<AgentOrchestrator> logger)
     {
         _toolRegistry = toolRegistry;
@@ -28,6 +30,7 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
         _toolCallProcessor = toolCallProcessor;
         _loopRunner = loopRunner;
         _policyResolver = policyResolver;
+        _runStore = runStore;
         _logger = logger;
     }
 
@@ -76,6 +79,63 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
 
         var result = await runTask.ConfigureAwait(false);
         yield return AgenticOrchestratorEvent.FromResult(result);
+    }
+
+    public async Task<AgentResult> ResumeAsync(
+        string appId,
+        string userId,
+        string sessionId,
+        string runId,
+        OllamaRequest enrichedRequest,
+        AppRuntimeConfig runtimeConfig,
+        CancellationToken cancellationToken = default)
+    {
+        var snapshot = await _runStore
+            .LoadAsync(appId, userId, sessionId, runId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (snapshot is null)
+        {
+            _logger.LogWarning("No agent run snapshot {RunId} for session {SessionId}; starting fresh", runId, sessionId);
+            return await RunAsync(appId, userId, sessionId, enrichedRequest, runtimeConfig, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        runtimeConfig = await _policyResolver
+            .ResolveAsync(runtimeConfig, cancellationToken)
+            .ConfigureAwait(false);
+
+        var lastUserMessage = enrichedRequest.Messages.GetLastUserMessage()?.Content;
+        var tools = (await _toolRegistry
+                .BuildToolsAsync(runtimeConfig, lastUserMessage, [], cancellationToken)
+                .ConfigureAwait(false))
+            .ToList();
+        var mcpServers = _toolRegistry.BuildMcpServers(runtimeConfig);
+
+        _logger.LogInformation(
+            "Resuming agent run {RunId} for {AppId}/{SessionId} at iteration {Iteration} state {State}",
+            runId,
+            appId,
+            sessionId,
+            snapshot.Iteration,
+            snapshot.LoopState);
+
+        return await _loopRunner.RunAsync(
+            new AgentLoopRequest
+            {
+                AppId = appId,
+                UserId = userId,
+                SessionId = sessionId,
+                EnrichedRequest = enrichedRequest,
+                RuntimeConfig = runtimeConfig,
+                Messages = snapshot.Messages.Count > 0 ? snapshot.Messages : enrichedRequest.Messages.ToList(),
+                Steps = snapshot.Steps,
+                Tools = tools,
+                McpServers = mcpServers,
+                StartIteration = Math.Max(1, snapshot.Iteration),
+                Report = null
+            },
+            cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<AgentResult> RunCoreAsync(

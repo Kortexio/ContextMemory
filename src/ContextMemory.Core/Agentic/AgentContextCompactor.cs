@@ -22,7 +22,8 @@ public interface IAgentContextCompactor
         AppRuntimeConfig runtimeConfig,
         List<OllamaMessage> messages,
         int iteration,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        WorkingMemory? workingMemory = null);
 }
 
 public sealed record ContextCompactionResult(
@@ -37,17 +38,20 @@ public sealed class AgentContextCompactor : IAgentContextCompactor
 
     private readonly ISessionArtifactStore _artifacts;
     private readonly ILlmAdapterResolver _adapterResolver;
+    private readonly ILlmModelRouter _modelRouter;
     private readonly ContextMemoryOptions _options;
     private readonly ILogger<AgentContextCompactor> _logger;
 
     public AgentContextCompactor(
         ISessionArtifactStore artifacts,
         ILlmAdapterResolver adapterResolver,
+        ILlmModelRouter modelRouter,
         IOptions<ContextMemoryOptions> options,
         ILogger<AgentContextCompactor> logger)
     {
         _artifacts = artifacts;
         _adapterResolver = adapterResolver;
+        _modelRouter = modelRouter;
         _options = options.Value;
         _logger = logger;
     }
@@ -59,7 +63,8 @@ public sealed class AgentContextCompactor : IAgentContextCompactor
         AppRuntimeConfig runtimeConfig,
         List<OllamaMessage> messages,
         int iteration,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        WorkingMemory? workingMemory = null)
     {
         var maxTokens = SessionWikiSettings.ResolveMaxContextTokens(runtimeConfig, _options);
         var estimated = TokenEstimator.Estimate(messages);
@@ -85,9 +90,10 @@ public sealed class AgentContextCompactor : IAgentContextCompactor
             return null;
         }
 
-        var summary = await GenerateSummaryAsync(runtimeConfig, messages, cancellationToken).ConfigureAwait(false);
+        var summary = await GenerateSummaryAsync(runtimeConfig, messages, workingMemory, cancellationToken)
+            .ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(summary))
-            summary = BuildHeuristicSummary(messages);
+            summary = BuildHeuristicSummary(messages, workingMemory);
 
         try
         {
@@ -143,15 +149,27 @@ public sealed class AgentContextCompactor : IAgentContextCompactor
     private async Task<string> GenerateSummaryAsync(
         AppRuntimeConfig runtimeConfig,
         List<OllamaMessage> messages,
+        WorkingMemory? workingMemory,
         CancellationToken cancellationToken)
     {
         try
         {
-            var model = SessionWikiSettings.ResolveWikiLlmModel(runtimeConfig, _options.DefaultWikiLlmModel);
+            var estimatedTokens = TokenEstimator.Estimate(messages.TakeLast(40));
+            var routed = _modelRouter.Route(new ModelRoutingRequest(
+                LlmTaskType.Compaction,
+                runtimeConfig,
+                RequiresVision: false,
+                EstimatedTokens: estimatedTokens));
+            var model = routed.Model;
             var adapter = _adapterResolver.Resolve(runtimeConfig);
+            var importanceNote = BuildImportancePreservationNote(workingMemory);
             var prompt =
                 "Summarize this agent session for continued work. Max 12 bullet lines. "
-                + "Keep goals, decisions, tool outcomes, and open questions. Same language as the user.\n\n"
+                + "Keep goals, decisions, tool outcomes, and open questions. Same language as the user. "
+                + "Preserve Critical and Important items verbatim when possible; "
+                + "Recoverable items may become artifact pointers; Discardable items can be dropped.\n"
+                + importanceNote
+                + "\n"
                 + SerializeTranscript(messages.TakeLast(40));
 
             var response = await adapter.GenerateAsync(
@@ -172,9 +190,13 @@ public sealed class AgentContextCompactor : IAgentContextCompactor
         }
     }
 
-    private static string BuildHeuristicSummary(List<OllamaMessage> messages)
+    private static string BuildHeuristicSummary(List<OllamaMessage> messages, WorkingMemory? workingMemory = null)
     {
         var sb = new StringBuilder();
+        var note = BuildImportancePreservationNote(workingMemory);
+        if (!string.IsNullOrWhiteSpace(note))
+            sb.AppendLine(note.Trim());
+
         foreach (var m in messages.TakeLast(8))
         {
             var role = m.Role ?? "?";
@@ -188,6 +210,43 @@ public sealed class AgentContextCompactor : IAgentContextCompactor
 
         return sb.ToString().Trim();
     }
+
+    private static string BuildImportancePreservationNote(WorkingMemory? workingMemory)
+    {
+        if (workingMemory is null)
+            return "Prefer preserving Critical/Important content over Discardable noise.\n";
+
+        var preserved = workingMemory.Items
+            .Where(i => i.IsPreservedOnCompaction)
+            .OrderBy(i => i.Importance)
+            .Take(8)
+            .Select(i => $"- [{i.Importance}] {i.Key}: {Truncate(i.Value, 120)}")
+            .ToList();
+
+        if (preserved.Count == 0
+            && string.IsNullOrWhiteSpace(workingMemory.Objective)
+            && string.IsNullOrWhiteSpace(workingMemory.Plan))
+        {
+            return "Prefer preserving Critical/Important content over Discardable noise.\n";
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine("Critical/Important items to preserve in the summary:");
+        if (!string.IsNullOrWhiteSpace(workingMemory.Objective))
+            sb.AppendLine($"- [Critical] Objective: {workingMemory.Objective.Trim()}");
+        if (!string.IsNullOrWhiteSpace(workingMemory.Plan))
+            sb.AppendLine($"- [Important] Plan: {workingMemory.Plan.Trim()}");
+        foreach (var line in preserved)
+            sb.AppendLine(line);
+        if (workingMemory.Blockers.Count > 0)
+            sb.AppendLine($"- [Important] Blockers: {string.Join("; ", workingMemory.Blockers.Take(5))}");
+        return sb.ToString();
+    }
+
+    private static string Truncate(string? value, int max) =>
+        string.IsNullOrEmpty(value) ? string.Empty
+        : value.Length <= max ? value
+        : value[..max] + "…";
 
     private static string SerializeTranscript(IEnumerable<OllamaMessage> messages) =>
         JsonSerializer.Serialize(

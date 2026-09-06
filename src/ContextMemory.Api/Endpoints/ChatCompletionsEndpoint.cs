@@ -20,7 +20,24 @@ public static class ChatCompletionsEndpoint
 
     public static void MapChatCompletionsEndpoint(this WebApplication app)
     {
-        app.MapPost("/v1/chat/completions", HandleAsync).DisableAntiforgery();
+        // v1: stable OpenAI-compatible contract
+        app.MapPost("/v1/chat/completions", HandleAsync)
+            .WithName("ChatCompletionsV1")
+            .WithTags("Chat")
+            .WithSummary("Chat completions (OpenAI-compatible, API v1)")
+            .WithDescription(
+                "OpenAI-compatible chat with session wiki enrichment, optional SSE streaming, web search, and agentic tools. "
+                + "Preferred public API. Echoes X-Context-Memory-Api-Version.")
+            .DisableAntiforgery();
+
+        // v2: same handler today; reserved for contract evolution (CM-1 versioning)
+        app.MapPost("/v2/chat/completions", HandleAsync)
+            .WithName("ChatCompletionsV2")
+            .WithTags("Chat")
+            .WithSummary("Chat completions (OpenAI-compatible, API v2)")
+            .WithDescription(
+                "API v2 surface. Currently mirrors v1 behaviour; future breaking contract changes land here.")
+            .DisableAntiforgery();
     }
 
     private static async Task HandleAsync(

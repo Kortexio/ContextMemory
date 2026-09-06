@@ -316,12 +316,14 @@ public sealed class PostgresSessionStore : ISessionStore
         return new SessionSnapshot
         {
             SessionPath = $"postgres://sessions/{sessionId}",
+            State = record.State,
             IndexMd = record.IndexMd,
             LogMd = record.LogMd,
             SchemaMd = record.SchemaMd,
             Pages = record.Pages,
             PageLastModified = record.PageLastModified,
-            Messages = record.Messages
+            Messages = record.Messages,
+            WorkingMemory = record.WorkingMemory
         };
     }
 
@@ -331,12 +333,14 @@ public sealed class PostgresSessionStore : ISessionStore
 
 internal sealed class SessionPersistenceRecord
 {
+    public SessionState State { get; set; } = SessionState.Active;
     public string IndexMd { get; set; } = SessionDefaults.EmptyIndex;
     public string LogMd { get; set; } = SessionDefaults.EmptyLog;
     public string SchemaMd { get; set; } = SessionDefaults.DefaultSchema;
     public Dictionary<string, string> Pages { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, DateTimeOffset> PageLastModified { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<OllamaMessage> Messages { get; set; } = [];
+    public WorkingMemory? WorkingMemory { get; set; }
 
     /// <summary>Dynamic-discovery tool outputs (not part of compiled wiki).</summary>
     public Dictionary<string, string> Artifacts { get; set; } = new(StringComparer.OrdinalIgnoreCase);
