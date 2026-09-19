@@ -166,10 +166,11 @@ internal sealed class OpenAiChatClient
     {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/models");
+            // GET /models enumerates the catalog — probe the origin instead.
+            using var request = new HttpRequestMessage(HttpMethod.Get, LlmHost.Origin(_baseUrl) + "/");
             ApplyAuth(request);
             using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            return response.IsSuccessStatusCode;
+            return LlmHost.IsReachable(response.StatusCode);
         }
         catch
         {

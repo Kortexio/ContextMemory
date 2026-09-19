@@ -6,6 +6,8 @@ using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Agentic.Mcp;
 using ContextMemory.Core.Agentic.Prompts;
 using ContextMemory.Core.Models;
+using ContextMemory.Core.Session;
+using ContextMemory.Core.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -117,35 +119,6 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             cancellationToken.ThrowIfCancellationRequested();
             EnsureUserMessagePresent(messages, request);
 
-            var compaction = await _contextCompactor
-                .TryCompactAsync(
-                    request.AppId,
-                    request.UserId,
-                    request.SessionId,
-                    request.RuntimeConfig,
-                    messages,
-                    iteration + 1,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            if (compaction is not null)
-            {
-                compactionCount++;
-                loopState = ApplyTransition(loopState, AgentLoopEvent.Compact, trace);
-                Report(request.Report, new AgenticProgressEvent
-                {
-                    Phase = AgenticProgressPhase.Compacting,
-                    Iteration = iteration + 1,
-                    ArtifactId = compaction.HistoryArtifactId,
-                    Detail = $"Compacted ~{compaction.EstimatedTokensBefore} tokens → summary + historyArtifactId"
-                });
-            }
-
-            loopState = ApplyTransition(loopState, AgentLoopEvent.LlmRequest, trace);
-            Report(request.Report, new AgenticProgressEvent
-            {
-                Phase = AgenticProgressPhase.LlmRequest,
-                Iteration = iteration + 1
-            });
             var toolsForRequest = request.Tools.Count > 0 ? request.Tools.ToList() : null;
             if (toolsForRequest is not null && capabilities.SanitizeSchemasAggressively)
             {
@@ -158,6 +131,46 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             {
                 ClientSideToolCalling.EnsureCatalogInSystemPrompt(messages, toolsForRequest!);
             }
+
+            var tokenBudget = SessionWikiSettings.ResolveAgentCompactionTokenBudget(
+                request.RuntimeConfig,
+                _options,
+                request.EnrichedRequest.Options?.NumCtx);
+
+            var compaction = await _contextCompactor
+                .TryCompactAsync(
+                    request.AppId,
+                    request.UserId,
+                    request.SessionId,
+                    request.RuntimeConfig,
+                    messages,
+                    iteration + 1,
+                    cancellationToken,
+                    tokenBudgetOverride: tokenBudget)
+                .ConfigureAwait(false);
+            if (compaction is not null)
+            {
+                compactionCount++;
+                loopState = ApplyTransition(loopState, AgentLoopEvent.Compact, trace);
+                if (useClientSideTools)
+                    ClientSideToolCalling.EnsureCatalogInSystemPrompt(messages, toolsForRequest!);
+                Report(request.Report, new AgenticProgressEvent
+                {
+                    Phase = AgenticProgressPhase.Compacting,
+                    Iteration = iteration + 1,
+                    ArtifactId = compaction.HistoryArtifactId,
+                    Detail = $"Compacted ~{compaction.EstimatedTokensBefore} tokens → summary + historyArtifactId"
+                });
+            }
+
+            AgentContextCompactor.ShrinkToBudget(messages, tokenBudget);
+
+            loopState = ApplyTransition(loopState, AgentLoopEvent.LlmRequest, trace);
+            Report(request.Report, new AgenticProgressEvent
+            {
+                Phase = AgenticProgressPhase.LlmRequest,
+                Iteration = iteration + 1
+            });
 
             var toolChoice = useClientSideTools
                 ? null
@@ -243,6 +256,142 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                         cancellationToken)
                     .ConfigureAwait(false);
                 loopState = ApplyTransition(loopState, AgentLoopEvent.LlmRequest, trace);
+            }
+            catch (HttpRequestException ex) when (LlmContextLengthError.IsMatch(ex))
+            {
+                var bodyPreview = TruncateForLog(ex.Message, 2000);
+                var nCtx = LlmContextLengthError.TryGetContextSize(ex.Message)
+                           ?? request.EnrichedRequest.Options?.NumCtx
+                           ?? request.RuntimeConfig.LlmOptions?.NumCtx
+                           ?? 4096;
+                var promptTokens = LlmContextLengthError.TryGetPromptTokens(ex.Message)
+                                   ?? TokenEstimator.Estimate(messages);
+                var fitBudget = SessionWikiSettings.FitBudgetForContextWindow(nCtx);
+
+                _logger.LogWarning(
+                    ex,
+                    "LLM context window exceeded for {AppId} (prompt≈{PromptTokens}, n_ctx={NCtx}); shrinking to {Budget} tokens and retrying. Body: {Body}",
+                    request.AppId,
+                    promptTokens,
+                    nCtx,
+                    fitBudget,
+                    bodyPreview);
+
+                loopState = ApplyTransition(loopState, AgentLoopEvent.Recover, trace);
+                Report(request.Report, new AgenticProgressEvent
+                {
+                    Phase = AgenticProgressPhase.Compacting,
+                    Iteration = iteration + 1,
+                    Detail = $"Prompt {promptTokens} tokens > n_ctx {nCtx}; shrinking context"
+                });
+
+                try
+                {
+                    await _contextCompactor
+                        .TryCompactAsync(
+                            request.AppId,
+                            request.UserId,
+                            request.SessionId,
+                            request.RuntimeConfig,
+                            messages,
+                            iteration + 1,
+                            cancellationToken,
+                            tokenBudgetOverride: fitBudget,
+                            force: true)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception compactEx)
+                {
+                    _logger.LogDebug(compactEx, "Forced compaction after context overflow failed; shrinking inline");
+                }
+
+                if (useClientSideTools && toolsForRequest is { Count: > 0 })
+                    ClientSideToolCalling.EnsureCatalogInSystemPrompt(messages, toolsForRequest);
+                AgentContextCompactor.ShrinkToBudget(messages, fitBudget);
+                compactionCount++;
+
+                var recoveredRequest = llmRequest with
+                {
+                    Messages = useClientSideTools
+                        ? ClientSideToolCalling.FlattenForClientSideWire(messages)
+                        : messages.ToList()
+                };
+
+                try
+                {
+                    response = await adapter.ChatAsync(recoveredRequest, cancellationToken).ConfigureAwait(false);
+                    llmCalls++;
+                    loopState = ApplyTransition(loopState, AgentLoopEvent.LlmRequest, trace);
+                }
+                catch (HttpRequestException stillOverEx) when (LlmContextLengthError.IsMatch(stillOverEx))
+                {
+                    _logger.LogWarning(
+                        stillOverEx,
+                        "Context overflow persisted after shrink for {AppId}; retrying without tools",
+                        request.AppId);
+
+                    AgentContextCompactor.ShrinkToBudget(messages, Math.Max(512, fitBudget * 2 / 3));
+                    var noToolsRequest = recoveredRequest with
+                    {
+                        Messages = ClientSideToolCalling.FlattenForClientSideWire(messages),
+                        Tools = null,
+                        McpServers = null,
+                        ToolChoice = null
+                    };
+
+                    try
+                    {
+                        response = await adapter.ChatAsync(noToolsRequest, cancellationToken).ConfigureAwait(false);
+                        llmCalls++;
+                        useClientSideTools = true;
+                        skipProsePromotion = true;
+                        loopState = ApplyTransition(loopState, AgentLoopEvent.LlmRequest, trace);
+                    }
+                    catch (HttpRequestException finalEx) when (LlmContextLengthError.IsMatch(finalEx) || IsHttpBadRequest(finalEx))
+                    {
+                        _logger.LogWarning(
+                            finalEx,
+                            "LLM context recovery failed for {AppId}. Body: {Body}",
+                            request.AppId,
+                            TruncateForLog(finalEx.Message, 2000));
+
+                        if (!string.IsNullOrWhiteSpace(lastAnswer))
+                        {
+                            loopState = ApplyTransition(loopState, AgentLoopEvent.Complete, trace);
+                            trace.Complete(AgentRunState.Completed);
+                            var partial = AttachDiscovery(
+                                AgentResult.Succeeded(lastAnswer, steps, iteration + 1),
+                                messages, steps, staticPromptChars, compactionCount, llmCalls,
+                                promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel)
+                                .WithTrace(trace);
+                            Report(request.Report, new AgenticProgressEvent
+                            {
+                                Phase = AgenticProgressPhase.Completed,
+                                Iteration = iteration + 1,
+                                Detail = "Completed with prior answer after context overflow"
+                            });
+                            return partial;
+                        }
+
+                        loopState = ApplyTransition(loopState, AgentLoopEvent.Fail, trace);
+                        trace.Complete(AgentRunState.Failed);
+                        var failed = AttachDiscovery(
+                            AgentResult.Failed(
+                                AgenticMessages.ContextWindowExceeded(promptTokens, nCtx, request.RuntimeConfig.DefaultLanguage),
+                                steps,
+                                iteration + 1),
+                            messages, steps, staticPromptChars, compactionCount, llmCalls,
+                            promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel)
+                            .WithTrace(trace);
+                        Report(request.Report, new AgenticProgressEvent
+                        {
+                            Phase = AgenticProgressPhase.Completed,
+                            Iteration = iteration + 1,
+                            Detail = $"Prompt exceeded n_ctx={nCtx}"
+                        });
+                        return failed;
+                    }
+                }
             }
             catch (HttpRequestException ex) when (IsHttpBadRequest(ex))
             {

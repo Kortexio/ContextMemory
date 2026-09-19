@@ -19,6 +19,29 @@ public static class SessionWikiSettings
     public static int ResolveMaxContextTokens(AppRuntimeConfig config, Configuration.ContextMemoryOptions defaults) =>
         config.MaxContextTokens > 0 ? config.MaxContextTokens : defaults.MaxContextTokens;
 
+    /// <summary>
+    /// Mid-turn compaction budget. Caps at ~75% of the model <c>num_ctx</c> when set so
+    /// agentic prompts (wiki + tools + history) fit the actual Ollama window (often 4096).
+    /// </summary>
+    public static int ResolveAgentCompactionTokenBudget(
+        AppRuntimeConfig config,
+        Configuration.ContextMemoryOptions defaults,
+        int? requestNumCtx)
+    {
+        var wikiBudget = ResolveMaxContextTokens(config, defaults);
+        var numCtx = requestNumCtx is > 0
+            ? requestNumCtx
+            : config.LlmOptions?.NumCtx;
+        if (numCtx is not > 0)
+            return wikiBudget;
+
+        return Math.Min(wikiBudget, FitBudgetForContextWindow(numCtx.Value));
+    }
+
+    /// <summary>Leave headroom for generation and tokenizer drift versus <see cref="Utilities.TokenEstimator"/>.</summary>
+    public static int FitBudgetForContextWindow(int nCtx) =>
+        Math.Max(512, nCtx * 3 / 4);
+
     public static int ResolveMaxHistoryMessages(AppRuntimeConfig config, Configuration.ContextMemoryOptions defaults) =>
         config.MaxHistoryMessages > 0 ? config.MaxHistoryMessages : defaults.MaxHistoryMessages;
 

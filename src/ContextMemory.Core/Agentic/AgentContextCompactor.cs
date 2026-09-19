@@ -23,7 +23,9 @@ public interface IAgentContextCompactor
         List<OllamaMessage> messages,
         int iteration,
         CancellationToken cancellationToken = default,
-        WorkingMemory? workingMemory = null);
+        WorkingMemory? workingMemory = null,
+        int? tokenBudgetOverride = null,
+        bool force = false);
 }
 
 public sealed record ContextCompactionResult(
@@ -64,12 +66,22 @@ public sealed class AgentContextCompactor : IAgentContextCompactor
         List<OllamaMessage> messages,
         int iteration,
         CancellationToken cancellationToken = default,
-        WorkingMemory? workingMemory = null)
+        WorkingMemory? workingMemory = null,
+        int? tokenBudgetOverride = null,
+        bool force = false)
     {
-        var maxTokens = SessionWikiSettings.ResolveMaxContextTokens(runtimeConfig, _options);
+        var maxTokens = tokenBudgetOverride is > 0
+            ? tokenBudgetOverride.Value
+            : SessionWikiSettings.ResolveAgentCompactionTokenBudget(runtimeConfig, _options, null);
         var estimated = TokenEstimator.Estimate(messages);
-        if (estimated <= maxTokens || messages.Count < 4)
+        if (!force && (estimated <= maxTokens || messages.Count < 4))
             return null;
+
+        if (messages.Count < 4)
+        {
+            ShrinkToBudget(messages, maxTokens);
+            return new ContextCompactionResult("inline", string.Empty, estimated, estimated);
+        }
 
         // Keep under common FS/DB id limits without assuming the prefix is already >= 64 chars
         // (short session ids like Jira keys produced ArgumentOutOfRange on ..[64]).
@@ -143,7 +155,68 @@ public sealed class AgentContextCompactor : IAgentContextCompactor
             });
         }
 
+        ShrinkToBudget(messages, maxTokens);
         return new ContextCompactionResult(historyId, summary, estimated, estimated);
+    }
+
+    /// <summary>
+    /// Collapse to system + last user and truncate so the estimated prompt fits <paramref name="maxTokens"/>.
+    /// No-op when already under budget.
+    /// </summary>
+    public static void ShrinkToBudget(List<OllamaMessage> messages, int maxTokens)
+    {
+        if (messages.Count == 0)
+            return;
+
+        maxTokens = Math.Max(64, maxTokens);
+        if (TokenEstimator.Estimate(messages) <= maxTokens)
+            return;
+
+        var system = messages.FirstOrDefault(m =>
+            string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase));
+        var lastUser = messages.LastOrDefault(m =>
+            string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase)
+            && !IsToolResponseWrapped(m.Content));
+
+        var systemContent = system?.Content ?? string.Empty;
+        var userContent = string.IsNullOrWhiteSpace(lastUser?.Content)
+            ? "Continue from the compacted session summary. Prefer tools for live data."
+            : lastUser!.Content;
+
+        messages.Clear();
+        messages.Add(new OllamaMessage { Role = "system", Content = systemContent });
+        messages.Add(new OllamaMessage { Role = "user", Content = userContent });
+
+        if (TokenEstimator.Estimate(messages) <= maxTokens)
+            return;
+
+        var userTokens = TokenEstimator.Estimate(userContent);
+        var systemTokenBudget = Math.Max(32, maxTokens - userTokens - 8);
+        var truncatedSystem = TruncatePreservingHeadAndTail(systemContent, systemTokenBudget * 4);
+        messages[0] = messages[0] with { Content = truncatedSystem };
+
+        if (TokenEstimator.Estimate(messages) <= maxTokens)
+            return;
+
+        var remainingUserTokens = Math.Max(16, maxTokens - TokenEstimator.Estimate(messages[0].Content) - 4);
+        var userChars = remainingUserTokens * 4;
+        if (userContent.Length > userChars)
+            messages[1] = messages[1] with { Content = userContent[..userChars] + "…" };
+    }
+
+    private static string TruncatePreservingHeadAndTail(string content, int maxChars)
+    {
+        if (string.IsNullOrEmpty(content) || content.Length <= maxChars)
+            return content;
+
+        maxChars = Math.Max(80, maxChars);
+        const string marker = "\n\n[…truncated for context window…]\n\n";
+        var keepHead = Math.Max(40, maxChars * 2 / 3);
+        var keepTail = Math.Max(0, maxChars - keepHead - marker.Length);
+        if (keepTail < 40)
+            return content[..Math.Min(content.Length, maxChars)] + "…";
+
+        return content[..keepHead] + marker + content[^keepTail..];
     }
 
     private async Task<string> GenerateSummaryAsync(

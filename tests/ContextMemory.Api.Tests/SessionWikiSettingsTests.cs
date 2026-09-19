@@ -81,4 +81,28 @@ public class SessionWikiSettingsTests
 
         Assert.Equal(expected, SessionWikiSettings.ShouldRunWikiLlm(snapshot, everyN));
     }
+
+    [Fact]
+    public void ResolveAgentCompactionTokenBudget_CapsToNumCtxHeadroom()
+    {
+        var defaults = new ContextMemory.Core.Configuration.ContextMemoryOptions { MaxContextTokens = 24_000 };
+        var config = new AppRuntimeConfig
+        {
+            AppId = "a",
+            MaxContextTokens = 24_000,
+            LlmOptions = new LlmGenerationConfig { NumCtx = 4096 }
+        };
+
+        Assert.Equal(3072, SessionWikiSettings.ResolveAgentCompactionTokenBudget(config, defaults, null));
+        Assert.Equal(6144, SessionWikiSettings.ResolveAgentCompactionTokenBudget(config, defaults, 8192));
+    }
+
+    [Fact]
+    public void ResolveAgentCompactionTokenBudget_UsesWikiBudgetWhenNumCtxUnset()
+    {
+        var defaults = new ContextMemory.Core.Configuration.ContextMemoryOptions { MaxContextTokens = 24_000 };
+        var config = new AppRuntimeConfig { AppId = "a", MaxContextTokens = 0 };
+
+        Assert.Equal(24_000, SessionWikiSettings.ResolveAgentCompactionTokenBudget(config, defaults, null));
+    }
 }

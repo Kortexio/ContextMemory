@@ -32,7 +32,7 @@
 | `GET /admin/apps/{appId}/agentic/catalog` | App-owned skills + guardrails |
 | `POST/PUT/DELETE /admin/apps/{appId}/skills...` | App skills CRUD (import/export) |
 | `POST/PUT/DELETE /admin/apps/{appId}/guardrails...` | App guardrails CRUD (import/export) |
-| `GET /health` | API, Ollama, Postgres health |
+| `GET /health` | API and Postgres liveness |
 | `GET /admin` | HTML pointer to the Admin UI host |
 
 The preferred chat response is the **OpenAI schema** — `choices[0].message.content`. Legacy `/api/chat` still returns Ollama `message.content` / `done`.

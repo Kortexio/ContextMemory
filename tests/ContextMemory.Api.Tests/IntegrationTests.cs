@@ -28,7 +28,6 @@ public class IntegrationTests : IClassFixture<ContextMemoryWebApplicationFactory
 
         Assert.Contains("status", json, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("checks", json, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ollama", json, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

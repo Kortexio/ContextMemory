@@ -158,7 +158,7 @@ internal sealed class ContextMemoryHeadersOperationFilter : Swashbuckle.AspNetCo
                 "Creates a new app and API key. Requires master key."),
             ["health"] = (
                 "Health check",
-                "Liveness probe: Ollama, persistence, and loaded apps."),
+                "Liveness probe: process, persistence, and loaded apps."),
             ["metrics"] = (
                 "Prometheus metrics",
                 "Per-tenant request, wiki, web search, and agentic counters."),

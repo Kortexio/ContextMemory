@@ -221,6 +221,16 @@ public static class AgenticMessages
             "O loop agentic atingiu o limite de tempo configurado antes de produzir uma resposta. "
             + "Por favor, reformula o pedido ou tenta novamente.");
 
+    public static string ContextWindowExceeded(int promptTokens, int nCtx, string? language) =>
+        TenantLocale.Select(
+            language,
+            $"The prompt ({promptTokens} tokens) exceeds the model context window (num_ctx={nCtx}). "
+            + "Raise num_ctx in the Playground advanced settings or in the app LLM config "
+            + "(for example 8192 or 32768) and retry.",
+            $"O prompt ({promptTokens} tokens) excede a janela de contexto do modelo (num_ctx={nCtx}). "
+            + "Aumenta o num_ctx nas opções avançadas do Playground ou na config LLM da app "
+            + "(por exemplo 8192 ou 32768) e tenta novamente.");
+
     public static string TimeoutProgressHeader(string? language) =>
         TenantLocale.Select(
             language,

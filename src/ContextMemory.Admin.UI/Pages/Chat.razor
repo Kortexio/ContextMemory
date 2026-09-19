@@ -117,6 +117,10 @@
                             <div class="col-6 form-group">
                                 <label>num_ctx</label>
                                 <InputNumber class="form-control form-control-sm" @bind-Value="_settings.NumCtx" />
+                                <FieldHelp>
+                                    Empty = app LLM config / server default. Do not leave at 4096 for agentic/MCP turns — the prompt often exceeds that.
+                                    Raise to 8192 or 32768, or set <code>numCtx</code> on the app LLM page.
+                                </FieldHelp>
                             </div>
                         </div>
                         <div class="form-row">
@@ -535,6 +539,15 @@
                 var config = await ChatApi.GetAppConfigAsync(_settings);
                 if (config is not null && !string.IsNullOrWhiteSpace(config.LlmModel))
                     _settings.Model = config.LlmModel;
+
+                if (config?.LlmOptions?.NumCtx is > 0)
+                    _settings.NumCtx = config.LlmOptions.NumCtx;
+                else if (_settings.NumCtx is 4096)
+                    _settings.NumCtx = null;
+            }
+            else if (_settings.NumCtx is 4096)
+            {
+                _settings.NumCtx = null;
             }
 
             await ChatSettingsStorage.SaveAsync(_settings);

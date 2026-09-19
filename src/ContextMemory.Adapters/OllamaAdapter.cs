@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
@@ -161,10 +160,10 @@ public sealed class OllamaAdapter : ILlmAdapter
     {
         try
         {
-            using var httpRequest = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/api/tags");
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Get, LlmHost.Origin(_baseUrl) + "/");
             ApplyAuth(httpRequest);
             using var response = await _httpClient.SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-            return response.StatusCode == HttpStatusCode.OK;
+            return LlmHost.IsReachable(response.StatusCode);
         }
         catch
         {
