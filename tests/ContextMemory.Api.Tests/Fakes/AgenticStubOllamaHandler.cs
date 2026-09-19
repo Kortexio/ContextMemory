@@ -26,6 +26,14 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
     {
         var path = request.RequestUri?.AbsolutePath ?? string.Empty;
 
+        if (path is "/" or "")
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("Ollama is running", Encoding.UTF8, "text/plain")
+            });
+        }
+
         if (path.EndsWith("/v1/models", StringComparison.OrdinalIgnoreCase)
             || path.EndsWith("/models", StringComparison.OrdinalIgnoreCase)
             || path.EndsWith("/api/tags", StringComparison.OrdinalIgnoreCase))

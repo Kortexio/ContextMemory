@@ -25,16 +25,13 @@ public class OllamaE2ETests : IClassFixture<OllamaE2EWebApplicationFactory>
         string.Equals(Environment.GetEnvironmentVariable("OLLAMA_E2E"), "1", StringComparison.Ordinal);
 
     [Fact]
-    public async Task Health_WhenOllamaRunning_ReportsOllamaUp()
+    public async Task Health_WhenGatewayReady_ReturnsOk()
     {
         if (!IsEnabled)
             return;
 
         var response = await _client.GetAsync("/health");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var json = await response.Content.ReadAsStringAsync();
-        Assert.Contains("up", json, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -191,7 +191,6 @@ public sealed class HealthResponseDto
 
 public sealed class HealthChecksDto
 {
-    public string? Ollama { get; set; }
     public string? Database { get; set; }
     public string? Persistence { get; set; }
     public bool AppsLoaded { get; set; }

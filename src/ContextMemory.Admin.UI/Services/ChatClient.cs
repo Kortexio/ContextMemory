@@ -403,7 +403,7 @@ public sealed class ChatClient
             Temperature = settings.Temperature,
             TopP = settings.TopP,
             TopK = settings.TopK,
-            NumCtx = settings.NumCtx,
+            NumCtx = settings.NumCtx is > 0 ? settings.NumCtx : null,
             RepeatPenalty = settings.RepeatPenalty,
             NumPredict = settings.NumPredict
         };

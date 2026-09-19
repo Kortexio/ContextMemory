@@ -21,7 +21,7 @@ public sealed class ChatTestSettings
     public float? Temperature { get; set; } = 0.7f;
     public float? TopP { get; set; } = 0.9f;
     public int? TopK { get; set; } = 40;
-    public int? NumCtx { get; set; } = 4096;
+    public int? NumCtx { get; set; }
     public float? RepeatPenalty { get; set; } = 1.1f;
     public int? NumPredict { get; set; }
     public bool ShowRawJson { get; set; } = false;

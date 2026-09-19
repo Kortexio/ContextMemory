@@ -422,6 +422,15 @@ public sealed class AgentResult
             Success = false
         };
 
+    public static AgentResult Failed(string answer, IReadOnlyList<AgentExecutionStep> steps, int iterations) =>
+        new()
+        {
+            FinalAnswer = answer,
+            Steps = steps,
+            Iterations = iterations,
+            Success = false
+        };
+
     public static AgentResult AwaitingHumanConfirmation(
         string message,
         string pendingId,

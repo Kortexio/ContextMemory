@@ -14,34 +14,12 @@ public static class HealthEndpoint
 
     private static async Task<IResult> GetHealthAsync(
         HttpContext httpContext,
-        ILlmAdapterResolver adapterResolver,
         IAppRegistry appRegistry,
         IAppConfigStore appConfigStore,
         IOptions<ContextMemoryOptions> options)
     {
         var config = options.Value;
         var usePostgres = PersistenceProviders.IsPostgres(config.PersistenceProvider);
-
-        // Cap LLM probe so Docker healthchecks (short curl timeout) do not hang on a slow backend.
-        // Default backend is OpenAI-compatible (/v1/models) via OllamaEndpoint or OpenAiEndpoint.
-        bool llmHealthy;
-        using (var llmCts = CancellationTokenSource.CreateLinkedTokenSource(httpContext.RequestAborted))
-        {
-            llmCts.CancelAfter(TimeSpan.FromSeconds(2));
-            try
-            {
-                llmHealthy = await adapterResolver
-                    .Resolve("ollama")
-                    .IsHealthyAsync(llmCts.Token)
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                llmHealthy = false;
-            }
-        }
-
-        var ollamaHealthy = llmHealthy;
 
         var appsLoaded = appRegistry.GetAllApps().Count > 0;
 
@@ -60,11 +38,8 @@ public static class HealthEndpoint
             profilesReady = Directory.Exists(appConfigStore.ProfilesRoot);
         }
 
-        // Process is live when persistence/apps are ready. Ollama may be degraded without failing Docker health.
         var healthy = appsLoaded && profilesReady;
-        var status = healthy
-            ? (ollamaHealthy ? "healthy" : "degraded")
-            : "unhealthy";
+        var status = healthy ? "healthy" : "unhealthy";
         var code = healthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable;
 
         return Results.Json(new
@@ -72,7 +47,6 @@ public static class HealthEndpoint
             status,
             checks = new
             {
-                ollama = ollamaHealthy ? "up" : "down",
                 database,
                 persistence = config.PersistenceProvider,
                 appsLoaded,
