@@ -35,14 +35,20 @@ public static class OllamaLlmText
         if (string.IsNullOrWhiteSpace(raw))
             return raw;
 
-        if (!raw.StartsWith("Thinking Process:", StringComparison.OrdinalIgnoreCase))
-            return raw.Trim();
+        var trimmed = raw.Trim();
+        var isThinkingBlock =
+            trimmed.StartsWith("Thinking Process:", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("Here's a thinking process", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("Here is a thinking process", StringComparison.OrdinalIgnoreCase);
+
+        if (!isThinkingBlock)
+            return trimmed;
 
         const string outputMarker = "**Output:**";
-        var outputIdx = raw.LastIndexOf(outputMarker, StringComparison.OrdinalIgnoreCase);
+        var outputIdx = trimmed.LastIndexOf(outputMarker, StringComparison.OrdinalIgnoreCase);
         if (outputIdx >= 0)
         {
-            var after = raw[(outputIdx + outputMarker.Length)..].Trim().Trim('`', '"', '\'', ' ', '\r', '\n');
+            var after = trimmed[(outputIdx + outputMarker.Length)..].Trim().Trim('`', '"', '\'', ' ', '\r', '\n');
             if (after.Length > 0)
             {
                 var line = after.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)[0];
@@ -50,7 +56,7 @@ public static class OllamaLlmText
             }
         }
 
-        var lines = raw.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var lines = trimmed.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         for (var i = lines.Length - 1; i >= 0; i--)
         {
             var line = lines[i].Trim('`', '*', ' ');
@@ -60,6 +66,6 @@ public static class OllamaLlmText
                 return line;
         }
 
-        return raw.Trim();
+        return trimmed;
     }
 }

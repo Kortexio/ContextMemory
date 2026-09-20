@@ -46,6 +46,12 @@ public sealed class DeterministicAgentValidator
                 ValidationMessages.EmptyFinalAnswer(request.RuntimeConfig));
         }
 
+        if (AgenticThinkingLeakGuardrail.TryGetRejectionFeedback(
+                finalAnswer, request.RuntimeConfig, out var thinkingFeedback))
+        {
+            return ValidationResult.Reject(thinkingFeedback);
+        }
+
         if (policy.HasKind(AgenticGuardrailKinds.SandboxClaim)
             && AgenticSandboxClaimGuardrail.TryGetRejectionFeedback(
                 finalAnswer,

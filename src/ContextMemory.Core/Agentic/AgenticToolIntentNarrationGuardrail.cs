@@ -147,10 +147,12 @@ public static class AgenticToolIntentNarrationGuardrail
         {
             return TenantLocale.Select(
                 lang,
-                "Rejected: the final answer names internal tools. Rewrite for the end user without tool names, "
-                + "APIs, or mechanics — deliver the result only.",
-                "Rejeitado: a resposta final nomeia tools internas. Reescreve para o utilizador final sem nomes de tools, "
-                + "APIs ou mecânica — entrega só o resultado.");
+                "Rejected: the final answer names internal tools. "
+                + "Answer the user's original question in their language with the result only — "
+                + "no tool names, no APIs, no mention of this rejection or the harness.",
+                "Rejeitado: a resposta final nomeia tools internas. "
+                + "Responde à pergunta original do utilizador na língua dele só com o resultado — "
+                + "sem nomes de tools, APIs, nem menção a esta rejeição ou ao harness.");
         }
 
         return BuildIntentFeedback(lang, hasMcp, hasDiscovery);
