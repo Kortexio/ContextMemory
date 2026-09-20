@@ -651,7 +651,7 @@ public sealed class McpJsonRpcClientTests
         Assert.Contains(firstHop, t => t.Function.Name == SessionDiscoveryTools.ToolDescribe);
 
         var summary = await registry.BuildToolNamesSummaryAsync(config, "accounts", null);
-        Assert.Contains("tool_search", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("MCP discovery helpers", summary, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("zuora__query_objects", summary, StringComparison.OrdinalIgnoreCase);
 
         var pinned = await registry.BuildToolsAsync(config, "again", ["zuora__query_objects"]);

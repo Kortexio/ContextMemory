@@ -34,6 +34,21 @@ public sealed class AgenticToolIntentNarrationGuardrailTests
     }
 
     [Fact]
+    public void Rejects_McpNarration_WithActionableToolSearchJson()
+    {
+        var config = AgenticConfig(withMcp: true);
+        var ok = AgenticToolIntentNarrationGuardrail.TryGetRejectionFeedback(
+            "Vou usar tool_search para encontrar a conta no Zuora.",
+            [],
+            config,
+            out var feedback);
+
+        Assert.True(ok);
+        Assert.Contains("tool_search", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("{\"tool\"", feedback, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Accepts_AfterSuccessfulTool()
     {
         var config = AgenticConfig();
@@ -97,11 +112,29 @@ public sealed class AgenticToolIntentNarrationGuardrailTests
         Assert.False(ok);
     }
 
-    private static AppRuntimeConfig AgenticConfig() =>
+    private static AppRuntimeConfig AgenticConfig(bool withMcp = false) =>
         new()
         {
             AppId = "test",
             DefaultLanguage = "pt",
-            Agentic = new AgenticConfig { Enabled = true }
+            Agentic = new AgenticConfig
+            {
+                Enabled = true,
+                Tools = withMcp
+                    ? new AgenticToolsConfig
+                    {
+                        Integrations =
+                        [
+                            new IntegrationToolConfig
+                            {
+                                Type = "mcp",
+                                Name = "zuora",
+                                Enabled = true,
+                                Url = "mock://zuora"
+                            }
+                        ]
+                    }
+                    : new AgenticToolsConfig()
+            }
         };
 }

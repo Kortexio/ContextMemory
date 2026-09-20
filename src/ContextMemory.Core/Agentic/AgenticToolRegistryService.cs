@@ -90,7 +90,7 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
         if (mcpServers.Count == 0)
             return string.Join(", ", names);
 
-        var mcpHint = $"MCP via tool_search (servers: {string.Join(", ", mcpServers)})";
+        var mcpHint = $"MCP discovery helpers (servers: {string.Join(", ", mcpServers)})";
         return names.Count == 0 ? mcpHint : string.Join(", ", names) + "; " + mcpHint;
     }
 
