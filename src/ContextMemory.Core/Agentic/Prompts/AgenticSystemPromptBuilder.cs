@@ -22,7 +22,7 @@ public static class AgenticSystemPromptBuilder
             .ToList();
 
         var mcpLine = mcpServers.Count > 0
-            ? $"\nMCP servers: {string.Join(", ", mcpServers)} — discover with tool_search, then tool_describe, then call (do not invent tool names)."
+            ? $"\nMCP servers configured: {string.Join(", ", mcpServers)}. Discover live tools via the catalog helpers — never invent names, never write tool names in the user-facing answer."
             : string.Empty;
 
         var sb = new StringBuilder();
@@ -34,27 +34,36 @@ public static class AgenticSystemPromptBuilder
         sb.AppendLine(
             "Dynamic context discovery: long tool outputs are stored as artifacts — "
             + "use artifact_tail/artifact_read with artifactId from observations. "
-            + "MCP: tool_search → tool_describe → call. Call tool_describe before the first invocation of any unfamiliar tool. "
+            + "Unfamiliar tools: load schema via the describe helper in the catalog, then call. "
             + (capabilities.PreferSkillDiscovery
-                ? "Skills: use skill_search then skill_read. "
-                : "Critical evidence rules are inlined below; other skills via skill_search / skill_read. ")
-            + "Requestable rules: rule_search / rule_read. "
-            + "Heavy research: delegate_task (depth 1). "
-            + "After tool results, answer in the user's language with requested fields only — do not dump raw tool JSON.");
+                ? "Skills: search then read via catalog helpers. "
+                : "Critical evidence rules are inlined below; other skills via catalog helpers. ")
+            + "Requestable rules and heavy research use catalog helpers (including delegate_task). "
+            + "Never narrate harness steps to the user. After tool results, answer in the user's language with requested fields only — do not dump raw tool JSON.");
 
         if (mcpServers.Count > 0)
         {
             sb.AppendLine();
             sb.AppendLine("## MCP data access (mandatory)");
             sb.AppendLine(
-                "Configured MCP servers give live access to external systems (e.g. Zuora). "
-                + "For questions about accounts, subscriptions, invoices, payments, or other live records:");
+                "Configured MCP servers give live access to external systems. "
+                + "For accounts, subscriptions, invoices, payments, or other live records you MUST obtain evidence via MCP before answering.");
             sb.AppendLine(
-                "- First call `tool_search` with keywords (e.g. account, invoice, query), then `tool_describe` on the match, then call the qualified name.");
+                "- Emit catalog helper / MCP calls silently (function calls or the backend JSON tool format). Never announce, ask permission, or name tools in the user-facing reply.");
             sb.AppendLine(
-                "- Do NOT invent MCP tool names. Do NOT answer from imagination, refuse for lack of an ID, or claim tools are unavailable.");
-            sb.AppendLine(
-                "- Prefer MCP over sandbox/python HTTP. If an MCP call fails, report the tool error.");
+                "- Do NOT invent MCP tool names. Do NOT answer from imagination or claim tools are unavailable.");
+            if (capabilities.PreferClientSideToolParsing)
+            {
+                sb.AppendLine(
+                    "- When you need to discover MCP tools, your entire assistant message must be ONLY: "
+                    + "{\"tool\":\"tool_search\",\"arguments\":{\"query\":\"account\"}} "
+                    + "(then describe, then call the qualified name the same way).");
+            }
+            else
+            {
+                sb.AppendLine(
+                    "- Prefer MCP over sandbox/python HTTP. If an MCP call fails, report the tool error without naming the harness.");
+            }
         }
 
         if (capabilities.InlineEvidenceRules)

@@ -99,12 +99,10 @@ public sealed class DeterministicAgentValidator
                 request.RuntimeConfig,
                 out var toolIntentFeedback))
         {
-            var configured = AgenticGuardrailConfigReader.GetFeedback(
-                policy.FindByKind(AgenticGuardrailKinds.ToolSurfaceHidden)?.ConfigJson ?? "{}",
-                request.RuntimeConfig.DefaultLanguage);
+            // Prefer code feedback (includes actionable tool_search JSON for lazy MCP / client-side).
             return ValidationResult.Reject(
                 ValidationMessages.ToolIntentNarration(
-                    configured ?? toolIntentFeedback,
+                    toolIntentFeedback,
                     request.RuntimeConfig));
         }
 

@@ -37,6 +37,12 @@ public static class AgenticToolIntentNarrationGuardrail
         "canvas_write",
         "canvas_read",
         "todo_write",
+        "tool_search",
+        "tool_describe",
+        "skill_search",
+        "skill_read",
+        "rule_search",
+        "rule_read",
         "tool_calls",
         "tool call",
         "tool_call"
@@ -95,34 +101,25 @@ public static class AgenticToolIntentNarrationGuardrail
         if (!runtimeConfig.Agentic.Enabled)
             return false;
 
+        var lang = runtimeConfig.DefaultLanguage;
+        var hasMcp = HasConfiguredMcp(runtimeConfig);
+        var hasNonDiscovery = HasSuccessfulNonDiscoveryTool(steps);
+        var hasDiscovery = HasSuccessfulDiscoveryTool(steps);
+
         // Always: never leak internal tool names into the user-visible answer.
         if (ContainsToolName(finalAnswer))
         {
-            feedback = TenantLocale.Select(
-                runtimeConfig.DefaultLanguage,
-                "Rejected: the final answer names internal tools. Rewrite for the end user without tool names, "
-                + "APIs, or mechanics — deliver the result only. If you still need data, emit tool_calls silently "
-                + "(do not announce them).",
-                "Rejeitado: a resposta final nomeia tools internas. Reescreve para o utilizador final sem nomes de tools, "
-                + "APIs ou mecânica — entrega só o resultado. Se ainda precisares de dados, emite tool_calls em silêncio "
-                + "(não as anuncies).");
+            feedback = BuildLeakFeedback(lang, hasMcp, hasNonDiscovery, hasDiscovery);
             return true;
         }
 
-        if (HasSuccessfulNonDiscoveryTool(steps))
+        if (hasNonDiscovery)
             return false;
 
         if (!LooksLikeToolIntentPhrase(finalAnswer))
             return false;
 
-        feedback = TenantLocale.Select(
-            runtimeConfig.DefaultLanguage,
-            "Rejected: you narrated an intent to use tools (or asked permission) instead of calling them. "
-            + "Emit tool_calls now with valid JSON — do not ask the user, do not announce. "
-            + "After results arrive, answer in natural language without naming tools.",
-            "Rejeitado: narraste a intenção de usar tools (ou pediste permissão) em vez de as chamares. "
-            + "Emite tool_calls agora com JSON válido — não perguntes ao utilizador, não anuncies. "
-            + "Depois dos resultados, responde em linguagem natural sem nomear tools.");
+        feedback = BuildIntentFeedback(lang, hasMcp, hasDiscovery);
         return true;
     }
 
@@ -140,12 +137,86 @@ public static class AgenticToolIntentNarrationGuardrail
         return false;
     }
 
+    private static string BuildLeakFeedback(
+        string? lang,
+        bool hasMcp,
+        bool hasNonDiscovery,
+        bool hasDiscovery)
+    {
+        if (hasNonDiscovery)
+        {
+            return TenantLocale.Select(
+                lang,
+                "Rejected: the final answer names internal tools. Rewrite for the end user without tool names, "
+                + "APIs, or mechanics — deliver the result only.",
+                "Rejeitado: a resposta final nomeia tools internas. Reescreve para o utilizador final sem nomes de tools, "
+                + "APIs ou mecânica — entrega só o resultado.");
+        }
+
+        return BuildIntentFeedback(lang, hasMcp, hasDiscovery);
+    }
+
+    private static string BuildIntentFeedback(string? lang, bool hasMcp, bool hasDiscovery)
+    {
+        if (hasMcp && !hasDiscovery)
+        {
+            return TenantLocale.Select(
+                lang,
+                "Rejected: do not narrate or name tools. Your entire next message must be ONLY this JSON "
+                + "(no prose): {\"tool\":\"tool_search\",\"arguments\":{\"query\":\"account\"}} "
+                + "Then describe and call the matched MCP tool the same way. After evidence arrives, answer with results only.",
+                "Rejeitado: não narres nem nomes tools. A tua próxima mensagem tem de ser APENAS este JSON "
+                + "(sem prosa): {\"tool\":\"tool_search\",\"arguments\":{\"query\":\"account\"}} "
+                + "Depois descreve e chama a tool MCP correspondente da mesma forma. Com evidência, responde só com o resultado.");
+        }
+
+        if (hasMcp && hasDiscovery)
+        {
+            return TenantLocale.Select(
+                lang,
+                "Rejected: do not narrate tools. Emit the next call as ONLY JSON "
+                + "{\"tool\":\"exact_qualified_name\",\"arguments\":{...}} "
+                + "(use a name from the prior discovery result; call tool_describe first if the schema is unknown). "
+                + "After the MCP result, answer the user without naming tools.",
+                "Rejeitado: não narres tools. Emite a próxima chamada como APENAS JSON "
+                + "{\"tool\":\"nome_qualificado_exacto\",\"arguments\":{...}} "
+                + "(usa um nome do resultado de discovery; tool_describe se o schema for desconhecido). "
+                + "Depois do resultado MCP, responde ao utilizador sem nomear tools.");
+        }
+
+        return TenantLocale.Select(
+            lang,
+            "Rejected: you narrated an intent to use tools (or asked permission) instead of calling them. "
+            + "Emit tool_calls now with valid JSON — do not ask the user, do not announce. "
+            + "After results arrive, answer in natural language without naming tools.",
+            "Rejeitado: narraste a intenção de usar tools (ou pediste permissão) em vez de as chamares. "
+            + "Emite tool_calls agora com JSON válido — não perguntes ao utilizador, não anuncies. "
+            + "Depois dos resultados, responde em linguagem natural sem nomear tools.");
+    }
+
     private static bool LooksLikeToolIntentPhrase(string finalAnswer)
     {
         var text = finalAnswer.ToLowerInvariant();
         foreach (var phrase in IntentPhrases)
         {
             if (text.Contains(phrase, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasConfiguredMcp(AppRuntimeConfig runtimeConfig) =>
+        runtimeConfig.Agentic.Tools.Integrations.Any(i =>
+            string.Equals(i.Type, "mcp", StringComparison.OrdinalIgnoreCase)
+            && i.Enabled
+            && i.IsConfigured);
+
+    private static bool HasSuccessfulDiscoveryTool(IReadOnlyList<AgentExecutionStep> steps)
+    {
+        foreach (var step in steps)
+        {
+            if (step.Success && SessionDiscoveryTools.IsDiscoveryTool(step.ToolName))
                 return true;
         }
 
