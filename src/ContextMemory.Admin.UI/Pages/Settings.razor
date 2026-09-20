@@ -102,6 +102,10 @@
                         <div class="kx-health-item"><small>Persistence</small><strong>@_health.Checks.Persistence</strong></div>
                         <div class="kx-health-item"><small>Apps loaded</small><strong>@_health.Checks.AppsLoaded</strong></div>
                         <div class="kx-health-item"><small>Default model</small><strong>@_health.Checks.DefaultModel</strong></div>
+                        @if (!string.IsNullOrWhiteSpace(_health.Checks.DefaultLlmEndpoint))
+                        {
+                            <div class="kx-health-item"><small>Default LLM endpoint</small><strong>@_health.Checks.DefaultLlmEndpoint</strong></div>
+                        }
                     </div>
                 }
             </div>

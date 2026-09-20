@@ -16,5 +16,6 @@ Short entry point. Start at the [README](../README.md) for the 5-minute Cursor w
 | [ops.md](ops.md) | Persistence, security, troubleshooting |
 | [license-and-support.md](license-and-support.md) | License & contributing |
 | [blueprint-01-upstream.md](blueprint-01-upstream.md) | Blueprint 01 upstream enrichments (CM-1…CM-7) |
-| [aha-demo.html](aha-demo.html) | 20s GIF storyboard |
+| [show-hn.md](show-hn.md) | Suggested Show HN title + blurb (BYO LLM) |
+| [aha-demo.html](aha-demo.html) | 20s GIF storyboard (not a live sandbox) |
 

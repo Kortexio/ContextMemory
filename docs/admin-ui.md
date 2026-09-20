@@ -46,7 +46,7 @@ Per-app pages (from Applications):
    - Docker Compose / GHCR Admin container: `http://api:8080` (server-side calls stay on the Docker network; the browser still opens Admin on `localhost:5200`)
 3. Paste the **Master Key** (demo: `cm_master_dev_key_change_me`).
 4. Click **Save**, then **Test connection**.
-5. Confirm Health: Ollama, Persistence, Apps loaded, optional Database.
+5. Confirm Health: Persistence, Apps loaded, default model / LLM endpoint, optional Database.
 
 **Save** stores values in this browser. **Reset to defaults** clears browser overrides and restores host defaults (`Admin__DefaultApiBaseUrl`, `Admin__DefaultMasterKey`). A link to public Prometheus metrics (`GET /metrics`) appears when connected.
 

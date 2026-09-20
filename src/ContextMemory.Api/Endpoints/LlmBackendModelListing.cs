@@ -24,7 +24,7 @@ internal static class LlmBackendModelListing
         CancellationToken cancellationToken)
     {
         var rawBase = string.IsNullOrWhiteSpace(llmEndpoint)
-            ? hostOptions.OllamaEndpoint
+            ? hostOptions.ResolveLocalLlmEndpoint()
             : llmEndpoint;
         if (string.IsNullOrWhiteSpace(rawBase))
             return;

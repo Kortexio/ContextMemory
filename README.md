@@ -11,14 +11,16 @@
   ·
   <a href="docs/README.md">Docs</a>
   ·
-  <a href="docs/aha-demo.html">Demo</a>
+  <a href="docs/aha-demo.html">Aha storyboard (GIF)</a>
+  ·
+  <a href="docs/show-hn.md">Show HN</a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%203.0-blue.svg" alt="License: AGPL-3.0"></a>
   <a href="https://dotnet.microsoft.com/"><img src="https://img.shields.io/badge/.NET-9.0-512BD4" alt=".NET 9"></a>
   <a href="https://github.com/users/Kortexio/packages/container/package/contextmemory"><img src="https://img.shields.io/badge/ghcr.io-contextmemory-blue?logo=docker" alt="Docker GHCR"></a>
-  <a href="https://github.com/Kortexio/ContextMemory/actions/workflows/docker-publish.yml"><img src="https://github.com/Kortexio/ContextMemory/actions/workflows/docker-publish.yml/badge.svg" alt="Docker CI"></a>
+  <a href="https://github.com/Kortexio/ContextMemory/actions/workflows/docker-publish.yml"><img src="https://img.shields.io/github/actions/workflow/status/Kortexio/ContextMemory/docker-publish.yml?branch=main&label=docker" alt="Docker CI"></a>
   <a href="https://github.com/Kortexio/ContextMemory/actions/workflows/dotnet-tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/Kortexio/ContextMemory/dotnet-tests.yml?branch=main&label=tests" alt="Tests"></a>
   <a href="https://github.com/Kortexio/ContextMemory/commits/main"><img src="https://img.shields.io/github/commit-activity/m/Kortexio/ContextMemory?style=flat-square" alt="GitHub commit activity"></a>
 </p>
@@ -29,7 +31,8 @@
 
 <p align="center">
   One OpenAI-compatible <code>/v1</code> URL: wiki memory, agentic tool loop, skills/guardrails, MCP, sandbox, and HITL —
-  self-hosted or <a href="https://kortexio.io">Cloud</a>. Not a vector black box. Not classic RAG inject.
+  self-hosted or <a href="https://kortexio.io">Cloud</a>. <strong>Bring your own LLM</strong> (any OpenAI-compatible engine).
+  Not a vector black box. Not classic RAG inject.
 </p>
 
 ---
@@ -53,7 +56,7 @@ Your client (OpenAI SDK / Cursor MCP / curl)
 │  ContextMemory (.NET 9)                    │
 │  Auth · session wiki · Global Wiki tool    │
 │  Agentic loop · skills · guardrails · HITL │
-│  LLM backend (per app, OpenAI-compatible)  │
+│  LLM backend (per app — BYO engine)        │
 └───────┬──────────────────┬─────────────────┘
         ▼                  ▼
  sandbox-runtime      mcp-runtime / MCP servers
@@ -62,6 +65,8 @@ Your client (OpenAI SDK / Cursor MCP / curl)
 ```
 
 **Honest boundaries:** this is a **gateway + server-side harness**, not a client agent framework (LangGraph/CrewAI) and not an agent OS (Letta). You keep your OpenAI client; the loop runs on the server.
+
+**LLM engines:** ContextMemory does **not** ship or lock to one inference stack. Per tenant you pick any OpenAI-compatible `/v1` host — Ollama, vLLM, LM Studio, [ExLlamaSharp](https://github.com/Kortexio/ExLlamaSharp), OpenAI, Azure-compatible, LiteLLM, custom. Compose defaults to Ollama only for zero-friction local DX; swap in **Admin → Config → LLM**.
 
 How we compare (Mem0 / Zep / Letta / **why we are not RAG**): [`docs/compare.md`](docs/compare.md).
 
@@ -74,77 +79,26 @@ How we compare (Mem0 / Zep / Letta / **why we are not RAG**): [`docs/compare.md`
 | Memory that survives turns without rewriting your client | Session markdown wiki + history inject; send only the new message |
 | Memory you can open, edit, audit | Files on disk / Postgres — not opaque embeddings |
 | Shared company/docs knowledge in chat | **Global Wiki** digests + on-demand `wiki_search` / `wiki_grep` (**not** classic RAG / embeddings) |
-| Point-in-time facts | Temporal revisions (`asOf` / supersede) on Global Wiki |
-| Tools without a second orchestrator | Same `/v1`: sandbox + MCP integrations + wiki tools |
-| Safer agents | Skills & guardrail packs, validators, confirmation keywords, HITL `[CONFIRM:id]` |
-| Cursor / Claude permanent memory fast | MCP wedge: `memory_save` / `memory_search` / `memory_get` (+ `wiki_search`, `session_recall`) |
-| Any LLM per tenant | Ollama, vLLM, LM Studio, OpenAI, Azure-compatible `/v1`, custom |
-| Operate without writing a test client | **Admin** + **Playground** (timeline, todos, artifacts, HITL) |
-| Full control on your infra | Docker/Compose self-host (API + Admin + mcp-runtime + sandbox) |
-| Zero ops | [Kortexio Cloud](https://kortexio.io) (`cmk_live_…`) |
+| Tools without a second orchestrator | Same `/v1`: sandbox + MCP + wiki tools |
+| Safer agents | Skills & guardrail packs, validators, HITL `[CONFIRM:id]` |
+| Cursor / Claude permanent memory fast | MCP wedge: `memory_save` / `memory_search` / `memory_get` |
+| Any LLM per tenant | BYO `/v1` — Ollama, vLLM, LM Studio, ExLlamaSharp, OpenAI, Azure-compatible, custom |
+| Operate without a test client | **Admin** + **Playground** |
+| Full control / zero ops | Docker self-host · [Kortexio Cloud](https://kortexio.io) (`cmk_live_…`) |
 
 ---
 
-## Capabilities (full surface)
+## Capabilities (summary)
 
-### Memory
+Full detail: [`docs/architecture-and-features.md`](docs/architecture-and-features.md) · Admin: [`docs/admin-ui.md`](docs/admin-ui.md) · HITL: [`docs/hitl.md`](docs/hitl.md).
 
-- **Session wiki** — markdown pages, index, execution log; compaction; update every N turns; optional dedicated maintainer model; **rolling summary** in the system prompt
-- **History** — last N messages (per-app budget); mid-turn **compaction** archives long transcripts as artifacts when over `MaxContextTokens`
-- **Persona & rules** — `basePersona`, `businessRules`, `formatRules`, `wikiSchema` per app
-- **Global Wiki** — app-scoped docs; ingest/batch APIs; digests; FTS; tools `wiki_search` / `wiki_grep`; revisions / audit / `asOf`
-- **No vector RAG** — discovery is digests + lexical/FTS + tools (Cursor-style), not embeddings
-- **Web search** (optional) — enrich turns; can persist into wiki
-
-### Agentic harness (server-side)
-
-When agentic tools are enabled, the gateway runs a tool loop:
-
-- **Iterations / timeout** — max steps, loop timeout, partial answer on timeout; mid-turn compaction phase
-- **Built-in tools** — `wiki_search`, `wiki_grep`; sandbox `shell_execute` / `python_execute` / `node_execute` / `container_execute` (self-hosted or ACA); discovery helpers (`artifact_*`, `skill_*`, `rule_*`, `tool_describe`, `session_log_search`, `delegate_task`, `todo_write`)
-- **Lazy tool schemas** — MCP and built-ins listed with short/open schemas; `tool_describe` for full args
-- **Artifacts** — long outputs (and all sandbox runs) stored per session; loop keeps a short preview + `artifactId`
-- **Subagents** — `delegate_task` (depth 1, isolated child session)
-- **MCP tools** — per-app catalog (`server__tool`), allow/deny, max tools per turn, OAuth/credentials
-- **Validation modes** — `deterministic` · `hybrid` · `llm-judge`
-- **Hooks** — PreToolUse / PostToolUse guardrail kinds
-- **HITL** — pause before destructive tools; `[CONFIRM:id]` / cancel; checkpoint in session log
-- **Progress** — `context_memory.agentic` phases (incl. Compacting / Subagent*) + `context_memory.discovery` counters
-- **Prompt profiles** — `auto` / `ollama` / `openai` / `claude` / `qwen` / `composer`
-- **Network egress policy** — restricted/allowed + host allowlists
-
-### Skills & guardrails
-
-- **Platform catalog** — shared skills/guardrails (Admin → Skills); import `.skill.json` / `.guardrail.json`
-- **Activation** — `skill` | `always_on` | `requestable` (rules loaded via `rule_search` / `rule_read`)
-- **Per-app policies** — additive inventory on top of platform defaults
-- Seeded examples include anti-hallucination, tool-calling discipline, wiki-first-for-docs, privacy/secrets, transparent failures, and more
-- Guardrail kinds include URL fetch, sandbox claims, tool-failure disclosure, blocked patterns, pre/post tool-use hooks
-
-### MCP (two directions)
-
-| Direction | Role |
+| Area | Highlights |
 |---|---|
-| **Outbound wedge** | Cursor/Claude → ContextMemory (`mcp-server/`) for memory tools |
-| **Inbound catalog** | ContextMemory agent → your MCP servers (HTTP/stdio via `mcp-runtime`, OAuth, catalog rebuild) |
-
-### Admin console
-
-Blazor Admin (`:5200`, Master Key auth) — operators configure tenants without touching JSON by hand:
-
-| Area | What you configure / do |
-|---|---|
-| Dashboard | Apps, requests, wiki/web-search stats |
-| New app / credentials | Register tenant, mint/rotate `cm_live_…` |
-| **Playground** | Chat Lab: agentic timeline (Compacting/Subagent), Todos, Artifacts, wiki refs, HITL |
-| LLM | Backend, model, endpoint, API key, history, streaming, think |
-| Memory & wiki | Session budgets, compaction, maintainer model, Global Wiki on/off + char budget |
-| Web search | Provider, mode, persist-to-wiki |
-| Rate limits | RPM/TPM (+ agentic weight) |
-| Persona & rules | Persona, business/format rules, wiki schema |
-| Agentic | Full gateway knobs: tools, MCP, sandbox, validators, HITL, egress |
-| Skills & policies | Platform + per-app skills/guardrails |
-| Settings | API base URL, Master Key, health |
+| **Memory** | Session wiki + rolling summary; history budgets; Global Wiki digests/FTS/revisions (`asOf`); **no vector RAG** |
+| **Agentic** | Server-side tool loop; sandbox; MCP catalog; artifacts; subagents; validators; HITL; egress policy |
+| **Skills** | Platform + per-app skills/guardrails (`skill` / `always_on` / `requestable`) |
+| **MCP** | Outbound wedge (Cursor → CM) · inbound catalog (CM → your MCP servers) |
+| **Ops** | Admin UI · File or Postgres · Prometheus `/metrics` · Compose (API + Admin + mcp-runtime + sandbox) |
 
 <p align="center">
   <img src="docs/images/admin-dashboard.png" width="800" alt="ContextMemory Admin dashboard">
@@ -153,41 +107,33 @@ Blazor Admin (`:5200`, Master Key auth) — operators configure tenants without 
 <p align="center">
   <img src="docs/images/admin-llm-backend.png" width="390" alt="LLM backend picker">
   &nbsp;
-  <img src="docs/images/admin-agentic.png" width="390" alt="Agentic gateway config">
-</p>
-
-<p align="center">
   <img src="docs/images/admin-playground.png" width="390" alt="Admin Playground">
-  &nbsp;
-  <img src="docs/images/admin-skills.png" width="390" alt="Skills and guardrails">
 </p>
-
-Guide: [`docs/admin-ui.md`](docs/admin-ui.md) · HITL: [`docs/hitl.md`](docs/hitl.md)
-
-### Self-host stack
-
-Docker Compose brings up a full local platform:
-
-| Service | Role |
-|---|---|
-| **API** (`:5100`) | Gateway `/v1`, admin APIs, metrics |
-| **Admin** (`:5200`) | Operator UI |
-| **mcp-runtime** | Stdio/HTTP MCP sidecar |
-| **sandbox-runtime** | Isolated shell/python/node execution |
-
-Persistence: **File** (single-node) or **Postgres** (HA + FTS). Images: `ghcr.io/kortexio/contextmemory` · `ghcr.io/kortexio/contextmemory-admin`.
-
-### Observability
-
-Prometheus `/metrics` · OpenTelemetry (Aspire) · per-app telemetry in Admin.
 
 ---
 
 ## Quickstart (5 minutes)
 
-### 1. Start the gateway
+**Bring your own LLM.** The gateway talks OpenAI-compatible `/v1` (and Ollama native `/api/chat` when you need `num_ctx`). Compose/GHCR defaults point at Ollama on the host for DX — change anytime in **Admin → Config → LLM** or `PATCH /admin/apps/{id}/config`.
 
-Default demo points at Ollama on the host. Swap the backend anytime in **Admin → Config → LLM** or `PATCH /admin/apps/{id}/config`.
+### 1a. Start with any `/v1` engine (vLLM, LM Studio, ExLlamaSharp, OpenAI, …)
+
+```bash
+docker run --rm -p 5100:8080 \
+  -v contextmemory-data:/app/data \
+  -e ContextMemory__MasterKey=cm_master_dev_key_change_me \
+  -e ContextMemory__Apps__demo-dev__ApiKey=cm_live_dev_key_change_me \
+  -e ContextMemory__Apps__demo-dev__LlmBackend=openai-compatible \
+  -e ContextMemory__Apps__demo-dev__LlmModel=my-model \
+  -e ContextMemory__Apps__demo-dev__LlmEndpoint=http://host.docker.internal:8000 \
+  -e ContextMemory__OpenAiEndpoint=http://host.docker.internal:8000 \
+  --add-host=host.docker.internal:host-gateway \
+  ghcr.io/kortexio/contextmemory:latest
+```
+
+Prefer a host-level default for all apps: set `ContextMemory__LlmEndpoint` (alias; falls back to `OllamaEndpoint` for older Compose files).
+
+### 1b. Or start with Ollama on the host (zero-friction DX)
 
 ```bash
 docker run --rm -p 5100:8080 \
@@ -195,14 +141,12 @@ docker run --rm -p 5100:8080 \
   -e ContextMemory__MasterKey=cm_master_dev_key_change_me \
   -e ContextMemory__Apps__demo-dev__ApiKey=cm_live_dev_key_change_me \
   -e ContextMemory__Apps__demo-dev__LlmModel=qwen3.5:9b \
-  -e ContextMemory__OllamaEndpoint=http://host.docker.internal:11434 \
+  -e ContextMemory__LlmEndpoint=http://host.docker.internal:11434 \
   --add-host=host.docker.internal:host-gateway \
   ghcr.io/kortexio/contextmemory:latest
 ```
 
-Full stack (API + Admin + MCP + sandbox): see [`docs/self-host.md`](docs/self-host.md) / `docker-compose.yml`.
-
-Admin UI: typically `http://localhost:5200`.
+Full stack (API + Admin + MCP + sandbox): [`docs/self-host.md`](docs/self-host.md) / `docker-compose.yml`. Admin: `http://localhost:5200`.
 
 No Docker? Use **[Kortexio Cloud](https://kortexio.io)** (`cmk_live_…`) and set `CONTEXTMEMORY_BASE_URL` to the cloud API.
 
@@ -222,7 +166,7 @@ Paste into **Cursor → Settings → MCP** (or `~/.cursor/mcp.json`). Same snipp
 | **A** | `Remember: staging DB is postgres-staging-01` | `memory_save` |
 | **B** (new) | `What is our staging DB?` | `memory_search` + answer |
 
-CLI: `./scripts/aha-demo.sh` or `.\scripts\aha-demo.ps1` · storyboard: [`docs/aha-demo.html`](docs/aha-demo.html)
+CLI: `./scripts/aha-demo.sh` or `.\scripts\aha-demo.ps1` · storyboard (for GIF recording): [`docs/aha-demo.html`](docs/aha-demo.html)
 
 ### Cloud vs self-host
 
@@ -231,6 +175,7 @@ CLI: `./scripts/aha-demo.sh` or `.\scripts\aha-demo.ps1` · storyboard: [`docs/a
 | Best for | Zero ops | Full control (API + Admin + MCP + sandbox) |
 | Key | `cmk_live_…` (no `X-App-Id`) | `cm_live_…` + `X-App-Id` |
 | Chat body | Identical OpenAI `/v1` | Identical OpenAI `/v1` |
+| LLM | BYO provider in dashboard | BYO engine in Admin / env |
 
 Guides: [Cloud](docs/cloud.md) · [Self-host](docs/self-host.md)
 
@@ -253,7 +198,8 @@ Thin header helpers (**not** full SDKs): [`@kortexio/contextmemory`](https://www
 | Doc | Topic |
 |---|---|
 | [docs/compare.md](docs/compare.md) | Why it exists · vs Mem0 / Zep / Letta · **why we are not RAG** |
-| [docs/architecture-and-features.md](docs/architecture-and-features.md) | Wiki, temporal facts, agentic, skills |
+| [docs/show-hn.md](docs/show-hn.md) | Suggested Show HN title + blurb |
+| [docs/architecture-and-features.md](docs/architecture-and-features.md) | Wiki, temporal facts, agentic, skills, **LLM backends** |
 | [docs/admin-ui.md](docs/admin-ui.md) | Admin UI map |
 | [docs/hitl.md](docs/hitl.md) | Human-in-the-loop |
 | [docs/api.md](docs/api.md) | HTTP API |

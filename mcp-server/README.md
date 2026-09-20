@@ -6,13 +6,17 @@
 
 ### 1. Start the gateway (Docker)
 
+**Any `/v1` engine** — set `LlmBackend=openai-compatible` + `LlmEndpoint` (see [main README](../README.md)).
+
+**Ollama DX default:**
+
 ```bash
 docker run --rm -p 5100:8080 \
   -v contextmemory-data:/app/data \
   -e ContextMemory__MasterKey=cm_master_dev_key_change_me \
   -e ContextMemory__Apps__demo-dev__ApiKey=cm_live_dev_key_change_me \
   -e ContextMemory__Apps__demo-dev__LlmModel=qwen3.5:9b \
-  -e ContextMemory__OllamaEndpoint=http://host.docker.internal:11434 \
+  -e ContextMemory__LlmEndpoint=http://host.docker.internal:11434 \
   --add-host=host.docker.internal:host-gateway \
   ghcr.io/kortexio/contextmemory:latest
 ```

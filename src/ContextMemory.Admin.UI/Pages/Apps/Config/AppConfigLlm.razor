@@ -40,13 +40,13 @@ else
                 <div class="form-group">
                     <label>Backend</label>
                     <InputSelect class="form-control" @bind-Value="_form.LlmBackend">
-                        <option value="ollama">ollama (OpenAI /v1 on OllamaEndpoint)</option>
+                        <option value="ollama">ollama (OpenAI /v1 on LlmEndpoint / OllamaEndpoint)</option>
+                        <option value="ollama-native">ollama-native (/api/chat, respects num_ctx)</option>
+                        <option value="openai-compatible">openai-compatible (vLLM, ExLlamaSharp, LiteLLM, …)</option>
+                        <option value="openai">openai</option>
                         <option value="vllm">vllm</option>
                         <option value="lmstudio">lmstudio</option>
-                        <option value="openai">openai</option>
-                        <option value="openai-compatible">openai-compatible</option>
-                        <option value="custom">custom (alias of openai-compatible)</option>
-                        <option value="ollama-native">ollama-native (/api/chat fallback)</option>
+                        <option value="custom">custom (/v1)</option>
                     </InputSelect>
                 </div>
                 <div class="form-group">

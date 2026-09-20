@@ -27,7 +27,7 @@ public record AppRuntimeConfig
 
     /// <summary>
     /// Optional per-app LLM base URL. Empty = use the host default for <see cref="LlmBackend"/>
-    /// (<c>OllamaEndpoint</c> / <c>LmStudioEndpoint</c> / <c>OpenAiEndpoint</c>).
+    /// (<c>LlmEndpoint</c> / <c>OllamaEndpoint</c> / <c>LmStudioEndpoint</c> / <c>OpenAiEndpoint</c>).
     /// </summary>
     public string LlmEndpoint { get; init; } = string.Empty;
 

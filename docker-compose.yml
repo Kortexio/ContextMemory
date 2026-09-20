@@ -70,7 +70,10 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ContextMemory__PersistenceProvider: ${PERSISTENCE_PROVIDER:-File}
       ContextMemory__DataPath: /app/data
+      ContextMemory__LlmEndpoint: ${LLM_ENDPOINT:-}
       ContextMemory__OllamaEndpoint: ${OLLAMA_ENDPOINT:-http://host.docker.internal:11434}
+      ContextMemory__OpenAiEndpoint: ${OPENAI_ENDPOINT:-https://api.openai.com}
+      ContextMemory__OpenAiApiKey: ${OPENAI_API_KEY:-}
       ContextMemory__DefaultLlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
       ContextMemory__MasterKey: ${MASTER_KEY:-cm_master_dev_key_change_me}
       ContextMemory__McpRuntimeUrl: http://mcp-runtime:8080
