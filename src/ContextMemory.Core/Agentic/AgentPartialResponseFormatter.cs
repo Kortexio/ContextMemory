@@ -18,28 +18,14 @@ public static class AgentPartialResponseFormatter
         if (steps.Count == 0)
             return AgenticMessages.TimeoutNoAnswer(language);
 
-        var lines = new List<string>
-        {
-            AgenticMessages.TimeoutProgressHeader(language),
-            string.Empty
-        };
+        var counts = steps
+            .GroupBy(s => s.ToolName, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => $"{g.Key}×{g.Count()}")
+            .ToList();
 
-        foreach (var step in steps)
-        {
-            lines.Add(AgenticMessages.TimeoutStepLine(
-                step.ToolName,
-                step.Iteration,
-                step.ExitCode ?? 0,
-                language));
-            if (!string.IsNullOrWhiteSpace(step.Output))
-                lines.Add($"  {Truncate(step.Output, 300)}");
-        }
-
-        lines.Add(string.Empty);
-        lines.Add(AgenticMessages.TimeoutPartialFooter(language));
-        return string.Join("\n", lines);
+        var summary = string.Join(", ", counts);
+        return AgenticMessages.TimeoutShortSummary(summary, language);
     }
-
-    private static string Truncate(string text, int max) =>
-        text.Length <= max ? text : text[..max] + "…";
 }

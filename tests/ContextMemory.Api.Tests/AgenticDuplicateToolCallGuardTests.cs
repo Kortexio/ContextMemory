@@ -1,0 +1,149 @@
+using ContextMemory.Core.Agentic;
+using ContextMemory.Core.Models;
+using Xunit;
+
+namespace ContextMemory.Api.Tests;
+
+public sealed class AgenticDuplicateToolCallGuardTests
+{
+    [Fact]
+    public void Rejects_IdenticalWikiSearch_IncludingUnicodeEscapeVariant()
+    {
+        var config = Config();
+        var steps = new List<AgentExecutionStep>
+        {
+            Successful("wiki_search", """{"query":"regras criação subscrição paccar"}""")
+        };
+
+        var again = AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_search",
+            """{"query":"regras cria\u00E7\u00E3o subscri\u00E7\u00E3o paccar"}""",
+            steps,
+            config,
+            out var feedback);
+
+        Assert.True(again);
+        Assert.Contains("NÃO repitas", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("MCP", feedback, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Allows_DifferentWikiQuery()
+    {
+        var config = Config();
+        var steps = new List<AgentExecutionStep>
+        {
+            Successful("wiki_search", """{"query":"regras criação subscrição paccar"}""")
+        };
+
+        var ok = AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_search",
+            """{"query":"PACCAR subscription create rules Zuora"}""",
+            steps,
+            config,
+            out _);
+
+        Assert.False(ok);
+    }
+
+    [Fact]
+    public void Allows_RetryAfterFailedCall()
+    {
+        var config = Config();
+        var steps = new List<AgentExecutionStep>
+        {
+            new()
+            {
+                Iteration = 1,
+                ToolName = "wiki_search",
+                Arguments = """{"query":"same"}""",
+                Output = "error",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero
+            }
+        };
+
+        var ok = AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_search",
+            """{"query":"same"}""",
+            steps,
+            config,
+            out _);
+
+        Assert.False(ok);
+    }
+
+    [Fact]
+    public void WithMcp_FeedbackPivotsToMcpJson()
+    {
+        var config = Config(withMcp: true);
+        var steps = new List<AgentExecutionStep>
+        {
+            Successful("wiki_search", """{"query":"subscription rules"}""")
+        };
+
+        var rejected = AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_search",
+            """{"query":"subscription rules"}""",
+            steps,
+            config,
+            out var feedback);
+
+        Assert.True(rejected);
+        Assert.Contains("{\"tool\"", feedback, StringComparison.Ordinal);
+        Assert.Contains("ask_zuora", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("query_objects", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Signature_NormalizesWhitespaceAndCase()
+    {
+        var a = AgenticDuplicateToolCallGuard.BuildSignature(
+            "Wiki_Search",
+            """{"query":"  Hello   World "}""");
+        var b = AgenticDuplicateToolCallGuard.BuildSignature(
+            "wiki_search",
+            """{"query":"hello world"}""");
+
+        Assert.Equal(a, b);
+    }
+
+    private static AgentExecutionStep Successful(string tool, string args) =>
+        new()
+        {
+            Iteration = 1,
+            ToolName = tool,
+            Arguments = args,
+            Output = "ok",
+            ExitCode = 0,
+            Success = true,
+            Duration = TimeSpan.FromMilliseconds(5)
+        };
+
+    private static AppRuntimeConfig Config(bool withMcp = false) =>
+        new()
+        {
+            AppId = "test",
+            DefaultLanguage = "pt",
+            Agentic = new AgenticConfig
+            {
+                Enabled = true,
+                Tools = withMcp
+                    ? new AgenticToolsConfig
+                    {
+                        Integrations =
+                        [
+                            new IntegrationToolConfig
+                            {
+                                Type = "mcp",
+                                Name = "zuora",
+                                Enabled = true,
+                                Url = "mock://zuora"
+                            }
+                        ]
+                    }
+                    : new AgenticToolsConfig()
+            }
+        };
+}

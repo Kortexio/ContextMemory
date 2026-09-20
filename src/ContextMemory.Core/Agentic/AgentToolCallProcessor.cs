@@ -49,6 +49,39 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
         bool skipConfirmation,
         CancellationToken cancellationToken = default)
     {
+        if (AgenticDuplicateToolCallGuard.TryReject(
+                toolCall.Function.Name,
+                toolCall.Function.Arguments,
+                steps,
+                runtimeConfig,
+                out var duplicateFeedback))
+        {
+            var rejected = new ToolExecutionResult
+            {
+                Output = duplicateFeedback,
+                ExitCode = 1,
+                Summary = "Duplicate tool call rejected"
+            };
+            messages.Add(new OllamaMessage
+            {
+                Role = "tool",
+                Content = AgenticToolObservationFormatter.Format(
+                    toolCall.Function.Name, rejected, runtimeConfig)
+            });
+            steps.Add(new AgentExecutionStep
+            {
+                Iteration = iteration,
+                ToolName = toolCall.Function.Name,
+                Arguments = toolCall.Function.Arguments,
+                Output = duplicateFeedback,
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero,
+                Summary = "Duplicate tool call rejected"
+            });
+            return new AgentToolCallOutcome { Result = rejected };
+        }
+
         var executionPolicy = PolicyLayersFactory
             .FromGuardrails(runtimeConfig.ResolvedPolicy, runtimeConfig.Agentic.Guardrails)
             .Execution;
