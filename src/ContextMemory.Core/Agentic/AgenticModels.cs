@@ -68,6 +68,10 @@ public record AgenticToolsConfig
     [JsonPropertyName("integrations")]
     public List<IntegrationToolConfig> Integrations { get; init; } = [];
 
+    /// <summary>
+    /// Top-K MCP tools offered to the model each turn. Effective value is clamped to
+    /// <c>LlmCapabilitiesResolver.AbsoluteMaxMcpToolsPerTurn</c> (12) at resolve time.
+    /// </summary>
     [JsonPropertyName("maxMcpToolsPerTurn")]
     public int MaxMcpToolsPerTurn { get; init; } = 12;
 

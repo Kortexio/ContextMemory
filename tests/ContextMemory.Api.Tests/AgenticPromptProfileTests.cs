@@ -173,12 +173,48 @@ public sealed class LlmCapabilitiesResolverTests
             LlmModel = "qwen3.5:9b",
             Agentic = new AgenticConfig
             {
+                Tools = new AgenticToolsConfig { MaxMcpToolsPerTurn = 8 }
+            }
+        };
+
+        Assert.Equal(8, LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
+        Assert.Equal(ModelHarnessMode.Weak, LlmCapabilitiesResolver.From(config).HarnessMode);
+    }
+
+    [Fact]
+    public void ResolveMaxMcpTools_ClampsOversizedTenantConfig()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            LlmBackend = "ollama-native",
+            LlmModel = "bonsai-27b:latest",
+            Agentic = new AgenticConfig
+            {
                 Tools = new AgenticToolsConfig { MaxMcpToolsPerTurn = 100 }
             }
         };
 
-        Assert.Equal(100, LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
-        Assert.Equal(ModelHarnessMode.Weak, LlmCapabilitiesResolver.From(config).HarnessMode);
+        Assert.Equal(
+            LlmCapabilitiesResolver.AbsoluteMaxMcpToolsPerTurn,
+            LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
+    }
+
+    [Fact]
+    public void ResolveMaxMcpTools_DefaultsToAbsoluteMaxWhenUnset()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            Agentic = new AgenticConfig
+            {
+                Tools = new AgenticToolsConfig { MaxMcpToolsPerTurn = 0 }
+            }
+        };
+
+        Assert.Equal(
+            LlmCapabilitiesResolver.AbsoluteMaxMcpToolsPerTurn,
+            LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
     }
 
     [Fact]
@@ -238,6 +274,7 @@ public sealed class AgenticSystemPromptBuilderTests
         Assert.Contains("`tool-calling-discipline`", prompt, StringComparison.Ordinal);
         Assert.Contains("skill_read", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("tool_describe", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("tool_search", prompt, StringComparison.OrdinalIgnoreCase);
         // Strong / lazy discovery: skill body is not stuffed into the system prompt.
         Assert.DoesNotContain("Emit tool_calls with valid JSON", prompt, StringComparison.Ordinal);
     }

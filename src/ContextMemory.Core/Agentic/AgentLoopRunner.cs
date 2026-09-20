@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Http;
+using System.Text.Json;
 using ContextMemory.Core.Localization;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
@@ -24,6 +25,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
     private readonly IAgenticPendingStore _pendingStore;
     private readonly IAgentContextCompactor _contextCompactor;
     private readonly IAgentStateMachine _stateMachine;
+    private readonly IMcpToolCatalog _mcpCatalog;
     private readonly ILogger<AgentLoopRunner> _logger;
     private readonly ContextMemoryOptions _options;
 
@@ -35,6 +37,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
         IAgenticPendingStore pendingStore,
         IAgentContextCompactor contextCompactor,
         IAgentStateMachine stateMachine,
+        IMcpToolCatalog mcpCatalog,
         ILogger<AgentLoopRunner> logger,
         IOptions<ContextMemoryOptions> options)
     {
@@ -45,6 +48,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
         _pendingStore = pendingStore;
         _contextCompactor = contextCompactor;
         _stateMachine = stateMachine;
+        _mcpCatalog = mcpCatalog;
         _logger = logger;
         _options = options.Value;
     }
@@ -54,6 +58,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
         var messages = request.Messages;
         EnsureUserMessagePresent(messages, request);
         var steps = request.Steps;
+        var toolsList = request.Tools.ToList();
         var capabilities = LlmCapabilitiesResolver.From(request.RuntimeConfig);
         var maxIterations = LlmCapabilitiesResolver.ResolveMaxIterations(request.RuntimeConfig);
         var loopTimeout = ResolveLoopTimeout(request.RuntimeConfig);
@@ -119,7 +124,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             cancellationToken.ThrowIfCancellationRequested();
             EnsureUserMessagePresent(messages, request);
 
-            var toolsForRequest = request.Tools.Count > 0 ? request.Tools.ToList() : null;
+            var toolsForRequest = toolsList.Count > 0 ? toolsList : null;
             if (toolsForRequest is not null && capabilities.SanitizeSchemasAggressively)
             {
                 toolsForRequest = SanitizeToolSchemas(toolsForRequest);
@@ -565,6 +570,22 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                             .WithTrace(trace);
                     }
 
+                    if (toolOutcome.Result is { Success: true }
+                        && string.Equals(
+                            toolCall.Function.Name,
+                            SessionDiscoveryTools.ToolDescribe,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        await TryPinMcpToolAfterDescribeAsync(
+                                toolCall,
+                                request.RuntimeConfig,
+                                toolsList,
+                                messages,
+                                capabilities.PreferClientSideToolParsing,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
                     loopState = ApplyTransition(loopState, AgentLoopEvent.ToolResult, trace);
                 }
 
@@ -941,6 +962,69 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             ? null
             : capabilities.DefaultToolChoice;
     }
+
+    private async Task TryPinMcpToolAfterDescribeAsync(
+        OllamaToolCall describeCall,
+        AppRuntimeConfig runtimeConfig,
+        List<OllamaTool> toolsList,
+        List<OllamaMessage> messages,
+        bool preferClientSideTools,
+        CancellationToken cancellationToken)
+    {
+        string? toolName = null;
+        try
+        {
+            using var doc = JsonDocument.Parse(
+                string.IsNullOrWhiteSpace(describeCall.Function.Arguments)
+                    ? "{}"
+                    : describeCall.Function.Arguments);
+            var root = doc.RootElement;
+            toolName = TryGetJsonString(root, "toolName")
+                       ?? TryGetJsonString(root, "name")
+                       ?? TryGetJsonString(root, "tool");
+        }
+        catch
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(toolName))
+            return;
+
+        toolName = toolName.Trim();
+        if (toolsList.Any(t =>
+                string.Equals(t.Function.Name, toolName, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        var catalog = await _mcpCatalog
+            .GetAllToolsAsync(runtimeConfig, cancellationToken)
+            .ConfigureAwait(false);
+        var match = catalog.FirstOrDefault(t =>
+            string.Equals(t.QualifiedName, toolName, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t.Name, toolName, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+            return;
+
+        var max = LlmCapabilitiesResolver.ResolveMaxMcpTools(runtimeConfig);
+        var pinnedCount = toolsList.Count(t =>
+            McpToolNaming.TryParseQualifiedName(t.Function.Name, out _, out _));
+        if (pinnedCount >= max)
+            return;
+
+        toolsList.Add(McpPinnedToolFactory.Create(match, runtimeConfig));
+        _logger.LogInformation(
+            "Pinned MCP tool {Tool} into turn catalog for {AppId} after tool_describe",
+            match.QualifiedName,
+            runtimeConfig.AppId);
+
+        if (preferClientSideTools && toolsList.Count > 0)
+            ClientSideToolCalling.EnsureCatalogInSystemPrompt(messages, toolsList);
+    }
+
+    private static string? TryGetJsonString(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.String
+            ? el.GetString()
+            : null;
 
     private static void EnsureUserMessagePresent(List<OllamaMessage> messages, AgentLoopRequest request)
     {

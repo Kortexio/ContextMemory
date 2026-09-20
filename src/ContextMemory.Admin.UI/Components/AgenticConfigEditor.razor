@@ -197,10 +197,10 @@
         </details>
         <div class="form-group mb-3" style="max-width: 12rem;">
             <label>Max MCP tools / turn</label>
-            <InputNumber class="form-control form-control-sm" @bind-Value="Model.Tools.MaxMcpToolsPerTurn" />
+            <InputNumber class="form-control form-control-sm" @bind-Value="Model.Tools.MaxMcpToolsPerTurn" min="1" max="12" />
             <FieldHelp>
-                Hard ceiling for how many MCP tools are offered to the model each turn (top-K by query relevance).
-                Applies to Weak and Strong harness alike. Set ≥ catalog size (e.g. <code>100</code>) to expose all tools.
+                Top-K MCP tools offered to the model each turn (by query relevance). Hard-capped at <code>12</code>
+                by the gateway so oversized catalogs cannot blow the context window (Qwen dumps the selection into the system prompt).
             </FieldHelp>
         </div>
 
@@ -497,7 +497,7 @@
                 },
             Tools = new AgenticToolsConfig
             {
-                MaxMcpToolsPerTurn = Tools.MaxMcpToolsPerTurn > 0 ? Tools.MaxMcpToolsPerTurn : 12,
+                MaxMcpToolsPerTurn = Math.Clamp(Tools.MaxMcpToolsPerTurn > 0 ? Tools.MaxMcpToolsPerTurn : 12, 1, 12),
                 Http = new AgenticHttpToolsConfig
                 {
                     Enabled = Tools.Http.Enabled,
@@ -602,7 +602,7 @@
                 EnabledGuardrailIds = packs.EnabledGuardrailIds?.ToList() ?? [],
                 Tools = new AgenticToolsForm
                 {
-                    MaxMcpToolsPerTurn = config.Tools.MaxMcpToolsPerTurn > 0 ? config.Tools.MaxMcpToolsPerTurn : 12,
+                    MaxMcpToolsPerTurn = Math.Clamp(config.Tools.MaxMcpToolsPerTurn > 0 ? config.Tools.MaxMcpToolsPerTurn : 12, 1, 12),
                     Http = new HttpToolsForm
                     {
                         Enabled = config.Tools.Http.Enabled,

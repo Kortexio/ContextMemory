@@ -133,11 +133,11 @@ Theory: minimize tokens in the big chat model. Prefer **lazy discovery** over st
 | Mechanism | Role |
 |---|---|
 | **Static (every turn)** | Persona + budgeted session wiki + rolling summary + top-K Global Wiki digests |
-| **On demand** | `wiki_search`, `wiki_grep`, `skill_search`/`skill_read`, `rule_search`/`rule_read`, `tool_describe`, artifacts |
+| **On demand** | `wiki_search`, `wiki_grep`, `skill_search`/`skill_read`, `tool_search`/`tool_describe`, artifacts |
 | **Models** | `LlmModel` (answer/agent) + `WikiLlmModel` (digests, rolling summary, mid-turn compaction) |
 | **Mid-turn compaction** | If estimated tokens &gt; `MaxContextTokens`: archive transcript as `history:…` artifact, summarize with `WikiLlmModel`, shrink messages; emit phase `Compacting` |
 | **Artifacts** | Long tool/MCP outputs stored per session; sandbox/terminal **always** archived with a short preview + `artifactId`. Tools: `artifact_tail` / `artifact_read` |
-| **Lazy tools[]** | Built-ins and MCP expose name + one-line description + open schema; call `tool_describe` before first use of an unfamiliar tool |
+| **Lazy tools[]** | Built-ins in `tools[]`; MCP discovered via `tool_search` → `tool_describe` (pin) → call; open stubs omit params until pin |
 | **Lazy skills** | Prompt lists up to 3 default skill ids; `skill_search` → snippets; `skill_read` → body |
 | **Rules** | `always_on` injected into system; `requestable` via `rule_search` / `rule_read` (`Activation` on catalog skills) |
 | **Hooks** | Guardrail kinds `pre-tool-use` / `post-tool-use` (deny/allow patterns, require confirm, redact) |
@@ -154,7 +154,7 @@ Theory: minimize tokens in the big chat model. Prefer **lazy discovery** over st
 | `artifact_read` / `artifact_tail` | Recover truncated / archived tool output |
 | `skill_search` / `skill_read` | Find and load skill bodies |
 | `rule_search` / `rule_read` | Requestable rules |
-| `tool_describe` | Full tool schema/description |
+| `tool_search` / `tool_describe` | Find MCP tools by keyword; load full schema and pin into turn catalog |
 | `session_log_search` | Grep session log when summary misses a detail |
 | `delegate_task` | Spawn isolated subagent (depth 1) |
 | `todo_write` | Session todo list for the Admin timeline |
@@ -298,12 +298,14 @@ Discovery telemetry also reports `harness_mode`, `resolved_prompt_profile`, `pro
 
 ### Supported LLM backends
 
+ContextMemory is **engine-agnostic**: it never embeds weights. Point each tenant (or the host defaults) at any OpenAI-compatible `/v1` server — Ollama, vLLM, LM Studio, [ExLlamaSharp](https://github.com/Kortexio/ExLlamaSharp), OpenAI, Azure OpenAI-compatible gateways, LiteLLM, custom.
+
 | Backend value | Wire protocol | Host default URL |
 |---|---|---|
-| `ollama` (default) | OpenAI `/v1` on `OllamaEndpoint` — **auto-switches to native when `numCtx` is set** | `ContextMemory:OllamaEndpoint` |
+| `ollama` (DX default) | OpenAI `/v1` on `LlmEndpoint` / `OllamaEndpoint` — **auto-switches to native when `numCtx` is set** | `ContextMemory:LlmEndpoint` (fallback `OllamaEndpoint`) |
 | `vllm` / `openai-compatible` / `openai` / `custom` | OpenAI `/v1/chat/completions` | `ContextMemory:OpenAiEndpoint` or per-app `llmEndpoint` |
 | `lmstudio` | OpenAI `/v1` | `ContextMemory:LmStudioEndpoint` |
-| `ollama-native` | Ollama `/api/chat` (respects `options.num_ctx`) | `ContextMemory:OllamaEndpoint` |
+| `ollama-native` | Ollama `/api/chat` (respects `options.num_ctx`) | `ContextMemory:LlmEndpoint` / `OllamaEndpoint` |
 
 **Per-app overrides** (Admin → app → Config, or `PATCH /admin/apps/{id}/config`):
 
@@ -314,7 +316,7 @@ Discovery telemetry also reports `harness_mode`, `resolved_prompt_profile`, `pro
 | `llmEndpoint` | Optional base URL for this app only. Empty = host default above. For OpenAI-compatible URLs, `/v1` is appended if missing. |
 | `llmApiKey` | Optional API key for this app. Empty = host `OpenAiApiKey`. |
 
-Example — point one tenant at a remote vLLM / LiteLLM server:
+Example — point one tenant at a remote vLLM / LiteLLM / ExLlamaSharp server:
 
 ```json
 {

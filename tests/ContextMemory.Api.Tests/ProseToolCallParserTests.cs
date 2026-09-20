@@ -177,6 +177,34 @@ public sealed class ProseToolCallParserTests
     }
 
     [Fact]
+    public void FilterAgainstCatalog_AllowsUnpinnedMcpQualifiedNames()
+    {
+        var catalog = new List<OllamaTool>
+        {
+            new("function", new OllamaFunction("tool_search", null, null))
+        };
+
+        var raw = new List<OllamaToolCall>
+        {
+            new(new OllamaFunctionCall("zuora__invented_tool", """{"x":1}""")),
+            new(new OllamaFunctionCall("tool_search", """{"query":"account"}"""))
+        };
+
+        var filtered = ProseToolCallParser.FilterAgainstCatalog(
+            raw,
+            catalog,
+            maxPerTurn: 6,
+            out var droppedUnknown,
+            out _,
+            out _);
+
+        Assert.NotNull(filtered);
+        Assert.Equal(2, filtered!.Count);
+        Assert.Equal(0, droppedUnknown);
+        Assert.Equal("zuora__invented_tool", filtered[0].Function.Name);
+    }
+
+    [Fact]
     public void FilterAgainstCatalog_ReturnsNull_WhenCatalogEmpty()
     {
         var raw = new List<OllamaToolCall>

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using ContextMemory.Core.Agentic.Mcp;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -74,7 +75,13 @@ public static partial class ProseToolCallParser
         foreach (var call in promoted)
         {
             var name = call.Function?.Name?.Trim();
-            if (string.IsNullOrWhiteSpace(name) || allowed.Count == 0 || !allowed.Contains(name))
+            var isMcpQualified = !string.IsNullOrWhiteSpace(name)
+                && McpToolNaming.TryParseQualifiedName(name, out _, out _);
+            // Allow MCP-qualified names through even when not yet pinned so the executor can
+            // reject invent-names with a tool_search hint (instead of silently dropping).
+            if (string.IsNullOrWhiteSpace(name)
+                || allowed.Count == 0
+                || (!allowed.Contains(name) && !isMcpQualified))
             {
                 droppedUnknown++;
                 continue;

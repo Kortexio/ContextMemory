@@ -215,7 +215,7 @@ public sealed class AgenticIntegrationTests : IClassFixture<AgenticStubWebApplic
                     },
                     Guardrails = new AgenticGuardrailsConfig
                     {
-                        MaxIterations = 5,
+                        MaxIterations = 8,
                         ValidationMode = "deterministic"
                     }
                 }
@@ -613,6 +613,75 @@ public sealed class McpJsonRpcClientTests
     }
 
     [Fact]
+    public async Task AgenticToolRegistryService_OmitsMcpUntilPinnedViaRecent()
+    {
+        var mcpTools = new List<McpToolDefinition>
+        {
+            new() { ServerName = "zuora", Name = "query_objects", Description = "Query Zuora objects" },
+            new() { ServerName = "zuora", Name = "zuora_graphql", Description = "GraphQL" }
+        };
+        var catalog = new StubMcpCatalog(mcpTools);
+        var registry = new AgenticToolRegistryService(catalog, new CapabilityPolicyFilter());
+        var config = new AppRuntimeConfig
+        {
+            AppId = "demo",
+            Agentic = new AgenticConfig
+            {
+                Enabled = true,
+                Tools = new AgenticToolsConfig
+                {
+                    MaxMcpToolsPerTurn = 12,
+                    Integrations =
+                    [
+                        new IntegrationToolConfig
+                        {
+                            Type = "mcp",
+                            Name = "zuora",
+                            Enabled = true,
+                            Url = "http://localhost/mcp"
+                        }
+                    ]
+                }
+            }
+        };
+
+        var firstHop = await registry.BuildToolsAsync(config, "list cancelled accounts", recentToolNames: null);
+        Assert.DoesNotContain(firstHop, t => t.Function.Name.StartsWith("zuora__", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(firstHop, t => t.Function.Name == SessionDiscoveryTools.ToolSearch);
+        Assert.Contains(firstHop, t => t.Function.Name == SessionDiscoveryTools.ToolDescribe);
+
+        var summary = await registry.BuildToolNamesSummaryAsync(config, "accounts", null);
+        Assert.Contains("tool_search", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("zuora__query_objects", summary, StringComparison.OrdinalIgnoreCase);
+
+        var pinned = await registry.BuildToolsAsync(config, "again", ["zuora__query_objects"]);
+        Assert.Contains(pinned, t => t.Function.Name == "zuora__query_objects");
+        Assert.DoesNotContain(pinned, t => t.Function.Name == "zuora__zuora_graphql");
+    }
+
+    private sealed class StubMcpCatalog(IReadOnlyList<McpToolDefinition> tools) : IMcpToolCatalog
+    {
+        public Task<IReadOnlyList<McpToolDefinition>> GetToolsAsync(
+            AppRuntimeConfig runtimeConfig,
+            string? userQuery = null,
+            IReadOnlyList<string>? recentToolNames = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(tools);
+
+        public Task<IReadOnlyList<McpToolDefinition>> GetAllToolsAsync(
+            AppRuntimeConfig runtimeConfig,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(tools);
+
+        public void Invalidate(string appId) { }
+
+        public Task<IReadOnlyList<McpCatalogSyncResult>> SyncAsync(
+            AppRuntimeConfig runtimeConfig,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<McpCatalogSyncResult>>([]);
+    }
+
+    [Fact]
     public void McpToolAccess_FilterCatalog_AppliesAllowAndDenyLists()
     {
         var config = new AppRuntimeConfig
@@ -762,7 +831,7 @@ public sealed class McpAgenticIntegrationTests : IClassFixture<AgenticStubWebApp
                     },
                     Guardrails = new AgenticGuardrailsConfig
                     {
-                        MaxIterations = 5,
+                        MaxIterations = 8,
                         ValidationMode = "deterministic"
                     }
                 }
@@ -783,9 +852,12 @@ public sealed class McpAgenticIntegrationTests : IClassFixture<AgenticStubWebApp
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadAsStringAsync();
-        Assert.Contains("A-001", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Conta A-001", body, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Active", body, StringComparison.OrdinalIgnoreCase);
 
-        Assert.Equal(2, _factory.AgenticHandler.ChatRequests.Count);
+        var joined = string.Join('\n', _factory.AgenticHandler.ChatRequestBodies);
+        Assert.Contains("tool_search", joined, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("tool_describe", joined, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("zuora-mcp__get_account", joined, StringComparison.OrdinalIgnoreCase);
     }
 }

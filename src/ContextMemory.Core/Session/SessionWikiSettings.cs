@@ -38,6 +38,26 @@ public static class SessionWikiSettings
         return Math.Min(wikiBudget, FitBudgetForContextWindow(numCtx.Value));
     }
 
+    /// <summary>
+    /// Wiki inject char budget capped at ~75% of <c>num_ctx</c> (token→char ≈ ×4) so fat sessions
+    /// cannot dominate the context window.
+    /// </summary>
+    public static int ResolveWikiInjectBudgetChars(
+        AppRuntimeConfig config,
+        Configuration.ContextMemoryOptions defaults,
+        int? requestNumCtx = null)
+    {
+        var budget = ResolveMaxWikiContextChars(config, defaults);
+        var numCtx = requestNumCtx is > 0
+            ? requestNumCtx
+            : config.LlmOptions?.NumCtx;
+        if (numCtx is not > 0)
+            return budget;
+
+        var fitChars = FitBudgetForContextWindow(numCtx.Value) * 4;
+        return Math.Min(budget, Math.Max(512, fitChars));
+    }
+
     /// <summary>Leave headroom for generation and tokenizer drift versus <see cref="Utilities.TokenEstimator"/>.</summary>
     public static int FitBudgetForContextWindow(int nCtx) =>
         Math.Max(512, nCtx * 3 / 4);
