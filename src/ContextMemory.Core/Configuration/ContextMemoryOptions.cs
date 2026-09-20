@@ -6,7 +6,23 @@ public class ContextMemoryOptions
 
     public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
     public string DataPath { get; set; } = "./data";
+
+    /// <summary>
+    /// Preferred host-level default LLM base URL (any OpenAI-compatible or Ollama-compatible engine).
+    /// When set, takes precedence over <see cref="OllamaEndpoint"/>.
+    /// </summary>
+    public string LlmEndpoint { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Legacy alias for the default local / Ollama-compatible base URL.
+    /// Prefer <see cref="LlmEndpoint"/> in new config; kept for Compose and older docs.
+    /// </summary>
     public string OllamaEndpoint { get; set; } = "http://localhost:11434";
+
+    /// <summary>Resolved default for backends that use the local/Ollama-compatible host URL.</summary>
+    public string ResolveLocalLlmEndpoint() =>
+        !string.IsNullOrWhiteSpace(LlmEndpoint) ? LlmEndpoint.Trim() : OllamaEndpoint.Trim();
+
     public int OllamaRequestTimeoutSeconds { get; set; } = 600;
     public int DefaultAgenticLoopTimeoutSeconds { get; set; } = 120;
     public int MaxHistoryMessages { get; set; } = 6;
@@ -65,5 +81,11 @@ public class AppOptionsEntry
     public string SystemPrompt { get; set; } = string.Empty;
     public string DefaultLanguage { get; set; } = "en-US";
     public string LlmModel { get; set; } = "qwen3.5:9b";
+    /// <summary>Optional seed backend (<c>ollama</c>, <c>openai-compatible</c>, <c>vllm</c>, …).</summary>
+    public string LlmBackend { get; set; } = string.Empty;
+    /// <summary>Optional per-app LLM base URL seed (overrides host defaults when set).</summary>
+    public string LlmEndpoint { get; set; } = string.Empty;
+    /// <summary>Optional per-app LLM API key seed.</summary>
+    public string LlmApiKey { get; set; } = string.Empty;
     public int MaxHistoryMessages { get; set; } = 6;
 }

@@ -11,7 +11,14 @@ namespace ContextMemory.Adapters;
 public sealed class OllamaAdapterOptions
 {
     public const string SectionName = "ContextMemory";
+
+    /// <summary>Legacy bind target; prefer <see cref="ContextMemoryOptions.LlmEndpoint"/> / <see cref="ContextMemoryOptions.OllamaEndpoint"/>.</summary>
     public string OllamaEndpoint { get; set; } = "http://localhost:11434";
+
+    public string LlmEndpoint { get; set; } = string.Empty;
+
+    public string ResolveBaseUrl() =>
+        !string.IsNullOrWhiteSpace(LlmEndpoint) ? LlmEndpoint.Trim() : OllamaEndpoint.Trim();
 }
 
 public sealed class OllamaAdapter : ILlmAdapter
@@ -27,7 +34,7 @@ public sealed class OllamaAdapter : ILlmAdapter
     private readonly string? _apiKey;
 
     public OllamaAdapter(HttpClient httpClient, IOptions<OllamaAdapterOptions> options)
-        : this(httpClient, options.Value.OllamaEndpoint, apiKey: null)
+        : this(httpClient, options.Value.ResolveBaseUrl(), apiKey: null)
     {
     }
 

@@ -37,6 +37,9 @@ public sealed class AppConfigBootstrapHostedService : IHostedService
                 FormatRules = GetDefaultFormatRules(),
                 DefaultLanguage = entry.DefaultLanguage,
                 LlmModel = string.IsNullOrWhiteSpace(entry.LlmModel) ? _options.DefaultLlmModel : entry.LlmModel,
+                LlmBackend = string.IsNullOrWhiteSpace(entry.LlmBackend) ? "ollama" : entry.LlmBackend.Trim(),
+                LlmEndpoint = entry.LlmEndpoint?.Trim() ?? string.Empty,
+                LlmApiKey = entry.LlmApiKey?.Trim() ?? string.Empty,
                 MaxHistoryMessages = entry.MaxHistoryMessages > 0
                     ? entry.MaxHistoryMessages
                     : _options.MaxHistoryMessages,

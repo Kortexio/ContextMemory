@@ -13,18 +13,37 @@ Public images (published on every push to `main`):
 | `ghcr.io/kortexio/contextmemory` | [API](https://github.com/users/Kortexio/packages/container/package/contextmemory) |
 | `ghcr.io/kortexio/contextmemory-admin` | [Admin UI](https://github.com/users/Kortexio/packages/container/package/contextmemory-admin) |
 
-**API only** (needs [Docker](https://docs.docker.com/get-docker/) + Ollama on the host):
+**API only** (needs [Docker](https://docs.docker.com/get-docker/) + any reachable LLM):
+
+**Bring-your-own `/v1` engine** (vLLM, LM Studio, [ExLlamaSharp](https://github.com/Kortexio/ExLlamaSharp), OpenAI, LiteLLM, …):
 
 ```bash
 docker run --rm -p 5100:8080 \
   --add-host=host.docker.internal:host-gateway \
   -v contextmemory-data:/app/data \
-  -e ContextMemory__OllamaEndpoint=http://host.docker.internal:11434 \
+  -e ContextMemory__MasterKey=cm_master_dev_key_change_me \
+  -e ContextMemory__Apps__demo-dev__ApiKey=cm_live_dev_key_change_me \
+  -e ContextMemory__Apps__demo-dev__LlmBackend=openai-compatible \
+  -e ContextMemory__Apps__demo-dev__LlmModel=my-model \
+  -e ContextMemory__Apps__demo-dev__LlmEndpoint=http://host.docker.internal:8000 \
+  -e ContextMemory__OpenAiEndpoint=http://host.docker.internal:8000 \
+  ghcr.io/kortexio/contextmemory:latest
+```
+
+**Ollama on the host** (zero-friction DX default):
+
+```bash
+docker run --rm -p 5100:8080 \
+  --add-host=host.docker.internal:host-gateway \
+  -v contextmemory-data:/app/data \
+  -e ContextMemory__LlmEndpoint=http://host.docker.internal:11434 \
   -e ContextMemory__MasterKey=cm_master_dev_key_change_me \
   -e ContextMemory__Apps__demo-dev__ApiKey=cm_live_dev_key_change_me \
   -e ContextMemory__Apps__demo-dev__LlmModel=qwen3.5:9b \
   ghcr.io/kortexio/contextmemory:latest
 ```
+
+`ContextMemory__LlmEndpoint` is the preferred host default; `OllamaEndpoint` remains a legacy alias when `LlmEndpoint` is empty.
 
 Then: http://localhost:5100/health
 
@@ -48,7 +67,7 @@ Or the helper scripts:
 
 ### Build from source: Docker Compose
 
-Builds and starts the **API** (`:5100`), **Admin** (`:5200`), **mcp-runtime** (stdio MCP host), and **sandbox-runtime** (shell/python/node) locally. Requires [Docker](https://docs.docker.com/get-docker/) and an LLM reachable from the containers (Ollama on the host by default).
+Builds and starts the **API** (`:5100`), **Admin** (`:5200`), **mcp-runtime** (stdio MCP host), and **sandbox-runtime** (shell/python/node) locally. Requires [Docker](https://docs.docker.com/get-docker/) and an LLM reachable from the containers (Compose DX default = Ollama on the host; point `LLM_ENDPOINT` / `OPENAI_ENDPOINT` at any `/v1` engine instead).
 
 ```bash
 git clone https://github.com/Kortexio/ContextMemory.git
@@ -77,19 +96,23 @@ Ops triage (Azure Monitor / GitHub): see [inbound-mcp-guide.md](inbound-mcp-guid
 
 For a Postgres-backed network overlay (shared Docker network, extra tenants), see `docker-compose.network.yml`.
 
-**Ollama on the host**
+**LLM on the host**
 
 ```bash
+# Example: Ollama DX default
 ollama pull qwen3.5:9b
-# Compose default: ContextMemory__OllamaEndpoint=http://host.docker.internal:11434
+# Compose: OLLAMA_ENDPOINT=http://host.docker.internal:11434
+# Or any /v1 engine: LLM_ENDPOINT=http://host.docker.internal:8000 + Admin backend openai-compatible
 ```
 
-**Useful Compose env vars** (see [`.env.example`](.env.example)):
+**Useful Compose env vars** (see [`.env.example`](../.env.example)):
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `API_PORT` / `ADMIN_PORT` | `5100` / `5200` | Host ports |
-| `OLLAMA_ENDPOINT` | `http://host.docker.internal:11434` | LLM from inside the API container |
+| `LLM_ENDPOINT` | _(empty)_ | Preferred host LLM base URL → `ContextMemory__LlmEndpoint` |
+| `OLLAMA_ENDPOINT` | `http://host.docker.internal:11434` | Legacy local default when `LLM_ENDPOINT` is empty |
+| `OPENAI_ENDPOINT` / `OPENAI_API_KEY` | OpenAI cloud / empty | Host defaults for `openai-compatible` / `vllm` / `openai` |
 | `DEFAULT_LLM_MODEL` | `qwen3.5:9b` | Seed + default model |
 | `MASTER_KEY` | `cm_master_dev_key_change_me` | Admin Master Key |
 | `DEMO_APP_API_KEY` | `cm_live_dev_key_change_me` | Seed app API key |
@@ -111,7 +134,7 @@ curl -X POST http://localhost:5100/v1/chat/completions \
 ### Prerequisites (dotnet run)
 
 - .NET 9 SDK
-- Ollama (or another configured backend) reachable on the network
+- Ollama, [ExLlamaSharp](https://github.com/Kortexio/ExLlamaSharp), vLLM, LM Studio, or any OpenAI-compatible `/v1` backend reachable on the network
 - Optional: PostgreSQL 14+ for production / multi-instance HA
 
 ### 1. Configure
@@ -136,7 +159,9 @@ For **PostgreSQL** in production or multi-instance HA:
   "ContextMemory": {
     "PersistenceProvider": "Postgres",
     "DataPath": "../../data",
+    "LlmEndpoint": "",
     "OllamaEndpoint": "http://localhost:11434",
+    "OpenAiEndpoint": "https://api.openai.com",
     "MasterKey": "your-master-key",
     "Apps": {
       "my-app": {
@@ -158,7 +183,10 @@ Use `"Postgres"` exactly (not `Postgresql`). Relative `DataPath` values resolve 
 | `ConnectionStrings:ContextMemory` | PostgreSQL connection string when `PersistenceProvider` is `Postgres` |
 | `ContextMemory:PersistenceProvider` | `File` (default) or `Postgres` |
 | `ContextMemory:DataPath` | Root for file-based persistence (apps, sessions, wiki) |
-| `ContextMemory:OllamaEndpoint` | Default Ollama (or Ollama-compatible) backend base URL |
+| `ContextMemory:LlmEndpoint` | Preferred host default LLM base URL (any OpenAI- or Ollama-compatible engine). Empty = use `OllamaEndpoint` |
+| `ContextMemory:OllamaEndpoint` | Legacy alias for the local/Ollama-compatible default when `LlmEndpoint` is empty |
+| `ContextMemory:OpenAiEndpoint` | Host default for `openai` / `openai-compatible` / `vllm` / `custom` when the app has no `llmEndpoint` |
+| `ContextMemory:LmStudioEndpoint` | Host default for `lmstudio` |
 | `ContextMemory:DefaultLlmModel` | Fallback model when an app has no `LlmModel` |
 | `ContextMemory:MasterKey` | Secret for Admin API / admin dashboard |
 | `ContextMemory:AdminCorsOrigins` | Allowed browser origins for Admin UI CORS |

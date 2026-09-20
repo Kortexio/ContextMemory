@@ -197,6 +197,7 @@ public sealed class HealthChecksDto
     public bool ProfilesReady { get; set; }
     public string? SessionsPath { get; set; }
     public string? DefaultModel { get; set; }
+    public string? DefaultLlmEndpoint { get; set; }
 }
 
 public sealed class AdminSettings

@@ -27,6 +27,7 @@ services:
         Username=${POSTGRES_USER:-contextmemory};Password=${POSTGRES_PASSWORD:-contextmemory_dev}
       ContextMemory__WikiPath: /app/wikis
       ContextMemory__OllamaEndpoint: ${OLLAMA_ENDPOINT:-https://server.kortexio.io}
+      ContextMemory__LlmEndpoint: ${LLM_ENDPOINT:-}
       ContextMemory__DefaultLlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
       ContextMemory__MasterKey: ${MASTER_KEY:-cm_master_local_dev_change_me}
       ContextMemory__McpRuntimeUrl: http://mcp-runtime:8080

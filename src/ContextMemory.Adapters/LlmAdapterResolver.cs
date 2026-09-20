@@ -78,10 +78,10 @@ public sealed class LlmAdapterResolver : ILlmAdapterResolver
                 _serviceProvider.GetRequiredService<LmStudioAdapter>()
                     .WithConnection(endpointOverride, apiKeyOverride),
 
-            // Default: OpenAI-compatible /v1 (Ollama /v1, vLLM, OpenAI, Azure-compatible, custom).
+            // Default: OpenAI-compatible /v1 (Ollama /v1, vLLM, ExLlamaSharp, OpenAI, Azure-compatible, custom).
             "ollama" =>
                 _serviceProvider.GetRequiredService<OpenAiAdapter>()
-                    .WithConnection(endpointOverride ?? _options.OllamaEndpoint, apiKeyOverride),
+                    .WithConnection(endpointOverride ?? _options.ResolveLocalLlmEndpoint(), apiKeyOverride),
 
             "vllm" or "openai" or "openai-compatible" or "custom" =>
                 _serviceProvider.GetRequiredService<OpenAiAdapter>()
@@ -89,7 +89,7 @@ public sealed class LlmAdapterResolver : ILlmAdapterResolver
 
             _ =>
                 _serviceProvider.GetRequiredService<OpenAiAdapter>()
-                    .WithConnection(endpointOverride ?? _options.OllamaEndpoint, apiKeyOverride)
+                    .WithConnection(endpointOverride ?? _options.ResolveLocalLlmEndpoint(), apiKeyOverride)
         };
     }
 }

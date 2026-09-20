@@ -53,8 +53,11 @@ public static class HealthEndpoint
                 profilesReady,
                 sessionsPath = Path.Combine(config.DataPath, "sessions"),
                 defaultModel = config.DefaultLlmModel,
+                defaultLlmEndpoint = config.ResolveLocalLlmEndpoint(),
                 harnessHints = new
                 {
+                    byoLlmNote =
+                        "Bring your own engine: set llmBackend + llmEndpoint per app, or host LlmEndpoint / OpenAiEndpoint / LmStudioEndpoint. OllamaEndpoint remains a legacy alias for the local default.",
                     ollamaNumCtxNote =
                         "When llmBackend=ollama and llmOptions.numCtx is set, gateway uses ollama-native (/api/chat) because Ollama /v1 ignores options.num_ctx.",
                     formatJsonNote =
