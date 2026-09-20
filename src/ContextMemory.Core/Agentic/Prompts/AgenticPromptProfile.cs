@@ -78,15 +78,15 @@ public static class AgenticPromptProfileResolver
         profile switch
         {
             AgenticPromptProfile.ComposerLike =>
-                "Prefer tool_describe → tool call → short observation. Discover context lazily; avoid dumping large payloads into chat.",
+                "MCP: tool_search → tool_describe → call. Discover context lazily; avoid dumping large payloads into chat.",
             AgenticPromptProfile.Claude =>
-                "Use tools via the function-calling interface. Call tool_describe before unfamiliar tools.",
+                "Use tools via the function-calling interface. MCP: tool_search → tool_describe before unfamiliar tools.",
             AgenticPromptProfile.Qwen =>
-                "Emit tool/function calls in the backend JSON format. Call tool_describe before first use of unknown tools.",
+                "Emit tool/function calls in the backend JSON format. MCP: tool_search → tool_describe before first use.",
             AgenticPromptProfile.OpenAi =>
-                "Use OpenAI-style function calls. Call tool_describe before first use of unknown tools.",
+                "Use OpenAI-style function calls. MCP: tool_search → tool_describe before first use of unknown tools.",
             _ =>
-                "When invoking a tool, emit valid tool/function call JSON for this backend. Call tool_describe before unfamiliar tools."
+                "When invoking a tool, emit valid tool/function call JSON for this backend. MCP: tool_search → tool_describe before unfamiliar tools."
         };
 
     private static bool ContainsAny(string haystack, params string[] needles)

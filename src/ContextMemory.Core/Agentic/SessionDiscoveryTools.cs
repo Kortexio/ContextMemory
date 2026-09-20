@@ -12,6 +12,7 @@ public static class SessionDiscoveryTools
     public const string RuleRead = "rule_read";
     public const string RuleSearch = "rule_search";
     public const string ToolDescribe = "tool_describe";
+    public const string ToolSearch = "tool_search";
     public const string SessionLogSearch = "session_log_search";
     public const string DelegateTask = "delegate_task";
     public const string TodoWrite = "todo_write";
@@ -24,6 +25,7 @@ public static class SessionDiscoveryTools
         || string.Equals(toolName, RuleRead, StringComparison.OrdinalIgnoreCase)
         || string.Equals(toolName, RuleSearch, StringComparison.OrdinalIgnoreCase)
         || string.Equals(toolName, ToolDescribe, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(toolName, ToolSearch, StringComparison.OrdinalIgnoreCase)
         || string.Equals(toolName, SessionLogSearch, StringComparison.OrdinalIgnoreCase)
         || string.Equals(toolName, DelegateTask, StringComparison.OrdinalIgnoreCase)
         || string.Equals(toolName, TodoWrite, StringComparison.OrdinalIgnoreCase);
@@ -109,14 +111,27 @@ public static class SessionDiscoveryTools
                     required = new[] { "ruleId" }
                 })),
             new OllamaTool("function", new OllamaFunction(
-                ToolDescribe,
-                "Load the full description/schema for a tool by name (MCP/builtins listed with short/open schemas).",
+                ToolSearch,
+                "Search MCP tools by keywords (name, server, description). Returns qualified names + snippets; then use tool_describe before calling.",
                 new
                 {
                     type = "object",
                     properties = new
                     {
-                        toolName = new { type = "string", description = "Exact tool/function name" }
+                        query = new { type = "string", description = "Keywords to match against MCP tools" },
+                        maxResults = new { type = "integer", description = "Max matches (default = maxMcpToolsPerTurn)" }
+                    },
+                    required = new[] { "query" }
+                })),
+            new OllamaTool("function", new OllamaFunction(
+                ToolDescribe,
+                "Load the full description/schema for a tool by name (from tool_search or builtins). Pins MCP tools into the turn catalog.",
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        toolName = new { type = "string", description = "Exact tool/function name (e.g. server__tool_name)" }
                     },
                     required = new[] { "toolName" }
                 })),

@@ -62,6 +62,80 @@ public sealed class ClientSideToolCallingTests
     }
 
     [Fact]
+    public void EnsureCatalog_ReplacesWhenToolsChange()
+    {
+        var messages = new List<OllamaMessage>
+        {
+            new() { Role = "system", Content = "base" },
+            new() { Role = "user", Content = "q" }
+        };
+        var tools1 = new List<OllamaTool>
+        {
+            new("function", new OllamaFunction("wiki_search", "Search wiki", new { type = "object" }))
+        };
+        var tools2 = new List<OllamaTool>
+        {
+            new("function", new OllamaFunction("wiki_search", "Search wiki", new { type = "object" })),
+            new("function", new OllamaFunction(
+                "zuora__query_objects",
+                "Query Zuora",
+                new Dictionary<string, object?>
+                {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object?>
+                    {
+                        ["object"] = new { type = "string" }
+                    }
+                }))
+        };
+
+        ClientSideToolCalling.EnsureCatalogInSystemPrompt(messages, tools1);
+        ClientSideToolCalling.EnsureCatalogInSystemPrompt(messages, tools2);
+
+        var system = messages[0].Content!;
+        Assert.Equal(1, system.Split(ClientSideToolCalling.CatalogMarker, StringSplitOptions.None).Length - 1);
+        Assert.Contains("zuora__query_objects", system, StringComparison.Ordinal);
+        Assert.Contains("params:", system, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildCatalog_SkipsParamsForOpenStubSchemas()
+    {
+        var tools = new List<OllamaTool>
+        {
+            new("function", new OllamaFunction(
+                "open_stub",
+                "Open schema tool",
+                new Dictionary<string, object?>
+                {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object?>(),
+                    ["additionalProperties"] = true
+                })),
+            new("function", new OllamaFunction(
+                "real_schema",
+                "Has real params",
+                new Dictionary<string, object?>
+                {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object?>
+                    {
+                        ["q"] = new { type = "string" }
+                    }
+                }))
+        };
+
+        var catalog = ClientSideToolCalling.BuildCatalog(tools);
+        Assert.Contains("`open_stub`", catalog, StringComparison.Ordinal);
+        Assert.Contains("`real_schema`", catalog, StringComparison.Ordinal);
+        var openIdx = catalog.IndexOf("`open_stub`", StringComparison.Ordinal);
+        var realIdx = catalog.IndexOf("`real_schema`", StringComparison.Ordinal);
+        Assert.True(openIdx >= 0 && realIdx > openIdx);
+        Assert.DoesNotContain("params:", catalog[openIdx..realIdx], StringComparison.Ordinal);
+        Assert.Contains("params:", catalog[realIdx..], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildCatalog_NeutralizesAngleBracketsInDescriptions()
     {
         var tools = new List<OllamaTool>

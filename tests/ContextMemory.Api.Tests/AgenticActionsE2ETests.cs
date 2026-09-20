@@ -158,7 +158,7 @@ public sealed class AgenticActionsE2ETests : IClassFixture<AgenticStubWebApplica
                     },
                     Guardrails = new AgenticGuardrailsConfig
                     {
-                        MaxIterations = 5,
+                        MaxIterations = 8,
                         ValidationMode = "deterministic"
                     }
                 }
@@ -192,7 +192,7 @@ public sealed class AgenticActionsE2ETests : IClassFixture<AgenticStubWebApplica
                     },
                     Guardrails = new AgenticGuardrailsConfig
                     {
-                        MaxIterations = 5,
+                        MaxIterations = 8,
                         ValidationMode = "deterministic"
                     }
                 }

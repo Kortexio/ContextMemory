@@ -95,26 +95,9 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
 
             if (awaitingToolResult)
             {
-                var isMcp = body.Contains("zuora-mcp__get_account", StringComparison.Ordinal);
-                if (isMcp)
-                {
-                    if (useClientSideReply)
-                        return Task.FromResult(OllamaClientSideToolCall("zuora-mcp__get_account", """{"accountId":"A-001"}"""));
-
-                    return Task.FromResult(isOpenAiChat
-                        ? OpenAiToolCall("zuora-mcp__get_account", """{"accountId":"A-001"}""")
-                        : OllamaToolCall("zuora-mcp__get_account", """{"accountId":"A-001"}"""));
-                }
-
-                if (body.Contains("delete", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (useClientSideReply)
-                        return Task.FromResult(OllamaClientSideToolCall("shell_execute", """{"command":"delete --force user-test"}"""));
-
-                    return Task.FromResult(isOpenAiChat
-                        ? OpenAiToolCall("shell_execute", """{"command":"delete --force user-test"}""")
-                        : OllamaToolCall("shell_execute", """{"command":"delete --force user-test"}"""));
-                }
+                var toolCall = ResolveNextToolCall(body, useClientSideReply, isOpenAiChat);
+                if (toolCall is not null)
+                    return Task.FromResult(toolCall);
 
                 if (useClientSideReply)
                     return Task.FromResult(OllamaClientSideToolCall("shell_execute", """{"command":"echo agentic-ok"}"""));
@@ -126,10 +109,16 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
 
             var isMcpFollowUp = hasToolResponseAlready
                 && (body.Contains("zuora-mcp__get_account", StringComparison.Ordinal)
-                    || body.Contains("[mock:zuora-mcp]", StringComparison.Ordinal));
+                    || body.Contains("[mock:zuora-mcp]", StringComparison.Ordinal)
+                    || body.Contains("MCP tool matches", StringComparison.Ordinal));
 
             if (isMcpFollowUp)
             {
+                // Still mid discovery / call chain?
+                var midChain = ResolveNextToolCall(body, useClientSideReply: isOllamaChat && hasClientCatalog && !hasNativeTools, isOpenAiChat);
+                if (midChain is not null)
+                    return Task.FromResult(midChain);
+
                 const string mcpAnswer = "Conta A-001 encontrada via Zuora MCP. Estado: Active.";
                 return Task.FromResult(isOpenAiChat ? OpenAiText(mcpAnswer) : OllamaText(mcpAnswer));
             }
@@ -165,6 +154,94 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
         }
 
         return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+    }
+
+    /// <summary>
+    /// Lazy MCP: tool_search → tool_describe → zuora-mcp__get_account.
+    /// Also handles shell delete / echo when not an MCP scenario.
+    /// </summary>
+    private static HttpResponseMessage? ResolveNextToolCall(string body, bool useClientSideReply, bool isOpenAiChat)
+    {
+        var wantsZuora = body.Contains("A-001", StringComparison.OrdinalIgnoreCase)
+            || body.Contains("Zuora", StringComparison.OrdinalIgnoreCase)
+            || body.Contains("zuora-mcp", StringComparison.OrdinalIgnoreCase);
+
+        if (wantsZuora)
+        {
+            var hasGetAccountResult = body.Contains("[mock:zuora-mcp]", StringComparison.Ordinal);
+            if (hasGetAccountResult)
+                return null;
+
+            // Raw JSON bodies escape backticks as \u0060 — detect describe without relying on `.
+            var hasDescribeResult =
+                body.Contains("zuora-mcp__get_account", StringComparison.Ordinal)
+                && (body.Contains("Input schema", StringComparison.Ordinal)
+                    || body.Contains("## Parameters", StringComparison.Ordinal)
+                    || body.Contains("\\u0060zuora-mcp__get_account\\u0060", StringComparison.Ordinal));
+            var hasSearchResult = body.Contains("MCP tool matches", StringComparison.Ordinal);
+            var getAccountInCatalog = body.Contains("zuora-mcp__get_account", StringComparison.Ordinal)
+                && body.Contains("## Tool catalog", StringComparison.Ordinal);
+
+            if (!hasSearchResult && !hasDescribeResult
+                && body.Contains("tool_search", StringComparison.Ordinal))
+            {
+                return EmitToolCall("tool_search", """{"query":"account"}""", useClientSideReply, isOpenAiChat);
+            }
+
+            if (hasSearchResult && !hasDescribeResult
+                && body.Contains("tool_describe", StringComparison.Ordinal))
+            {
+                return EmitToolCall(
+                    "tool_describe",
+                    """{"toolName":"zuora-mcp__get_account"}""",
+                    useClientSideReply,
+                    isOpenAiChat);
+            }
+
+            if (hasDescribeResult || getAccountInCatalog)
+            {
+                return EmitToolCall(
+                    "zuora-mcp__get_account",
+                    """{"accountId":"A-001"}""",
+                    useClientSideReply,
+                    isOpenAiChat);
+            }
+        }
+
+        if (body.Contains("delete", StringComparison.OrdinalIgnoreCase))
+        {
+            return EmitToolCall(
+                "shell_execute",
+                """{"command":"delete --force user-test"}""",
+                useClientSideReply,
+                isOpenAiChat);
+        }
+
+        if (body.Contains("shell_execute", StringComparison.Ordinal)
+            || body.Contains("echo agentic", StringComparison.OrdinalIgnoreCase)
+            || body.Contains("Executa echo", StringComparison.OrdinalIgnoreCase))
+        {
+            return EmitToolCall(
+                "shell_execute",
+                """{"command":"echo agentic-ok"}""",
+                useClientSideReply,
+                isOpenAiChat);
+        }
+
+        return null;
+    }
+
+    private static HttpResponseMessage EmitToolCall(
+        string name,
+        string argumentsJson,
+        bool useClientSideReply,
+        bool isOpenAiChat)
+    {
+        if (useClientSideReply)
+            return OllamaClientSideToolCall(name, argumentsJson);
+        return isOpenAiChat
+            ? OpenAiToolCall(name, argumentsJson)
+            : OllamaToolCall(name, argumentsJson);
     }
 
     private string GetFinalAnswerContent()

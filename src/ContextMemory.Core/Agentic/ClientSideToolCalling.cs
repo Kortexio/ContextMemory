@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using ContextMemory.Core.Agentic.Mcp;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -22,15 +23,16 @@ public static class ClientSideToolCalling
         if (system is null)
             return;
 
-        if (system.Content?.Contains(CatalogMarker, StringComparison.Ordinal) == true)
-            return;
-
         var catalog = BuildCatalog(tools);
+        var content = system.Content ?? string.Empty;
+        var markerIdx = content.IndexOf(CatalogMarker, StringComparison.Ordinal);
+        if (markerIdx >= 0)
+            content = content[..markerIdx].TrimEnd() + "\n\n" + catalog;
+        else
+            content = content.TrimEnd() + "\n\n" + catalog;
+
         var idx = messages.IndexOf(system);
-        messages[idx] = system with
-        {
-            Content = (system.Content ?? string.Empty).TrimEnd() + "\n\n" + catalog
-        };
+        messages[idx] = system with { Content = content };
     }
 
     public static string BuildCatalog(IReadOnlyList<OllamaTool> tools)
@@ -60,6 +62,10 @@ public static class ClientSideToolCalling
             }
 
             sb.AppendLine();
+            // Skip open stub schemas (empty properties) — full params appear after tool_describe pin.
+            if (McpPinnedToolFactory.IsOpenStubParameters(fn.Parameters))
+                continue;
+
             var schema = CompactSchema(fn.Parameters);
             if (!string.IsNullOrWhiteSpace(schema))
                 sb.AppendLine("  params: " + NeutralizeXmlTriggers(schema));

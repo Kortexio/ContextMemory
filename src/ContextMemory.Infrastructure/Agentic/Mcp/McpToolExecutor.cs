@@ -10,11 +10,16 @@ namespace ContextMemory.Infrastructure.Agentic.Mcp;
 public sealed class McpToolExecutor : IToolExecutor
 {
     private readonly McpJsonRpcClient _client;
+    private readonly IMcpToolCatalog _catalog;
     private readonly ILogger<McpToolExecutor> _logger;
 
-    public McpToolExecutor(McpJsonRpcClient client, ILogger<McpToolExecutor> logger)
+    public McpToolExecutor(
+        McpJsonRpcClient client,
+        IMcpToolCatalog catalog,
+        ILogger<McpToolExecutor> logger)
     {
         _client = client;
+        _catalog = catalog;
         _logger = logger;
     }
 
@@ -85,6 +90,25 @@ public sealed class McpToolExecutor : IToolExecutor
                 Output = denied
                     ? $"MCP tool `{mcpToolName}` is blocked on server `{server.Name}`."
                     : $"MCP tool `{mcpToolName}` is not allowed on server `{server.Name}`.",
+                ExitCode = 1
+            };
+        }
+
+        // Invent-name guard: only tools present in the persisted catalog may run.
+        var catalog = await _catalog
+            .GetAllToolsAsync(runtimeConfig, cancellationToken)
+            .ConfigureAwait(false);
+        var known = catalog.Any(t =>
+            string.Equals(t.QualifiedName, toolCall.Function.Name, StringComparison.OrdinalIgnoreCase)
+            || (McpToolNaming.ServerNamesMatch(t.ServerName, serverName)
+                && string.Equals(t.Name, mcpToolName, StringComparison.OrdinalIgnoreCase)));
+        if (!known)
+        {
+            return new ToolExecutionResult
+            {
+                Output =
+                    $"Unknown MCP tool `{toolCall.Function.Name}`. "
+                    + "Do not invent tool names — call `tool_search` with keywords, then `tool_describe`, then call the exact qualified name.",
                 ExitCode = 1
             };
         }

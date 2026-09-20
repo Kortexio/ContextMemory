@@ -105,4 +105,30 @@ public class SessionWikiSettingsTests
 
         Assert.Equal(24_000, SessionWikiSettings.ResolveAgentCompactionTokenBudget(config, defaults, null));
     }
+
+    [Fact]
+    public void ResolveWikiInjectBudgetChars_CapsToNumCtxHeadroom()
+    {
+        var defaults = new ContextMemory.Core.Configuration.ContextMemoryOptions { MaxWikiContextChars = 24_000 };
+        var config = new AppRuntimeConfig
+        {
+            AppId = "a",
+            MaxWikiContextChars = 24_000,
+            LlmOptions = new LlmGenerationConfig { NumCtx = 4096 }
+        };
+
+        // FitBudget(4096)=3072 tokens → ×4 = 12288 chars
+        Assert.Equal(12_288, SessionWikiSettings.ResolveWikiInjectBudgetChars(config, defaults));
+        // request override 8192 → Fit=6144 → ×4 = 24576, but budget is 24000
+        Assert.Equal(24_000, SessionWikiSettings.ResolveWikiInjectBudgetChars(config, defaults, 8192));
+    }
+
+    [Fact]
+    public void ResolveWikiInjectBudgetChars_UsesConfiguredWhenNumCtxUnset()
+    {
+        var defaults = new ContextMemory.Core.Configuration.ContextMemoryOptions { MaxWikiContextChars = 4_000 };
+        var config = new AppRuntimeConfig { AppId = "a", MaxWikiContextChars = 0 };
+
+        Assert.Equal(4_000, SessionWikiSettings.ResolveWikiInjectBudgetChars(config, defaults));
+    }
 }

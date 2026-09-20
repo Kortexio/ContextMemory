@@ -56,7 +56,8 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
         }
 
         // Lean working set: smaller budget when a rolling summary already covers history.
-        var budget = SessionWikiSettings.ResolveMaxWikiContextChars(config, _options);
+        // Also cap at ~75% of num_ctx so fat wiki sessions cannot blow the model window.
+        var budget = SessionWikiSettings.ResolveWikiInjectBudgetChars(config, _options);
         if (!string.IsNullOrWhiteSpace(rollingSummary))
             budget = Math.Min(budget, Math.Max(800, budget / 2));
         var compiled = SessionWikiCompiler.Compile(snapshot, userQuery, budget);

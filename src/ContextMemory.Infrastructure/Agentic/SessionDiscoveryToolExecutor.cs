@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using ContextMemory.Core.Agentic;
 using ContextMemory.Core.Agentic.Mcp;
+using ContextMemory.Core.Agentic.Prompts;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 
@@ -133,6 +134,18 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
             return Ok($"# Rule `{rule.Id}` — {rule.Name} ({rule.Activation})\n\n{body}");
         }
 
+        if (string.Equals(name, SessionDiscoveryTools.ToolSearch, StringComparison.OrdinalIgnoreCase))
+        {
+            var query = GetString(root, "query");
+            if (string.IsNullOrWhiteSpace(query))
+                return Fail("tool_search requires query.");
+            var defaultMax = LlmCapabilitiesResolver.ResolveMaxMcpTools(runtimeConfig);
+            var maxResults = GetInt(root, "maxResults", defaultMax);
+            maxResults = Math.Clamp(maxResults, 1, LlmCapabilitiesResolver.AbsoluteMaxMcpToolsPerTurn);
+            return Ok(await SearchMcpToolsAsync(runtimeConfig, query, maxResults, cancellationToken)
+                .ConfigureAwait(false));
+        }
+
         if (string.Equals(name, SessionDiscoveryTools.ToolDescribe, StringComparison.OrdinalIgnoreCase))
         {
             // Models often use name/tool instead of toolName with open schemas.
@@ -145,7 +158,7 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
             var described = await DescribeToolAsync(toolName.Trim(), runtimeConfig, cancellationToken)
                 .ConfigureAwait(false);
             return described is null
-                ? Fail($"Unknown tool: {toolName}")
+                ? Fail($"Unknown tool: {toolName}. Run tool_search to find MCP tool names.")
                 : Ok(described);
         }
 
@@ -175,6 +188,56 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
         }
 
         return Fail($"Unsupported discovery tool: {name}");
+    }
+
+    private async Task<string> SearchMcpToolsAsync(
+        AppRuntimeConfig runtimeConfig,
+        string query,
+        int maxResults,
+        CancellationToken cancellationToken)
+    {
+        var all = await _mcpCatalog
+            .GetAllToolsAsync(runtimeConfig, cancellationToken)
+            .ConfigureAwait(false);
+        if (all.Count == 0)
+            return "No MCP tools are registered for this app. Sync MCP integrations in Admin first.";
+
+        var tokens = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var scored = new List<(int Score, McpToolDefinition Tool, string Snippet)>();
+        foreach (var tool in all)
+        {
+            var hay = $"{tool.ServerName}\n{tool.Name}\n{tool.QualifiedName}\n{tool.Description}";
+            var score = 0;
+            foreach (var t in tokens)
+            {
+                if (tool.Name.Contains(t, StringComparison.OrdinalIgnoreCase))
+                    score += 5;
+                if (tool.ServerName.Contains(t, StringComparison.OrdinalIgnoreCase))
+                    score += 4;
+                if (tool.QualifiedName.Contains(t, StringComparison.OrdinalIgnoreCase))
+                    score += 3;
+                if (hay.Contains(t, StringComparison.OrdinalIgnoreCase))
+                    score += 1;
+            }
+
+            if (score <= 0)
+                continue;
+
+            var snippet = string.IsNullOrWhiteSpace(tool.Description)
+                ? tool.Name
+                : SessionDiscoveryTools.ShortenDescription(tool.Description, maxChars: 100);
+            scored.Add((score, tool, snippet));
+        }
+
+        if (scored.Count == 0)
+            return $"No matching MCP tools for '{query}'. Try broader keywords (e.g. query, account, invoice).";
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# MCP tool matches for `{query}`");
+        sb.AppendLine("Next: call tool_describe with the exact qualified name, then call the tool.");
+        foreach (var hit in scored.OrderByDescending(x => x.Score).Take(Math.Max(1, maxResults)))
+            sb.AppendLine($"- `{hit.Tool.QualifiedName}`: {hit.Snippet}");
+        return sb.ToString().TrimEnd();
     }
 
     private async Task<string?> DescribeToolAsync(

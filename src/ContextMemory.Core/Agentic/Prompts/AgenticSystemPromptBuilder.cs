@@ -22,7 +22,7 @@ public static class AgenticSystemPromptBuilder
             .ToList();
 
         var mcpLine = mcpServers.Count > 0
-            ? $"\nMCP servers: {string.Join(", ", mcpServers)} (use tool_describe before calling unfamiliar MCP tools)."
+            ? $"\nMCP servers: {string.Join(", ", mcpServers)} — discover with tool_search, then tool_describe, then call (do not invent tool names)."
             : string.Empty;
 
         var sb = new StringBuilder();
@@ -34,7 +34,7 @@ public static class AgenticSystemPromptBuilder
         sb.AppendLine(
             "Dynamic context discovery: long tool outputs are stored as artifacts — "
             + "use artifact_tail/artifact_read with artifactId from observations. "
-            + "Call tool_describe before the first invocation of any unfamiliar tool (MCP or built-in). "
+            + "MCP: tool_search → tool_describe → call. Call tool_describe before the first invocation of any unfamiliar tool. "
             + (capabilities.PreferSkillDiscovery
                 ? "Skills: use skill_search then skill_read. "
                 : "Critical evidence rules are inlined below; other skills via skill_search / skill_read. ")
@@ -50,13 +50,9 @@ public static class AgenticSystemPromptBuilder
                 "Configured MCP servers give live access to external systems (e.g. Zuora). "
                 + "For questions about accounts, subscriptions, invoices, payments, or other live records:");
             sb.AppendLine(
-                "- You MUST call the relevant MCP tools in this turn (e.g. `…__query_objects`, `…__zuora_graphql`, "
-                + "`…__get_account_summary`, `…__manage_customer_accounts`).");
+                "- First call `tool_search` with keywords (e.g. account, invoice, query), then `tool_describe` on the match, then call the qualified name.");
             sb.AppendLine(
-                "- Do NOT answer from imagination, refuse for lack of an ID, or claim tools are unavailable.");
-            sb.AppendLine(
-                "- If the schema is unclear, call `tool_describe` once, then call the tool with filters "
-                + "(example: account status Canceled via `query_objects`).");
+                "- Do NOT invent MCP tool names. Do NOT answer from imagination, refuse for lack of an ID, or claim tools are unavailable.");
             sb.AppendLine(
                 "- Prefer MCP over sandbox/python HTTP. If an MCP call fails, report the tool error.");
         }

@@ -99,15 +99,22 @@ public static partial class LlmCapabilitiesResolver
     }
 
     /// <summary>
-    /// Effective max MCP tools from tenant config (<c>maxMcpToolsPerTurn</c>). Default 12 when unset.
+    /// Absolute ceiling for MCP tools offered to the model per turn (Qwen dumps the selection into the system prompt).
+    /// Tenant config above this is clamped at resolve time so oversized catalogs cannot blow the context window.
+    /// </summary>
+    public const int AbsoluteMaxMcpToolsPerTurn = 12;
+
+    /// <summary>
+    /// Effective max MCP tools from tenant config (<c>maxMcpToolsPerTurn</c>). Default 12 when unset; hard-capped at
+    /// <see cref="AbsoluteMaxMcpToolsPerTurn"/>.
     /// </summary>
     public static int ResolveMaxMcpTools(AppRuntimeConfig config)
     {
         var configured = config.Agentic.Tools.MaxMcpToolsPerTurn > 0
             ? config.Agentic.Tools.MaxMcpToolsPerTurn
-            : 12;
+            : AbsoluteMaxMcpToolsPerTurn;
         var caps = From(config);
-        return Math.Min(configured, caps.MaxMcpToolsHint);
+        return Math.Clamp(Math.Min(configured, caps.MaxMcpToolsHint), 1, AbsoluteMaxMcpToolsPerTurn);
     }
 
     /// <summary>
