@@ -249,6 +249,23 @@ public static class AgenticMessages
             "_Partial answer — the task was not completed within the available time._",
             "_Resposta parcial — a tarefa não foi concluída dentro do tempo disponível._");
 
+    /// <summary>
+    /// Short user-facing timeout message with unique tool counts (no per-step output dumps).
+    /// </summary>
+    public static string TimeoutShortSummary(string toolCountsSummary, string? language) =>
+        TenantLocale.Select(
+            language,
+            "I could not finish within the configured time limit"
+            + (string.IsNullOrWhiteSpace(toolCountsSummary)
+                ? "."
+                : $" (tools used: {toolCountsSummary}).")
+            + " Please try again with a narrower question, or continue in a new turn.",
+            "Não consegui concluir dentro do limite de tempo configurado"
+            + (string.IsNullOrWhiteSpace(toolCountsSummary)
+                ? "."
+                : $" (tools usadas: {toolCountsSummary}).")
+            + " Tenta de novo com uma pergunta mais focada, ou continua noutro turn.");
+
     public static string JudgeDefaultReject(string? language) =>
         TenantLocale.Select(
             language,

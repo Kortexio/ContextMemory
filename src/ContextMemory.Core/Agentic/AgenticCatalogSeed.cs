@@ -48,6 +48,7 @@ public static class AgenticCatalogSeed
                 - Use `fetch_url` / `web_search` only for allowlisted public HTTP and open-web freshness — never as a substitute for a configured MCP.
                 - If MCP fails, report the MCP error. Do not fall back to inventing REST scripts or placeholder credentials.
                 - Do NOT ask the user for client id, client secret, or access tokens when MCP credentials are already configured.
+                - For product/rules/subscription/account/invoice questions about a live system (e.g. Zuora/PACCAR): after one weak wiki miss, call MCP (`…__ask_zuora`, `…__query_objects`, …) instead of repeating `wiki_search`.
                 - Reply in the user's language.
                 """),
 
@@ -56,6 +57,7 @@ public static class AgenticCatalogSeed
                 """
                 ## Tool-calling discipline
                 - Invoke tools only when needed: external action, live data/pages, or app documentation via `wiki_search`.
+                - Never call the same tool with the same arguments twice in one turn. If results did not answer the question, change strategy (different query or MCP), do not loop.
                 - When you need a tool: emit **only** `tool_calls` (or the backend's function-calling form) with valid JSON — no extra narration.
                 - Never announce "I will use wiki_search" / "posso usar as tools?" — that is not a tool call. Just emit the call.
                 - Never name tools, APIs, or harness mechanics in the **user-facing** answer. The end user only needs the result.
@@ -81,6 +83,8 @@ public static class AgenticCatalogSeed
                 ## Wiki-first for internal docs
                 - Use `wiki_search` for Jira/Confluence/SQL/docs already ingested into the app before guessing.
                 - Prefer wiki evidence over memory when they conflict.
+                - At most 1–2 wiki searches per question. Never repeat the same query.
+                - If results do not answer the question, stop searching the wiki and use MCP or other tools (or say evidence is missing).
                 - Reply in the user's language.
                 """,
                 activation: AgenticSkillActivation.AlwaysOn),

@@ -22,13 +22,33 @@ public sealed class AgentPartialResponseFormatterTests
     }
 
     [Fact]
-    public void FormatTimeoutResponse_WithSteps_SummarizesProgress()
+    public void FormatTimeoutResponse_WithSteps_SummarizesCountsWithoutOutputDumps()
     {
         var steps = new List<AgentExecutionStep>
         {
             new()
             {
                 Iteration = 1,
+                ToolName = "wiki_search",
+                Arguments = """{"query":"a"}""",
+                Output = "HUGE irrelevant confluence dump that must not appear in the user answer",
+                ExitCode = 0,
+                Success = true,
+                Duration = TimeSpan.FromMilliseconds(10)
+            },
+            new()
+            {
+                Iteration = 2,
+                ToolName = "wiki_search",
+                Arguments = """{"query":"a"}""",
+                Output = "another dump",
+                ExitCode = 0,
+                Success = true,
+                Duration = TimeSpan.FromMilliseconds(10)
+            },
+            new()
+            {
+                Iteration = 3,
                 ToolName = "shell_execute",
                 Arguments = "{}",
                 Output = "done",
@@ -40,8 +60,11 @@ public sealed class AgentPartialResponseFormatterTests
 
         var result = AgentPartialResponseFormatter.FormatTimeoutResponse(null, steps);
 
-        Assert.Contains("shell_execute", result);
+        Assert.Contains("wiki_search×2", result, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("shell_execute×1", result, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("time limit", result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("HUGE irrelevant", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("Progress so far", result, StringComparison.OrdinalIgnoreCase);
     }
 }
 
