@@ -62,6 +62,12 @@ public sealed class HybridAgentValidator : IAgentValidator
                 ValidationMessages.EmptyFinalAnswer(request.RuntimeConfig));
         }
 
+        if (AgenticThinkingLeakGuardrail.TryGetRejectionFeedback(
+                request.FinalAnswer, request.RuntimeConfig, out var thinkingFeedback))
+        {
+            return ValidationResult.Reject(thinkingFeedback);
+        }
+
         var policy = request.RuntimeConfig.ResolvedPolicy;
 
         if (policy.HasKind(AgenticGuardrailKinds.SandboxClaim)
