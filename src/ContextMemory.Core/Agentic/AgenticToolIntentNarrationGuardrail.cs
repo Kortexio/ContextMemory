@@ -158,32 +158,21 @@ public static class AgenticToolIntentNarrationGuardrail
 
     private static string BuildIntentFeedback(string? lang, bool hasMcp, bool hasDiscovery)
     {
-        if (hasMcp && !hasDiscovery)
+        if (hasMcp)
         {
             return TenantLocale.Select(
                 lang,
-                "Rejected: do not narrate or name tools. Your entire next message must be ONLY this JSON "
-                + "(no prose): {\"tool\":\"tool_search\",\"arguments\":{\"query\":\"account\"}} "
-                + "Then describe and call the matched MCP tool the same way. After evidence arrives, answer with results only.",
-                "Rejeitado: não narres nem nomes tools. A tua próxima mensagem tem de ser APENAS este JSON "
-                + "(sem prosa): {\"tool\":\"tool_search\",\"arguments\":{\"query\":\"account\"}} "
-                + "Depois descreve e chama a tool MCP correspondente da mesma forma. Com evidência, responde só com o resultado.");
+                "Rejected: do not narrate or name tools. Emit a tool call now as ONLY JSON "
+                + "{\"tool\":\"exact_name_from_catalog\",\"arguments\":{...}} "
+                + "(prefer listed MCP tools for live data; tool_describe if the schema is unclear). "
+                + "After evidence arrives, answer with results only — no tool names.",
+                "Rejeitado: não narres nem nomes tools. Emite agora uma tool call como APENAS JSON "
+                + "{\"tool\":\"nome_exacto_do_catalogo\",\"arguments\":{...}} "
+                + "(prefere MCP listadas para dados live; tool_describe se o schema for unclear). "
+                + "Com evidência, responde só com o resultado — sem nomes de tools.");
         }
 
-        if (hasMcp && hasDiscovery)
-        {
-            return TenantLocale.Select(
-                lang,
-                "Rejected: do not narrate tools. Emit the next call as ONLY JSON "
-                + "{\"tool\":\"exact_qualified_name\",\"arguments\":{...}} "
-                + "(use a name from the prior discovery result; call tool_describe first if the schema is unknown). "
-                + "After the MCP result, answer the user without naming tools.",
-                "Rejeitado: não narres tools. Emite a próxima chamada como APENAS JSON "
-                + "{\"tool\":\"nome_qualificado_exacto\",\"arguments\":{...}} "
-                + "(usa um nome do resultado de discovery; tool_describe se o schema for desconhecido). "
-                + "Depois do resultado MCP, responde ao utilizador sem nomear tools.");
-        }
-
+        _ = hasDiscovery;
         return TenantLocale.Select(
             lang,
             "Rejected: you narrated an intent to use tools (or asked permission) instead of calling them. "

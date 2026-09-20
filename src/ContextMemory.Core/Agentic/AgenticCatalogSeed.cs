@@ -270,11 +270,11 @@ public static class AgenticCatalogSeed
                 {
                     kind = AgenticGuardrailKinds.ToolSurfaceHidden,
                     feedbackEn =
-                        "Rejected: do not name tools or announce/ask permission in the user-facing answer. "
-                        + "When MCP discovery is needed, reply with ONLY {\"tool\":\"tool_search\",\"arguments\":{\"query\":\"…\"}} then describe/call; afterwards answer with the result only.",
+                        "Rejected: do not name tools or announce/ask permission to use them in the user-facing answer. "
+                        + "Emit tool_calls silently when needed; then answer with the result only.",
                     feedbackPt =
-                        "Rejeitado: não nomes tools nem anuncies/peças permissão na resposta ao utilizador. "
-                        + "Para discovery MCP, responde APENAS {\"tool\":\"tool_search\",\"arguments\":{\"query\":\"…\"}} depois describe/call; no fim responde só com o resultado."
+                        "Rejeitado: não nomes tools nem anuncies/peças permissão para as usar na resposta ao utilizador. "
+                        + "Emite tool_calls em silêncio quando precisares; depois responde só com o resultado."
                 }),
                 IsSystem = true,
                 IsDefaultEnabled = true,

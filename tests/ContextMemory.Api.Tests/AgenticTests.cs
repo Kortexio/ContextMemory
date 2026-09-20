@@ -613,7 +613,7 @@ public sealed class McpJsonRpcClientTests
     }
 
     [Fact]
-    public async Task AgenticToolRegistryService_OmitsMcpUntilPinnedViaRecent()
+    public async Task AgenticToolRegistryService_IncludesSelectedMcpWithOpenStub()
     {
         var mcpTools = new List<McpToolDefinition>
         {
@@ -645,18 +645,16 @@ public sealed class McpJsonRpcClientTests
             }
         };
 
-        var firstHop = await registry.BuildToolsAsync(config, "list cancelled accounts", recentToolNames: null);
-        Assert.DoesNotContain(firstHop, t => t.Function.Name.StartsWith("zuora__", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(firstHop, t => t.Function.Name == SessionDiscoveryTools.ToolSearch);
-        Assert.Contains(firstHop, t => t.Function.Name == SessionDiscoveryTools.ToolDescribe);
+        var tools = await registry.BuildToolsAsync(config, "list cancelled accounts", recentToolNames: null);
+        Assert.Contains(tools, t => t.Function.Name == "zuora__query_objects");
+        Assert.Contains(tools, t => t.Function.Name == "zuora__zuora_graphql");
+        Assert.Contains(tools, t => t.Function.Name == SessionDiscoveryTools.ToolDescribe);
+        Assert.All(
+            tools.Where(t => t.Function.Name.StartsWith("zuora__", StringComparison.Ordinal)),
+            t => Assert.True(McpPinnedToolFactory.IsOpenStubParameters(t.Function.Parameters)));
 
         var summary = await registry.BuildToolNamesSummaryAsync(config, "accounts", null);
-        Assert.Contains("MCP discovery helpers", summary, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("zuora__query_objects", summary, StringComparison.OrdinalIgnoreCase);
-
-        var pinned = await registry.BuildToolsAsync(config, "again", ["zuora__query_objects"]);
-        Assert.Contains(pinned, t => t.Function.Name == "zuora__query_objects");
-        Assert.DoesNotContain(pinned, t => t.Function.Name == "zuora__zuora_graphql");
+        Assert.Contains("zuora__query_objects", summary, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class StubMcpCatalog(IReadOnlyList<McpToolDefinition> tools) : IMcpToolCatalog
@@ -852,12 +850,11 @@ public sealed class McpAgenticIntegrationTests : IClassFixture<AgenticStubWebApp
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var body = await response.Content.ReadAsStringAsync();
-        Assert.Contains("Conta A-001", body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("A-001", body, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Active", body, StringComparison.OrdinalIgnoreCase);
 
+        Assert.Equal(2, _factory.AgenticHandler.ChatRequests.Count);
         var joined = string.Join('\n', _factory.AgenticHandler.ChatRequestBodies);
-        Assert.Contains("tool_search", joined, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("tool_describe", joined, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("zuora-mcp__get_account", joined, StringComparison.OrdinalIgnoreCase);
     }
 }
