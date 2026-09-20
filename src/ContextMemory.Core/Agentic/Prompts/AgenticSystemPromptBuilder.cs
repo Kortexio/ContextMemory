@@ -41,7 +41,9 @@ public static class AgenticSystemPromptBuilder
             + "Requestable rules: rule_search / rule_read. "
             + "Heavy research: delegate_task (depth 1). "
             + "Never narrate harness steps or tool names to the user. "
-            + "After tool results, answer in the user's language with requested fields only — do not dump raw tool JSON.");
+            + "Always answer in the same language the user wrote in (latest user message) — "
+            + "do not switch to English just because tools or schemas are English. "
+            + "After tool results, answer with requested fields only — do not dump raw tool JSON.");
 
         if (mcpServers.Count > 0)
         {
