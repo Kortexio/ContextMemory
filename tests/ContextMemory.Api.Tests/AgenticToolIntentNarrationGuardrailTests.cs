@@ -34,7 +34,7 @@ public sealed class AgenticToolIntentNarrationGuardrailTests
     }
 
     [Fact]
-    public void Rejects_McpNarration_WithActionableToolSearchJson()
+    public void Rejects_McpNarration_WithActionableToolJson()
     {
         var config = AgenticConfig(withMcp: true);
         var ok = AgenticToolIntentNarrationGuardrail.TryGetRejectionFeedback(
@@ -44,8 +44,8 @@ public sealed class AgenticToolIntentNarrationGuardrailTests
             out var feedback);
 
         Assert.True(ok);
-        Assert.Contains("tool_search", feedback, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("{\"tool\"", feedback, StringComparison.Ordinal);
+        Assert.Contains("nome_exacto_do_catalogo", feedback, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

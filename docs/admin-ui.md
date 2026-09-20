@@ -139,7 +139,7 @@ App RPM, per-user RPM, TPM, agentic request weight, agentic tokens per iteration
 | Loop guardrails | Validation mode, network egress, max iterations, loop timeout, min answer length, confirmation keywords, allowed hosts, expected regexes, require exit 0, human review on max iterations |
 | **Skills & guardrail packs** | Per-app checkboxes from the shared catalog (see Skills page). Omit selection → catalog defaults. Skills may be `always_on` / `requestable` rules. |
 | Execution tools | `self-hosted-sandbox` → sandbox endpoint (Compose: `http://sandbox-runtime:8080`) or `aca-session` → ACA pool URL; runtimes shell/python/node/(custom); `allowEgress`. Sandbox output is always archived as a session artifact. |
-| MCP integrations | `http` or `stdio`; name, URL/command+args, auth mode, credential ref, OAuth fields, allow/deny tool lists, timeout, enabled, allowEgress; max MCP tools per turn; schemas are lazy (`tool_describe`) |
+| MCP integrations | `http` or `stdio`; name, URL/command+args, auth mode, credential ref, OAuth fields, allow/deny tool lists, timeout, enabled, allowEgress; max MCP tools per turn (hard-capped at 12); schemas lazy via `tool_describe` |
 
 Example stdio MCP is shown in a collapsible on the Config page. After editing MCP servers, rebuild the tool catalog via API if needed: `POST /apps/{appId}/mcp/catalog/rebuild` (Master Key or app auth as configured).
 

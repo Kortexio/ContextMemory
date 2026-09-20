@@ -24,7 +24,6 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
         IReadOnlyList<string>? recentToolNames = null,
         CancellationToken cancellationToken = default)
     {
-        _ = userQuery;
         var tools = new List<OllamaTool>();
         tools.AddRange(AgenticToolRegistry.BuildExecutionTools(runtimeConfig, lazySchemas: true));
 
@@ -35,7 +34,7 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
         if (wikiGrep is not null)
             tools.Add(wikiGrep);
 
-        // Cursor-style discovery helpers (artifact/skill/log/tool_search/tool_describe).
+        // Discovery helpers (artifact/skill/log/tool_search/tool_describe) — MCP still selected below.
         tools.AddRange(SessionDiscoveryTools.BuildTools(runtimeConfig));
 
         var caps = LlmCapabilitiesResolver.From(runtimeConfig);
@@ -45,21 +44,21 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
         tools.AddRange(AgenticDocumentTools.BuildTools(runtimeConfig));
         tools.AddRange(AgenticCanvasTools.BuildTools(runtimeConfig));
 
-        // Lazy MCP: zero tools on first hop. Pin only MCP tools already invoked this conversation
-        // (real schema from catalog). New MCP tools enter via tool_search → tool_describe → pin.
-        if (recentToolNames is { Count: > 0 })
+        // Phase 1 only: selector top-K capped by ResolveMaxMcpTools (absolute ≤ 12).
+        // Open schema + short description; full schema via tool_describe.
+        object openParameters = McpPinnedToolFactory.OpenStubParameters();
+        var mcpTools = await _mcpCatalog
+            .GetToolsAsync(runtimeConfig, userQuery, recentToolNames, cancellationToken)
+            .ConfigureAwait(false);
+        foreach (var mcpTool in mcpTools)
         {
-            var recent = recentToolNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var allMcp = await _mcpCatalog
-                .GetAllToolsAsync(runtimeConfig, cancellationToken)
-                .ConfigureAwait(false);
-            var max = LlmCapabilitiesResolver.ResolveMaxMcpTools(runtimeConfig);
-            foreach (var mcpTool in allMcp
-                         .Where(t => recent.Contains(t.QualifiedName) || recent.Contains(t.Name))
-                         .Take(max))
-            {
-                tools.Add(McpPinnedToolFactory.Create(mcpTool, runtimeConfig));
-            }
+            var fullDescription = AgenticToolDescriptionBuilder.BuildMcpDescription(mcpTool, runtimeConfig);
+            tools.Add(new OllamaTool(
+                "function",
+                new OllamaFunction(
+                    mcpTool.QualifiedName,
+                    SessionDiscoveryTools.ShortenDescription(fullDescription),
+                    openParameters)));
         }
 
         var capability = PolicyLayersFactory
@@ -76,22 +75,7 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
     {
         var tools = await BuildToolsAsync(runtimeConfig, userQuery, recentToolNames, cancellationToken)
             .ConfigureAwait(false);
-        var names = tools
-            .Select(t => t.Function.Name)
-            .Where(n => !McpToolNaming.TryParseQualifiedName(n, out _, out _))
-            .ToList();
-
-        var mcpServers = runtimeConfig.Agentic.Tools.Integrations
-            .Where(i => string.Equals(i.Type, "mcp", StringComparison.OrdinalIgnoreCase) && i.Enabled)
-            .Select(i => i.Name)
-            .Where(n => !string.IsNullOrWhiteSpace(n))
-            .ToList();
-
-        if (mcpServers.Count == 0)
-            return string.Join(", ", names);
-
-        var mcpHint = $"MCP discovery helpers (servers: {string.Join(", ", mcpServers)})";
-        return names.Count == 0 ? mcpHint : string.Join(", ", names) + "; " + mcpHint;
+        return string.Join(", ", tools.Select(t => t.Function.Name));
     }
 
     public List<OllamaMcpServer> BuildMcpServers(AppRuntimeConfig runtimeConfig) =>

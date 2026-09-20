@@ -272,7 +272,8 @@ public sealed class AgenticSystemPromptBuilderTests
         Assert.Contains("shell_execute", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("## Default skills", prompt, StringComparison.Ordinal);
         Assert.Contains("`tool-calling-discipline`", prompt, StringComparison.Ordinal);
-        Assert.Contains("catalog helpers", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("skill_read", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("tool_describe", prompt, StringComparison.OrdinalIgnoreCase);
         // Strong / lazy discovery: skill body is not stuffed into the system prompt.
         Assert.DoesNotContain("Emit tool_calls with valid JSON", prompt, StringComparison.Ordinal);
     }

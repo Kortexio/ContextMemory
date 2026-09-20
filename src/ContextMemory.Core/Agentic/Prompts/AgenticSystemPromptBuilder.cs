@@ -22,7 +22,7 @@ public static class AgenticSystemPromptBuilder
             .ToList();
 
         var mcpLine = mcpServers.Count > 0
-            ? $"\nMCP servers configured: {string.Join(", ", mcpServers)}. Discover live tools via the catalog helpers — never invent names, never write tool names in the user-facing answer."
+            ? $"\nMCP servers: {string.Join(", ", mcpServers)} (use tool_describe before calling unfamiliar MCP tools)."
             : string.Empty;
 
         var sb = new StringBuilder();
@@ -34,35 +34,37 @@ public static class AgenticSystemPromptBuilder
         sb.AppendLine(
             "Dynamic context discovery: long tool outputs are stored as artifacts — "
             + "use artifact_tail/artifact_read with artifactId from observations. "
-            + "Unfamiliar tools: load schema via the describe helper in the catalog, then call. "
+            + "Call tool_describe before the first invocation of any unfamiliar tool (MCP or built-in). "
             + (capabilities.PreferSkillDiscovery
-                ? "Skills: search then read via catalog helpers. "
-                : "Critical evidence rules are inlined below; other skills via catalog helpers. ")
-            + "Requestable rules and heavy research use catalog helpers (including delegate_task). "
-            + "Never narrate harness steps to the user. After tool results, answer in the user's language with requested fields only — do not dump raw tool JSON.");
+                ? "Skills: use skill_search then skill_read. "
+                : "Critical evidence rules are inlined below; other skills via skill_search / skill_read. ")
+            + "Requestable rules: rule_search / rule_read. "
+            + "Heavy research: delegate_task (depth 1). "
+            + "Never narrate harness steps or tool names to the user. "
+            + "After tool results, answer in the user's language with requested fields only — do not dump raw tool JSON.");
 
         if (mcpServers.Count > 0)
         {
             sb.AppendLine();
             sb.AppendLine("## MCP data access (mandatory)");
             sb.AppendLine(
-                "Configured MCP servers give live access to external systems. "
-                + "For accounts, subscriptions, invoices, payments, or other live records you MUST obtain evidence via MCP before answering.");
+                "Configured MCP servers give live access to external systems (e.g. Zuora). "
+                + "For questions about accounts, subscriptions, invoices, payments, or other live records:");
             sb.AppendLine(
-                "- Emit catalog helper / MCP calls silently (function calls or the backend JSON tool format). Never announce, ask permission, or name tools in the user-facing reply.");
+                "- You MUST call the relevant MCP tools listed in Available tools / the tool catalog "
+                + "(e.g. `…__query_objects`, `…__zuora_graphql`, `…__get_account_summary`).");
             sb.AppendLine(
-                "- Do NOT invent MCP tool names. Do NOT answer from imagination or claim tools are unavailable.");
+                "- Do NOT answer from imagination, refuse for lack of an ID, or claim tools are unavailable.");
+            sb.AppendLine(
+                "- If the schema is unclear, call `tool_describe` once, then call the tool with filters.");
+            sb.AppendLine(
+                "- Prefer MCP over wiki_search / sandbox HTTP for live Zuora records. "
+                + "If an MCP call fails, report the tool error without naming the harness.");
             if (capabilities.PreferClientSideToolParsing)
             {
                 sb.AppendLine(
-                    "- When you need to discover MCP tools, your entire assistant message must be ONLY: "
-                    + "{\"tool\":\"tool_search\",\"arguments\":{\"query\":\"account\"}} "
-                    + "(then describe, then call the qualified name the same way).");
-            }
-            else
-            {
-                sb.AppendLine(
-                    "- Prefer MCP over sandbox/python HTTP. If an MCP call fails, report the tool error without naming the harness.");
+                    "- When calling a tool, your entire assistant message must be ONLY "
+                    + "{\"tool\":\"exact_name\",\"arguments\":{...}} (no prose).");
             }
         }
 

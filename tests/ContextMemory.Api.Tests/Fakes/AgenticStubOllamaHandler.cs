@@ -157,7 +157,7 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
     }
 
     /// <summary>
-    /// Lazy MCP: tool_search → tool_describe → zuora-mcp__get_account.
+    /// Phase 1 path: MCP tools are already in the catalog — call zuora-mcp__get_account directly.
     /// Also handles shell delete / echo when not an MCP scenario.
     /// </summary>
     private static HttpResponseMessage? ResolveNextToolCall(string body, bool useClientSideReply, bool isOpenAiChat)
@@ -172,33 +172,8 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
             if (hasGetAccountResult)
                 return null;
 
-            // Raw JSON bodies escape backticks as \u0060 — detect describe without relying on `.
-            var hasDescribeResult =
-                body.Contains("zuora-mcp__get_account", StringComparison.Ordinal)
-                && (body.Contains("Input schema", StringComparison.Ordinal)
-                    || body.Contains("## Parameters", StringComparison.Ordinal)
-                    || body.Contains("\\u0060zuora-mcp__get_account\\u0060", StringComparison.Ordinal));
-            var hasSearchResult = body.Contains("MCP tool matches", StringComparison.Ordinal);
-            var getAccountInCatalog = body.Contains("zuora-mcp__get_account", StringComparison.Ordinal)
-                && body.Contains("## Tool catalog", StringComparison.Ordinal);
-
-            if (!hasSearchResult && !hasDescribeResult
-                && body.Contains("tool_search", StringComparison.Ordinal))
-            {
-                return EmitToolCall("tool_search", """{"query":"account"}""", useClientSideReply, isOpenAiChat);
-            }
-
-            if (hasSearchResult && !hasDescribeResult
-                && body.Contains("tool_describe", StringComparison.Ordinal))
-            {
-                return EmitToolCall(
-                    "tool_describe",
-                    """{"toolName":"zuora-mcp__get_account"}""",
-                    useClientSideReply,
-                    isOpenAiChat);
-            }
-
-            if (hasDescribeResult || getAccountInCatalog)
+            var getAccountVisible = body.Contains("zuora-mcp__get_account", StringComparison.Ordinal);
+            if (getAccountVisible)
             {
                 return EmitToolCall(
                     "zuora-mcp__get_account",
