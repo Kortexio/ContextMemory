@@ -27,9 +27,9 @@ public static class AgenticDuplicateToolCallGuard
 
     /// <summary>
     /// Max wiki_search/wiki_grep attempts (success or fail) before forcing a pivot.
-    /// Three permits the common search → refined search → grep workflow while remaining bounded.
+    /// Five permits search → refine → grep while remaining bounded; identical queries stay blocked.
     /// </summary>
-    public const int MaxWikiAttemptsPerTurn = 3;
+    public const int MaxWikiAttemptsPerTurn = 5;
 
     /// <summary>
     /// After this many consecutive wiki-budget rejections, strip tools and force a final answer.

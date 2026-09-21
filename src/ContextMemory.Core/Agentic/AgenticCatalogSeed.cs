@@ -83,7 +83,7 @@ public static class AgenticCatalogSeed
                 ## Wiki-first for internal docs
                 - Use `wiki_search` for Jira/Confluence/SQL/docs already ingested into the app before guessing.
                 - Prefer wiki evidence over memory when they conflict.
-                - At most 1–2 wiki searches per question. Never repeat the same query.
+                - At most 5 distinct wiki_search/wiki_grep calls per question. Never repeat the same query or pattern.
                 - If results do not answer the question, stop searching the wiki and use MCP or other tools (or say evidence is missing).
                 - Reply in the user's language.
                 """,
