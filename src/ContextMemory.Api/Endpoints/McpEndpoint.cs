@@ -10,10 +10,12 @@ public static class McpEndpoint
     public static void MapMcpEndpoints(this WebApplication app)
     {
         app.MapGet("/apps/{appId}/mcp/servers", GetServersAsync);
+        app.MapGet("/apps/{appId}/mcp/catalog", GetCatalogAsync);
         app.MapPost("/apps/{appId}/mcp/catalog/rebuild", RebuildCatalogAsync);
         app.MapPost("/apps/{appId}/mcp/test/{name}", TestServerAsync);
         app.MapPost("/apps/{appId}/mcp/credentials/{name}", UpsertCredentialAsync);
         app.MapGet("/admin/apps/{appId}/mcp/servers", GetServersAsync);
+        app.MapGet("/admin/apps/{appId}/mcp/catalog", GetCatalogAsync);
         app.MapPost("/admin/apps/{appId}/mcp/catalog/rebuild", RebuildCatalogAsync);
         app.MapPost("/admin/apps/{appId}/mcp/test/{name}", TestServerAsync);
         app.MapGet("/admin/apps/{appId}/mcp/credentials", ListCredentialsAsync);
@@ -104,6 +106,47 @@ public static class McpEndpoint
             });
 
         return Results.Json(servers);
+    }
+
+    /// <summary>
+    /// Raw persisted MCP catalog for admin pickers. Reads the store only — never SyncAsync,
+    /// never FilterCatalog — so allowlist curation can see tools that are currently denied.
+    /// </summary>
+    private static async Task<IResult> GetCatalogAsync(
+        HttpContext httpContext,
+        string appId,
+        string? integration,
+        IMcpCatalogStore catalogStore,
+        CancellationToken cancellationToken)
+    {
+        if (!ValidateAppAccess(httpContext, appId, out var error))
+            return error!;
+
+        IEnumerable<string>? names = string.IsNullOrWhiteSpace(integration)
+            ? null
+            : [integration];
+        var tools = await catalogStore
+            .GetToolsAsync(appId, names, cancellationToken)
+            .ConfigureAwait(false);
+
+        const int maxDescriptionChars = 160;
+        var payload = tools.Select(t => new McpCatalogToolAdminDto
+        {
+            IntegrationName = t.ServerName,
+            ToolName = t.Name,
+            QualifiedName = t.QualifiedName,
+            Description = TruncateDescription(t.Description, maxDescriptionChars)
+        });
+
+        return Results.Json(payload);
+    }
+
+    private static string TruncateDescription(string? description, int maxChars)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+            return string.Empty;
+        var trimmed = description.Trim();
+        return trimmed.Length <= maxChars ? trimmed : trimmed[..maxChars].TrimEnd() + "…";
     }
 
     private static async Task<IResult> RebuildCatalogAsync(

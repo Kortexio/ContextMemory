@@ -156,6 +156,37 @@ public sealed class AgenticLiveDataEvidenceGuardrailTests
         Assert.True(ok);
     }
 
+    [Fact]
+    public void RejectionFeedback_WithoutWiki_UsesMcpExample()
+    {
+        var config = ConfigWithMcp();
+        var ok = AgenticLiveDataEvidenceGuardrail.TryGetRejectionFeedback(
+            "get account A0001 balance",
+            "The account is active with balance 0.",
+            steps: [],
+            config,
+            out var feedback);
+
+        Assert.True(ok);
+        Assert.Contains("query_objects", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("wiki_search", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RejectionFeedback_WithWiki_SuggestsWikiSearch()
+    {
+        var config = ConfigWithWiki();
+        var ok = AgenticLiveDataEvidenceGuardrail.TryGetRejectionFeedback(
+            "busque os tickets PAC-759",
+            "PAC-759 is about billing reconciliation and was closed yesterday.",
+            steps: [],
+            config,
+            out var feedback);
+
+        Assert.True(ok);
+        Assert.Contains("wiki_search", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static AppRuntimeConfig ConfigWithMcp() =>
         new()
         {

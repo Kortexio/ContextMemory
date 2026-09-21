@@ -52,13 +52,13 @@ public sealed class GlobalWikiToolExecutor : IToolExecutor
             using var doc = JsonDocument.Parse(
                 string.IsNullOrWhiteSpace(toolCall.Function.Arguments) ? "{}" : toolCall.Function.Arguments);
             var root = doc.RootElement;
-            query = root.TryGetProperty("query", out var q) ? q.GetString() ?? string.Empty : string.Empty;
-            if (root.TryGetProperty("sourceId", out var s) && s.ValueKind == JsonValueKind.String)
-                sourceId = s.GetString();
-            if (root.TryGetProperty("topK", out var t) && t.TryGetInt32(out var topKVal) && topKVal > 0)
+            query = TryGetStringIgnoreCase(root, "query") ?? string.Empty;
+            if (TryGetStringIgnoreCase(root, "sourceId") is { } s)
+                sourceId = s;
+            if (TryGetIntIgnoreCase(root, "topK") is { } topKVal && topKVal > 0)
                 topK = topKVal;
-            if (root.TryGetProperty("asOf", out var a) && a.ValueKind == JsonValueKind.String
-                && DateTimeOffset.TryParse(a.GetString(), out var asOfVal))
+            if (TryGetStringIgnoreCase(root, "asOf") is { } asOfRaw
+                && DateTimeOffset.TryParse(asOfRaw, out var asOfVal))
                 asOf = asOfVal;
         }
         catch
@@ -129,13 +129,13 @@ public sealed class GlobalWikiToolExecutor : IToolExecutor
             using var doc = JsonDocument.Parse(
                 string.IsNullOrWhiteSpace(toolCall.Function.Arguments) ? "{}" : toolCall.Function.Arguments);
             var root = doc.RootElement;
-            pattern = root.TryGetProperty("pattern", out var p) ? p.GetString() ?? string.Empty : string.Empty;
-            if (root.TryGetProperty("sourceId", out var s) && s.ValueKind == JsonValueKind.String)
-                sourceId = s.GetString();
-            if (root.TryGetProperty("maxHits", out var m) && m.TryGetInt32(out var maxHitsVal) && maxHitsVal > 0)
+            pattern = TryGetStringIgnoreCase(root, "pattern") ?? string.Empty;
+            if (TryGetStringIgnoreCase(root, "sourceId") is { } s)
+                sourceId = s;
+            if (TryGetIntIgnoreCase(root, "maxHits") is { } maxHitsVal && maxHitsVal > 0)
                 maxHits = maxHitsVal;
-            if (root.TryGetProperty("asOf", out var a) && a.ValueKind == JsonValueKind.String
-                && DateTimeOffset.TryParse(a.GetString(), out var asOfVal))
+            if (TryGetStringIgnoreCase(root, "asOf") is { } asOfRaw
+                && DateTimeOffset.TryParse(asOfRaw, out var asOfVal))
                 asOf = asOfVal;
         }
         catch
@@ -179,5 +179,32 @@ public sealed class GlobalWikiToolExecutor : IToolExecutor
                      + (result.Truncated ? "\n\n_(results truncated)_" : string.Empty),
             ExitCode = 0
         };
+    }
+
+    private static string? TryGetStringIgnoreCase(JsonElement root, string name)
+    {
+        foreach (var prop in root.EnumerateObject())
+        {
+            if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase)
+                && prop.Value.ValueKind == JsonValueKind.String)
+            {
+                return prop.Value.GetString();
+            }
+        }
+
+        return null;
+    }
+
+    private static int? TryGetIntIgnoreCase(JsonElement root, string name)
+    {
+        foreach (var prop in root.EnumerateObject())
+        {
+            if (!string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (prop.Value.TryGetInt32(out var n))
+                return n;
+        }
+
+        return null;
     }
 }

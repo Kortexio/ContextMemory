@@ -202,6 +202,7 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
                     messages,
                     report,
                     skipConfirmation: true,
+                    turnCatalog: null,
                     cancellationToken)
                 .ConfigureAwait(false);
 

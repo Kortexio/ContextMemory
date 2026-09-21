@@ -41,7 +41,9 @@ public static class AgenticDuplicateToolCallGuard
         var name = NormalizeToolName(toolName);
         if (QueryFocusedTools.Contains(name))
         {
-            var wikiAttempts = steps.Count(s => QueryFocusedTools.Contains(NormalizeToolName(s.ToolName)));
+            var wikiAttempts = steps.Count(s =>
+                !s.RejectedByGuard
+                && QueryFocusedTools.Contains(NormalizeToolName(s.ToolName)));
             if (wikiAttempts >= MaxWikiAttemptsPerTurn)
             {
                 feedback = BuildWikiBudgetFeedback(runtimeConfig);
@@ -142,17 +144,17 @@ public static class AgenticDuplicateToolCallGuard
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
                 return string.Empty;
 
-            // wiki_search uses "query"; wiki_grep uses "pattern".
-            if (doc.RootElement.TryGetProperty("query", out var q)
-                && q.ValueKind == JsonValueKind.String)
+            // wiki_search uses "query"; wiki_grep uses "pattern" (case-insensitive).
+            foreach (var prop in doc.RootElement.EnumerateObject())
             {
-                return q.GetString() ?? string.Empty;
-            }
+                if (prop.Value.ValueKind != JsonValueKind.String)
+                    continue;
 
-            if (doc.RootElement.TryGetProperty("pattern", out var p)
-                && p.ValueKind == JsonValueKind.String)
-            {
-                return p.GetString() ?? string.Empty;
+                if (string.Equals(prop.Name, "query", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(prop.Name, "pattern", StringComparison.OrdinalIgnoreCase))
+                {
+                    return prop.Value.GetString() ?? string.Empty;
+                }
             }
 
             // {} or object without query/pattern → empty (do not fall back to raw JSON).
