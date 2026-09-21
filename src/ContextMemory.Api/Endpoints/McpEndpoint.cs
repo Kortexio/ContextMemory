@@ -74,15 +74,14 @@ public static class McpEndpoint
         HttpContext httpContext,
         string appId,
         IAppConfigStore appConfigStore,
-        IMcpCatalogStore catalogStore,
+        IMcpToolCatalog mcpToolCatalog,
         CancellationToken cancellationToken)
     {
         if (!ValidateAppAccess(httpContext, appId, out var error))
             return error!;
 
         var runtime = appConfigStore.GetConfig(appId);
-        // Read persisted sync status only — never SyncAsync on GET (that opens every MCP server).
-        var sync = await catalogStore.GetSyncStatusAsync(appId, cancellationToken).ConfigureAwait(false);
+        var sync = await mcpToolCatalog.SyncAsync(runtime, cancellationToken).ConfigureAwait(false);
         var syncByName = sync.ToDictionary(x => x.IntegrationName, StringComparer.OrdinalIgnoreCase);
 
         var servers = runtime.Agentic.Tools.Integrations

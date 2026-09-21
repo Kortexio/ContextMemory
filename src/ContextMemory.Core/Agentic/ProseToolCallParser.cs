@@ -52,32 +52,11 @@ public static partial class ProseToolCallParser
         int maxPerTurn,
         out int droppedUnknown,
         out int droppedInvalidArgs,
-        out int droppedCapped) =>
-        FilterAgainstCatalog(
-            promoted,
-            catalog,
-            maxPerTurn,
-            out droppedUnknown,
-            out droppedInvalidArgs,
-            out droppedCapped,
-            out _,
-            out _);
-
-    public static IReadOnlyList<OllamaToolCall>? FilterAgainstCatalog(
-        IReadOnlyList<OllamaToolCall>? promoted,
-        IReadOnlyList<OllamaTool>? catalog,
-        int maxPerTurn,
-        out int droppedUnknown,
-        out int droppedInvalidArgs,
-        out int droppedCapped,
-        out int droppedAmbiguous,
-        out IReadOnlyList<string> ambiguousHints)
+        out int droppedCapped)
     {
         droppedUnknown = 0;
         droppedInvalidArgs = 0;
         droppedCapped = 0;
-        droppedAmbiguous = 0;
-        ambiguousHints = [];
         if (promoted is null || promoted.Count == 0)
             return null;
 
@@ -93,7 +72,6 @@ public static partial class ProseToolCallParser
         }
 
         var kept = new List<OllamaToolCall>(promoted.Count);
-        var ambiguous = new List<string>();
         foreach (var call in promoted)
         {
             var name = call.Function?.Name?.Trim();
@@ -103,18 +81,8 @@ public static partial class ProseToolCallParser
                 continue;
             }
 
-            var resolution = ClientSideToolCalling.ResolveShortMcpName(name, allowed);
-            if (resolution.Kind == ShortMcpNameKind.Ambiguous)
-            {
-                droppedAmbiguous++;
-                ambiguous.Add(
-                    $"`{name}` → {string.Join(", ", resolution.Candidates.Select(c => $"`{c}`"))}");
-                continue;
-            }
-
-            var resolved = resolution.Kind is ShortMcpNameKind.Exact or ShortMcpNameKind.Unique
-                ? resolution.ResolvedName!
-                : name;
+            // Catalog lists MCP short names under a server header; expand when unambiguous.
+            var resolved = ClientSideToolCalling.TryExpandShortMcpName(name, allowed) ?? name;
             var isMcpQualified = McpToolNaming.TryParseQualifiedName(resolved, out _, out _);
             // Allow MCP-qualified names through even when not yet pinned so the executor can
             // reject invent-names with a tool_search hint (instead of silently dropping).
@@ -135,8 +103,6 @@ public static partial class ProseToolCallParser
                 ? call
                 : new OllamaToolCall(new OllamaFunctionCall(resolved, args)));
         }
-
-        ambiguousHints = ambiguous;
 
         // Cap only when caller passes a positive limit (typically Admin maxMcpToolsPerTurn via ResolveMaxMcpTools).
         if (maxPerTurn > 0 && kept.Count > maxPerTurn)
@@ -360,27 +326,14 @@ public static partial class ProseToolCallParser
 
     private static bool LooksLikeToolName(string toolName)
     {
-        if (string.IsNullOrWhiteSpace(toolName) || toolName.Length > 128)
-            return false;
-
-        // Accept MCP short names without underscores (e.g. "ping") and camelCase —
-        // FilterAgainstCatalog validates against the turn catalog / qualified form.
-        var hasLetter = false;
-        foreach (var ch in toolName)
-        {
-            if (char.IsLetter(ch))
-            {
-                hasLetter = true;
-                continue;
-            }
-
-            if (char.IsDigit(ch) || ch is '_' or '-' or '.')
-                continue;
-
-            return false;
-        }
-
-        return hasLetter;
+        if (toolName.Contains("__", StringComparison.Ordinal))
+            return true;
+        if (toolName.Contains('_', StringComparison.Ordinal))
+            return true;
+        return toolName.Contains("search", StringComparison.OrdinalIgnoreCase)
+            || toolName.Contains("execute", StringComparison.OrdinalIgnoreCase)
+            || toolName.Contains("describe", StringComparison.OrdinalIgnoreCase)
+            || toolName.Contains("query", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? SerializeArguments(JsonElement parent, string propertyName)

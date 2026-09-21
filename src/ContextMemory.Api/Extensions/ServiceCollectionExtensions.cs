@@ -1,7 +1,5 @@
 using ContextMemory.Core.Agentic;
-using ContextMemory.Core.Agentic.Policies;
 using ContextMemory.Core.Agentic.Subagent;
-using ContextMemory.Core.Agentic.ToolProviders;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Engine;
@@ -76,24 +74,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SecretClassifier>();
 
         services.AddSingleton<IAgentConfirmationFlow, AgentConfirmationFlow>();
-        services.AddSingleton(AgenticToolCallPolicyChain.CreateDefault());
         services.AddSingleton<IAgentToolCallProcessor, AgentToolCallProcessor>();
         services.AddSingleton<IAgentContextCompactor, AgentContextCompactor>();
         services.AddSingleton<IAgentStateMachine, AgentStateMachine>();
         services.AddSingleton<IAgentRunStore, ArtifactAgentRunStore>();
         services.AddSingleton<IAgentLoopRunner, AgentLoopRunner>();
         services.AddSingleton<ISubagentOrchestrator, SubagentOrchestrator>();
-
-        services.AddSingleton<IAgenticToolProvider, ExecutionToolProvider>();
-        services.AddSingleton<IAgenticToolProvider, WikiToolProvider>();
-        services.AddSingleton<IAgenticToolProvider, DiscoveryToolProvider>();
-        services.AddSingleton<IAgenticToolProvider, HttpToolProvider>();
-        services.AddSingleton<IAgenticToolProvider, VisionToolProvider>();
-        services.AddSingleton<IAgenticToolProvider, BrowserToolProvider>();
-        services.AddSingleton<IAgenticToolProvider, DocumentToolProvider>();
-        services.AddSingleton<IAgenticToolProvider, CanvasToolProvider>();
-        services.AddScoped<IAgenticToolProvider, McpToolProvider>();
-
         services.AddScoped<IAgenticToolRegistry, AgenticToolRegistryService>();
         services.AddScoped<IAgentOrchestrator, AgentOrchestrator>();
 

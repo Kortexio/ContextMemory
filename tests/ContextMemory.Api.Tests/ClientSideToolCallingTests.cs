@@ -160,23 +160,6 @@ public sealed class ClientSideToolCallingTests
     }
 
     [Fact]
-    public void ResolveShortMcpName_ReportsAmbiguousCandidates()
-    {
-        var catalog = new[]
-        {
-            "zuora-a__get_account",
-            "zuora-b__get_account",
-            "wiki_search"
-        };
-
-        var resolved = ClientSideToolCalling.ResolveShortMcpName("get_account", catalog);
-        Assert.Equal(ShortMcpNameKind.Ambiguous, resolved.Kind);
-        Assert.Null(resolved.ResolvedName);
-        Assert.Equal(2, resolved.Candidates.Count);
-        Assert.Null(ClientSideToolCalling.TryExpandShortMcpName("get_account", catalog));
-    }
-
-    [Fact]
     public void BuildCatalog_SkipsParamsForOpenStubSchemas()
     {
         var tools = new List<OllamaTool>
