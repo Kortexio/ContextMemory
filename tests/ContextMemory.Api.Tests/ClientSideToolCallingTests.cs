@@ -1,4 +1,5 @@
 using ContextMemory.Core.Agentic;
+using ContextMemory.Core.Agentic.Mcp;
 using ContextMemory.Core.Models;
 using Xunit;
 
@@ -94,8 +95,68 @@ public sealed class ClientSideToolCallingTests
 
         var system = messages[0].Content!;
         Assert.Equal(1, system.Split(ClientSideToolCalling.CatalogMarker, StringSplitOptions.None).Length - 1);
-        Assert.Contains("zuora__query_objects", system, StringComparison.Ordinal);
+        Assert.Contains("MCP `zuora`", system, StringComparison.Ordinal);
+        Assert.Contains("`query_objects`", system, StringComparison.Ordinal);
+        Assert.DoesNotContain("`zuora__query_objects`", system, StringComparison.Ordinal);
         Assert.Contains("params:", system, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildCatalog_GroupsMcpUnderServerHeader()
+    {
+        var tools = new List<OllamaTool>
+        {
+            new("function", new OllamaFunction("wiki_search", "Search wiki", new { type = "object" })),
+            new("function", new OllamaFunction(
+                "zuora-developer-mcp-PACCAR-ACCP__ask_zuora",
+                "Expert on Zuora billing APIs and account lookups for support",
+                McpPinnedToolFactory.OpenStubParameters())),
+            new("function", new OllamaFunction(
+                "zuora-developer-mcp-PACCAR-ACCP__query_objects",
+                "Query any Zuora object with ZOQL-like filters",
+                McpPinnedToolFactory.OpenStubParameters()))
+        };
+
+        var catalog = ClientSideToolCalling.BuildCatalog(tools);
+        Assert.Contains("`wiki_search`", catalog, StringComparison.Ordinal);
+        Assert.Contains("MCP `zuora-developer-mcp-PACCAR-ACCP`", catalog, StringComparison.Ordinal);
+        Assert.Contains("`ask_zuora`", catalog, StringComparison.Ordinal);
+        Assert.Contains("`query_objects`", catalog, StringComparison.Ordinal);
+        Assert.DoesNotContain("`zuora-developer-mcp-PACCAR-ACCP__ask_zuora`", catalog, StringComparison.Ordinal);
+        // Descriptions truncated for token economy
+        Assert.DoesNotContain("tool_describe for full schema", catalog, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FormatToolNamesSummary_GroupsMcpShortNames()
+    {
+        var tools = new List<OllamaTool>
+        {
+            new("function", new OllamaFunction("wiki_search", "w", new { type = "object" })),
+            new("function", new OllamaFunction(
+                "zuora-dev__ask_zuora", "a", McpPinnedToolFactory.OpenStubParameters())),
+            new("function", new OllamaFunction(
+                "zuora-dev__query_objects", "q", McpPinnedToolFactory.OpenStubParameters()))
+        };
+
+        var summary = ClientSideToolCalling.FormatToolNamesSummary(tools);
+        Assert.Equal("wiki_search | zuora-dev: ask_zuora, query_objects", summary);
+    }
+
+    [Fact]
+    public void TryExpandShortMcpName_ResolvesUniqueShortName()
+    {
+        var catalog = new[]
+        {
+            "wiki_search",
+            "zuora-dev__ask_zuora",
+            "zuora-dev__query_objects"
+        };
+
+        Assert.Equal(
+            "zuora-dev__ask_zuora",
+            ClientSideToolCalling.TryExpandShortMcpName("ask_zuora", catalog));
+        Assert.Null(ClientSideToolCalling.TryExpandShortMcpName("missing", catalog));
     }
 
     [Fact]

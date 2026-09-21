@@ -654,7 +654,9 @@ public sealed class McpJsonRpcClientTests
             t => Assert.True(McpPinnedToolFactory.IsOpenStubParameters(t.Function.Parameters)));
 
         var summary = await registry.BuildToolNamesSummaryAsync(config, "accounts", null);
-        Assert.Contains("zuora__query_objects", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("zuora:", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("query_objects", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("zuora__query_objects", summary, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class StubMcpCatalog(IReadOnlyList<McpToolDefinition> tools) : IMcpToolCatalog

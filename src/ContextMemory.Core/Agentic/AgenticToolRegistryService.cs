@@ -75,7 +75,7 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
     {
         var tools = await BuildToolsAsync(runtimeConfig, userQuery, recentToolNames, cancellationToken)
             .ConfigureAwait(false);
-        return string.Join(", ", tools.Select(t => t.Function.Name));
+        return ClientSideToolCalling.FormatToolNamesSummary(tools);
     }
 
     public List<OllamaMcpServer> BuildMcpServers(AppRuntimeConfig runtimeConfig) =>

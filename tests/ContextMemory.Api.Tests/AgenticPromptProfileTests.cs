@@ -164,7 +164,7 @@ public sealed class LlmCapabilitiesResolverTests
     }
 
     [Fact]
-    public void ResolveMaxMcpTools_RespectsTenantConfig_EvenForWeakModels()
+    public void ResolveMaxMcpTools_ClientSidePrompt_ClampsTenantConfig()
     {
         var config = new AppRuntimeConfig
         {
@@ -177,12 +177,51 @@ public sealed class LlmCapabilitiesResolverTests
             }
         };
 
+        Assert.Equal(
+            LlmCapabilitiesResolver.ClientSidePromptMaxMcpTools,
+            LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
+        Assert.True(LlmCapabilitiesResolver.From(config).PreferClientSideToolParsing);
+    }
+
+    [Fact]
+    public void ResolveMaxMcpTools_NativePath_RespectsTenantConfig()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            LlmBackend = "openai",
+            LlmModel = "gpt-4o",
+            Agentic = new AgenticConfig
+            {
+                Tools = new AgenticToolsConfig { MaxMcpToolsPerTurn = 8 }
+            }
+        };
+
         Assert.Equal(8, LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
-        Assert.Equal(ModelHarnessMode.Weak, LlmCapabilitiesResolver.From(config).HarnessMode);
+        Assert.False(LlmCapabilitiesResolver.From(config).PreferClientSideToolParsing);
     }
 
     [Fact]
     public void ResolveMaxMcpTools_ClampsOversizedTenantConfig()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            LlmBackend = "openai",
+            LlmModel = "gpt-4o",
+            Agentic = new AgenticConfig
+            {
+                Tools = new AgenticToolsConfig { MaxMcpToolsPerTurn = 100 }
+            }
+        };
+
+        Assert.Equal(
+            LlmCapabilitiesResolver.AbsoluteMaxMcpToolsPerTurn,
+            LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
+    }
+
+    [Fact]
+    public void ResolveMaxMcpTools_ClientSidePrompt_ClampsOversizedToSoftCap()
     {
         var config = new AppRuntimeConfig
         {
@@ -196,12 +235,31 @@ public sealed class LlmCapabilitiesResolverTests
         };
 
         Assert.Equal(
+            LlmCapabilitiesResolver.ClientSidePromptMaxMcpTools,
+            LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
+    }
+
+    [Fact]
+    public void ResolveMaxMcpTools_DefaultsToAbsoluteMaxWhenUnset_OnNativePath()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            LlmBackend = "openai",
+            LlmModel = "gpt-4o",
+            Agentic = new AgenticConfig
+            {
+                Tools = new AgenticToolsConfig { MaxMcpToolsPerTurn = 0 }
+            }
+        };
+
+        Assert.Equal(
             LlmCapabilitiesResolver.AbsoluteMaxMcpToolsPerTurn,
             LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
     }
 
     [Fact]
-    public void ResolveMaxMcpTools_DefaultsToAbsoluteMaxWhenUnset()
+    public void ResolveMaxMcpTools_DefaultsToClientSideCap_ForDefaultQwenOllama()
     {
         var config = new AppRuntimeConfig
         {
@@ -213,7 +271,7 @@ public sealed class LlmCapabilitiesResolverTests
         };
 
         Assert.Equal(
-            LlmCapabilitiesResolver.AbsoluteMaxMcpToolsPerTurn,
+            LlmCapabilitiesResolver.ClientSidePromptMaxMcpTools,
             LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
     }
 

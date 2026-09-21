@@ -205,6 +205,34 @@ public sealed class ProseToolCallParserTests
     }
 
     [Fact]
+    public void FilterAgainstCatalog_ExpandsShortMcpNames()
+    {
+        var catalog = new List<OllamaTool>
+        {
+            new("function", new OllamaFunction("wiki_search", null, null)),
+            new("function", new OllamaFunction("zuora-dev__ask_zuora", null, null)),
+            new("function", new OllamaFunction("zuora-dev__query_objects", null, null))
+        };
+
+        var raw = new List<OllamaToolCall>
+        {
+            new(new OllamaFunctionCall("ask_zuora", """{"question":"status?"}"""))
+        };
+
+        var filtered = ProseToolCallParser.FilterAgainstCatalog(
+            raw,
+            catalog,
+            maxPerTurn: 6,
+            out var droppedUnknown,
+            out _,
+            out _);
+
+        Assert.NotNull(filtered);
+        Assert.Equal(0, droppedUnknown);
+        Assert.Equal("zuora-dev__ask_zuora", filtered![0].Function.Name);
+    }
+
+    [Fact]
     public void FilterAgainstCatalog_ReturnsNull_WhenCatalogEmpty()
     {
         var raw = new List<OllamaToolCall>
