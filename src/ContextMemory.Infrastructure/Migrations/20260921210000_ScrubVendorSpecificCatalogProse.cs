@@ -41,7 +41,7 @@ public partial class ScrubVendorSpecificCatalogProse : Migration
                   "noNetworkMarkers": ["não tem acesso à rede","nao tem acesso a rede","sem acesso à rede","sem acesso a rede","não tem acesso a rede","no access to the network","no network access","without network access","cannot access the network","can''t access the network","network egress","rede externa","external network","dns/timeout","dns timeout","falhará com erro de conexão","falhara com erro de conexao","will fail with a connection","não será executado com sucesso","nao sera executado com sucesso","will not be executed successfully","não há como contornar","nao ha como contornar","no way to work around"],
                   "sandboxSubjectMarkers": ["python_execute","shell_execute","node_execute","sandbox","aca"],
                   "hypotheticalMarkers": ["o que aconteceria","what would happen","se eu tentasse","if i tried","if i were to"]
-                }'::text,
+                }'::jsonb,
                 "UpdatedAt" = NOW()
             WHERE "Id" = 'sandbox-claim-reject' AND "IsSystem" = TRUE;
             """);
@@ -54,7 +54,7 @@ public partial class ScrubVendorSpecificCatalogProse : Migration
                   "liveDataMarkers": ["account","conta","subscription","subscricao","subscrição","subscricoes","subscrições","assinatura","invoice","fatura","payment","pagamento","billing","canceled","cancelled","cancelad","customer","cliente","balance","saldo","rate plan","query_objects","accountnumber","account number","ticket","tickets","jira","issue","issues","confluence","wiki","validacao","validação"],
                   "evidenceToolMarkers": ["__","query_objects","get_account","manage_customer","wiki_search","wiki_grep","wiki_get","wiki_read"],
                   "honestUnknownMarkers": ["not found","no results","no evidence","could not find","couldn''t find","unable to find","no matching","empty result","tool failed","tool error","failed","não encontrei","nao encontrei","não foi possível","nao foi possivel","sem resultados","sem evidência","sem evidencia","não há dados","nao ha dados","falhou"]
-                }'::text,
+                }'::jsonb,
                 "UpdatedAt" = NOW()
             WHERE "Id" = 'live-data-evidence-required' AND "IsSystem" = TRUE;
             """);
