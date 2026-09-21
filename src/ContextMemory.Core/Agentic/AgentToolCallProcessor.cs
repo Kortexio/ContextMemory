@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using ContextMemory.Core.Agentic.Policies;
 using ContextMemory.Core.Agentic.Prompts;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Localization;
@@ -18,7 +17,6 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
     private readonly ISessionArtifactStore _artifactStore;
     private readonly IExecutionPolicyEvaluator _executionPolicy;
     private readonly ContextMemoryOptions _options;
-    private readonly AgenticToolCallPolicyChain _policyChain;
 
     public AgentToolCallProcessor(
         IEnumerable<IToolExecutor> toolExecutors,
@@ -27,8 +25,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
         ISessionStore sessionStore,
         ISessionArtifactStore artifactStore,
         IExecutionPolicyEvaluator executionPolicy,
-        IOptions<ContextMemoryOptions> options,
-        AgenticToolCallPolicyChain? policyChain = null)
+        IOptions<ContextMemoryOptions> options)
     {
         _toolExecutors = toolExecutors;
         _sessionToolExecutors = sessionToolExecutors;
@@ -37,38 +34,54 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
         _artifactStore = artifactStore;
         _executionPolicy = executionPolicy;
         _options = options.Value;
-        _policyChain = policyChain ?? AgenticToolCallPolicyChain.CreateDefault();
     }
 
     public async Task<AgentToolCallOutcome> ProcessAsync(
-        AgentToolCallContext context,
+        OllamaToolCall toolCall,
+        string appId,
+        string userId,
+        string sessionId,
+        AppRuntimeConfig runtimeConfig,
+        int iteration,
+        List<AgentExecutionStep> steps,
+        List<OllamaMessage> messages,
+        Action<AgenticProgressEvent>? report,
+        bool skipConfirmation,
+        IReadOnlyList<OllamaTool>? turnCatalog = null,
         CancellationToken cancellationToken = default)
     {
-        var toolCall = context.ToolCall;
-        var appId = context.AppId;
-        var userId = context.UserId;
-        var sessionId = context.SessionId;
-        var runtimeConfig = context.RuntimeConfig;
-        var iteration = context.Iteration;
-        var steps = context.Steps;
-        var messages = context.Messages;
-        var report = context.Report;
-        var skipConfirmation = context.SkipConfirmation;
-
-        if (_policyChain.TryReject(
-                new AgenticToolCallPolicyContext(
-                    toolCall.Function.Name,
-                    toolCall.Function.Arguments,
-                    steps,
-                    runtimeConfig,
-                    context.TurnCatalog),
-                out var policyFeedback,
-                out var policyName))
+        if (AgenticDuplicateToolCallGuard.TryReject(
+                toolCall.Function.Name,
+                toolCall.Function.Arguments,
+                steps,
+                runtimeConfig,
+                out var duplicateFeedback))
         {
             return RejectByGuard(
-                context,
-                policyFeedback,
-                MapPolicySummary(policyName));
+                toolCall,
+                iteration,
+                steps,
+                messages,
+                runtimeConfig,
+                duplicateFeedback,
+                "Duplicate tool call rejected");
+        }
+
+        if (AgenticRequiredArgumentsGuard.TryReject(
+                toolCall.Function.Name,
+                toolCall.Function.Arguments,
+                turnCatalog,
+                runtimeConfig,
+                out var requiredFeedback))
+        {
+            return RejectByGuard(
+                toolCall,
+                iteration,
+                steps,
+                messages,
+                runtimeConfig,
+                requiredFeedback,
+                "Required arguments missing");
         }
 
         var executionPolicy = PolicyLayersFactory
@@ -81,10 +94,29 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
 
         if (execDecision == ExecutionPolicyDecision.Deny)
         {
-            return RejectByPolicy(
-                context,
-                "Tool denied by execution policy.",
-                "ExecutionPolicy denied");
+            var denied = new ToolExecutionResult
+            {
+                Output = "Tool denied by execution policy.",
+                ExitCode = 1
+            };
+            messages.Add(new OllamaMessage
+            {
+                Role = "tool",
+                Content = AgenticToolObservationFormatter.Format(
+                    toolCall.Function.Name, denied, runtimeConfig)
+            });
+            steps.Add(new AgentExecutionStep
+            {
+                Iteration = iteration,
+                ToolName = toolCall.Function.Name,
+                Arguments = toolCall.Function.Arguments,
+                Output = denied.Output ?? string.Empty,
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero,
+                Summary = "ExecutionPolicy denied"
+            });
+            return new AgentToolCallOutcome { Result = denied };
         }
 
         if (execDecision == ExecutionPolicyDecision.RequireConfirm && !skipConfirmation)
@@ -209,10 +241,29 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
             runtimeConfig);
         if (!preHook.Allowed)
         {
-            return RejectByPolicy(
-                context,
-                preHook.Message ?? "Tool denied by PreToolUse hook.",
-                "PreToolUse denied");
+            var denied = new ToolExecutionResult
+            {
+                Output = preHook.Message ?? "Tool denied by PreToolUse hook.",
+                ExitCode = 1
+            };
+            messages.Add(new OllamaMessage
+            {
+                Role = "tool",
+                Content = AgenticToolObservationFormatter.Format(
+                    toolCall.Function.Name, denied, runtimeConfig)
+            });
+            steps.Add(new AgentExecutionStep
+            {
+                Iteration = iteration,
+                ToolName = toolCall.Function.Name,
+                Arguments = toolCall.Function.Arguments,
+                Output = denied.Output ?? string.Empty,
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero,
+                Summary = "PreToolUse denied"
+            });
+            return new AgentToolCallOutcome { Result = denied };
         }
 
         if (preHook.RequireConfirm && !skipConfirmation)
@@ -367,31 +418,14 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
         return new AgentToolCallOutcome { Result = toolResult };
     }
 
-    private static string MapPolicySummary(string? policyName) =>
-        policyName switch
-        {
-            "required-arguments" => "Required arguments missing",
-            "wiki-budget" or "wiki-empty-query" or "duplicate-tool-call" => "Duplicate tool call rejected",
-            _ => "Tool call rejected by policy"
-        };
-
     private static AgentToolCallOutcome RejectByGuard(
-        AgentToolCallContext context,
+        OllamaToolCall toolCall,
+        int iteration,
+        List<AgentExecutionStep> steps,
+        List<OllamaMessage> messages,
+        AppRuntimeConfig runtimeConfig,
         string feedback,
-        string summary) =>
-        RejectCore(context, feedback, summary, rejectedByGuard: true);
-
-    private static AgentToolCallOutcome RejectByPolicy(
-        AgentToolCallContext context,
-        string feedback,
-        string summary) =>
-        RejectCore(context, feedback, summary, rejectedByGuard: false);
-
-    private static AgentToolCallOutcome RejectCore(
-        AgentToolCallContext context,
-        string feedback,
-        string summary,
-        bool rejectedByGuard)
+        string summary)
     {
         var rejected = new ToolExecutionResult
         {
@@ -399,23 +433,23 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
             ExitCode = 1,
             Summary = summary
         };
-        context.Messages.Add(new OllamaMessage
+        messages.Add(new OllamaMessage
         {
             Role = "tool",
             Content = AgenticToolObservationFormatter.Format(
-                context.ToolCall.Function.Name, rejected, context.RuntimeConfig)
+                toolCall.Function.Name, rejected, runtimeConfig)
         });
-        context.Steps.Add(new AgentExecutionStep
+        steps.Add(new AgentExecutionStep
         {
-            Iteration = context.Iteration,
-            ToolName = context.ToolCall.Function.Name,
-            Arguments = context.ToolCall.Function.Arguments,
+            Iteration = iteration,
+            ToolName = toolCall.Function.Name,
+            Arguments = toolCall.Function.Arguments,
             Output = feedback,
             ExitCode = 1,
             Success = false,
             Duration = TimeSpan.Zero,
             Summary = summary,
-            RejectedByGuard = rejectedByGuard
+            RejectedByGuard = true
         });
         return new AgentToolCallOutcome { Result = rejected };
     }

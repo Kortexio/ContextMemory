@@ -192,20 +192,17 @@ public sealed class AgentOrchestrator : IAgentOrchestrator
 
             var resumeResult = await _toolCallProcessor
                 .ProcessAsync(
-                    new AgentToolCallContext
-                    {
-                        ToolCall = resumeToolCall,
-                        AppId = appId,
-                        UserId = userId,
-                        SessionId = sessionId,
-                        RuntimeConfig = runtimeConfig,
-                        Iteration = confirmedPending.Iteration,
-                        Steps = steps,
-                        Messages = messages,
-                        Report = report,
-                        SkipConfirmation = true,
-                        TurnCatalog = null
-                    },
+                    resumeToolCall,
+                    appId,
+                    userId,
+                    sessionId,
+                    runtimeConfig,
+                    confirmedPending.Iteration,
+                    steps,
+                    messages,
+                    report,
+                    skipConfirmation: true,
+                    turnCatalog: null,
                     cancellationToken)
                 .ConfigureAwait(false);
 

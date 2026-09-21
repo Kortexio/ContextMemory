@@ -128,11 +128,7 @@ public static partial class LlmCapabilitiesResolver
     /// </summary>
     public const int WeakPromptMaxMcpTools = 6;
 
-    /// <summary>
-    /// Obsolete alias for <see cref="WeakPromptMaxMcpTools"/> (4k baseline).
-    /// Kept so older call sites compile; new code should use <see cref="ResolveWeakMaxMcpTools"/>.
-    /// </summary>
-    [Obsolete("Use ResolveWeakMaxMcpTools(config) or WeakPromptMaxMcpTools (4k baseline).")]
+    /// <summary>Alias kept for older call sites / tests (equals the 4k Weak baseline).</summary>
     public const int ClientSidePromptMaxMcpTools = WeakPromptMaxMcpTools;
 
     /// <summary>
