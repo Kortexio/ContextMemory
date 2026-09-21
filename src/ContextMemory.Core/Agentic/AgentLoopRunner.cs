@@ -603,17 +603,14 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     forceAnswerOnly = true;
                     requireToolChoice = false;
                     _logger.LogWarning(
-                        "Forcing answer-only iteration for {AppId} after repeated wiki budget rejections with evidence",
+                        "Forcing answer-only iteration for {AppId} after repeated wiki budget rejections",
                         request.AppId);
                     messages.Add(new OllamaMessage
                     {
                         Role = "user",
-                        Content = TenantLocale.Select(
-                            request.RuntimeConfig.DefaultLanguage,
-                            "STOP. Wiki budget is exhausted and evidence was already gathered. "
-                            + "Answer the user NOW in plain text. Do NOT emit tool_calls or JSON tool invocations.",
-                            "PARA. O orçamento wiki esgotou-se e já há evidência recolhida. "
-                            + "Responde AGORA ao utilizador em texto. NÃO emitas tool_calls nem invocações JSON de tools.")
+                        Content = AgenticDuplicateToolCallGuard.BuildForceAnswerNudge(
+                            request.RuntimeConfig,
+                            steps)
                     });
                 }
 

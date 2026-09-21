@@ -171,14 +171,12 @@ public static class AgenticDuplicateToolCallGuard
     }
 
     /// <summary>
-    /// True when wiki already returned successful evidence and the model keeps hitting the wiki budget.
-    /// Caller should strip tools and force a text answer on the next iteration.
+    /// True when the model keeps hitting the wiki budget (with or without prior wiki evidence).
+    /// Caller should strip tools and force a text answer — otherwise weak models burn all iterations
+    /// on repeated budget rejections (even when feedback asked for MCP).
     /// </summary>
     public static bool ShouldForceAnswerAfterWikiBudget(IReadOnlyList<AgentExecutionStep> steps)
     {
-        if (!HasSuccessfulWikiEvidence(steps))
-            return false;
-
         var trailing = 0;
         for (var i = steps.Count - 1; i >= 0; i--)
         {
@@ -188,6 +186,28 @@ public static class AgenticDuplicateToolCallGuard
         }
 
         return trailing >= MaxWikiBudgetRejectionsBeforeForceAnswer;
+    }
+
+    public static string BuildForceAnswerNudge(AppRuntimeConfig runtimeConfig, IReadOnlyList<AgentExecutionStep> steps)
+    {
+        if (HasSuccessfulWikiEvidence(steps))
+        {
+            return TenantLocale.Select(
+                runtimeConfig.DefaultLanguage,
+                "STOP. Wiki budget is exhausted and evidence was already gathered. "
+                + "Answer the user NOW in plain text. Do NOT emit tool_calls or JSON tool invocations.",
+                "PARA. O orçamento wiki esgotou-se e já há evidência recolhida. "
+                + "Responde AGORA ao utilizador em texto. NÃO emitas tool_calls nem invocações JSON de tools.");
+        }
+
+        return TenantLocale.Select(
+            runtimeConfig.DefaultLanguage,
+            "STOP. Wiki budget is exhausted and further wiki calls are blocked. "
+            + "Answer the user NOW honestly from what you have (or say you could not get live data). "
+            + "Do NOT emit tool_calls or JSON tool invocations.",
+            "PARA. O orçamento wiki esgotou-se e novas chamadas wiki estão bloqueadas. "
+            + "Responde AGORA com honestidade com o que tens (ou diz que não obtiveste dados vivos). "
+            + "NÃO emitas tool_calls nem invocações JSON de tools.");
     }
 
     public static bool IsWikiBudgetRejection(AgentExecutionStep step)

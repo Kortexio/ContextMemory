@@ -229,7 +229,7 @@ public sealed class AgenticDuplicateToolCallGuardTests
     }
 
     [Fact]
-    public void ShouldForceAnswerAfterWikiBudget_False_WithoutEvidence()
+    public void ShouldForceAnswerAfterWikiBudget_True_EvenWithoutEvidence()
     {
         var steps = new List<AgentExecutionStep>
         {
@@ -255,7 +255,9 @@ public sealed class AgenticDuplicateToolCallGuardTests
             }
         };
 
-        Assert.False(AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterWikiBudget(steps));
+        Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterWikiBudget(steps));
+        var nudge = AgenticDuplicateToolCallGuard.BuildForceAnswerNudge(Config(), steps);
+        Assert.Contains("honestidade", nudge, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
