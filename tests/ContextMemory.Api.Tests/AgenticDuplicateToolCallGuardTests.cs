@@ -289,6 +289,72 @@ public sealed class AgenticDuplicateToolCallGuardTests
     }
 
     [Fact]
+    public void Rejects_IdenticalFailedDiscoveryCall()
+    {
+        var steps = new List<AgentExecutionStep>
+        {
+            new()
+            {
+                Iteration = 2,
+                ToolName = SessionDiscoveryTools.ArtifactRead,
+                Arguments = """{"artifact_id":"tool:wiki_search:a689673a"}""",
+                Output = "artifact_read requires artifactId.",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero
+            }
+        };
+
+        var rejected = AgenticDuplicateToolCallGuard.TryReject(
+            SessionDiscoveryTools.ArtifactRead,
+            """{"artifact_id":"tool:wiki_search:a689673a"}""",
+            steps,
+            Config(),
+            out var feedback);
+
+        Assert.True(rejected);
+        Assert.Contains("já falhou", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RepeatedFailedDiscoveryCall_ForcesAnswerWhenEvidenceExists()
+    {
+        var arguments = """{"artifact_id":"tool:wiki_search:a689673a"}""";
+        var steps = new List<AgentExecutionStep>
+        {
+            Successful("wiki_search", """{"query":"paccar rules"}""", "PACCAR evidence"),
+            new()
+            {
+                Iteration = 2,
+                ToolName = SessionDiscoveryTools.ArtifactRead,
+                Arguments = arguments,
+                Output = "artifact_read requires artifactId.",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero
+            },
+            new()
+            {
+                Iteration = 3,
+                ToolName = SessionDiscoveryTools.ArtifactRead,
+                Arguments = arguments,
+                Output = "Rejected: identical artifact_read already failed.",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero,
+                Summary = AgenticDuplicateToolCallGuard.DuplicateRejectedSummary
+            }
+        };
+
+        Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterRepeatedDiscoveryFailure(steps));
+        Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswer(steps));
+        Assert.Contains(
+            "leitura interna",
+            AgenticDuplicateToolCallGuard.BuildForceAnswerNudge(Config(), steps),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void IdenticalSuccessfulCall_FeedbackForcesAnswerNotMoreTools()
     {
         var config = Config(withMcp: true);
@@ -478,6 +544,19 @@ public sealed class AgenticDuplicateToolCallGuardTests
             """{"query":"hello world"}""");
 
         Assert.Equal(a, b);
+    }
+
+    [Fact]
+    public void Signature_NormalizesJsonPropertyOrderAndSnakeCase()
+    {
+        var snake = AgenticDuplicateToolCallGuard.BuildSignature(
+            SessionDiscoveryTools.ArtifactTail,
+            """{"artifact_id":"TOOL:WIKI_SEARCH:ABC","max_chars":2000}""");
+        var camel = AgenticDuplicateToolCallGuard.BuildSignature(
+            SessionDiscoveryTools.ArtifactTail,
+            """{"maxChars":2000,"artifactId":"tool:wiki_search:abc"}""");
+
+        Assert.Equal(snake, camel);
     }
 
     private static AgentExecutionStep Successful(string tool, string args, string output = "ok") =>

@@ -98,6 +98,7 @@ public sealed class AgenticTimeoutIntegrationTests : IClassFixture<AgenticStubWe
         _factory = factory;
         _client = factory.CreateClient();
         _factory.AgenticHandler.InfiniteToolLoop = true;
+        _factory.AgenticHandler.VaryInfiniteToolLoopArguments = true;
     }
 
     [Fact]

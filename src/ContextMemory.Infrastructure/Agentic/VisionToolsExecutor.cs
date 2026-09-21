@@ -56,10 +56,8 @@ public sealed class VisionToolsExecutor : ISessionScopedToolExecutor
             using var doc = JsonDocument.Parse(
                 string.IsNullOrWhiteSpace(toolCall.Function.Arguments) ? "{}" : toolCall.Function.Arguments);
             var root = doc.RootElement;
-            if (root.TryGetProperty("url", out var u))
-                url = u.GetString();
-            if (root.TryGetProperty("artifactId", out var a))
-                artifactId = a.GetString();
+            url = AgenticToolArguments.GetString(root, "url");
+            artifactId = AgenticToolArguments.GetString(root, "artifactId");
         }
         catch
         {

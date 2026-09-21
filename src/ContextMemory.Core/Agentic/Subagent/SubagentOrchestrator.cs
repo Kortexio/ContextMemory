@@ -334,34 +334,30 @@ public sealed class SubagentOrchestrator : ISubagentOrchestrator
         if (maxDepth <= 0)
             maxDepth = 2;
 
-        var maxIterations = 4;
-        if (root.TryGetProperty("maxIterations", out var m) && m.TryGetInt32(out var n) && n > 0)
-            maxIterations = Math.Min(n, 8);
+        var maxIterations = Math.Min(AgenticToolArguments.GetInt(root, "maxIterations", 4), 8);
 
-        if (root.TryGetProperty("depth", out var d) && d.TryGetInt32(out var depthArg) && depthArg > 0)
+        var depthArg = AgenticToolArguments.GetInt(root, "depth", 0);
+        var maxDepthArg = AgenticToolArguments.GetInt(root, "maxDepth", 0);
+        if (depthArg > 0)
             maxDepth = Math.Min(maxDepth, depthArg);
-        else if (root.TryGetProperty("maxDepth", out var md) && md.TryGetInt32(out var maxDepthArg) && maxDepthArg > 0)
+        else if (maxDepthArg > 0)
             maxDepth = Math.Min(maxDepth, maxDepthArg);
 
         var role = SubagentRole.General;
-        if (root.TryGetProperty("role", out var roleEl))
-            TryParseRole(roleEl.GetString(), out role);
+        TryParseRole(AgenticToolArguments.GetString(root, "role"), out role);
 
-        string? modelHint = null;
-        if (root.TryGetProperty("modelHint", out var mh) && mh.ValueKind == JsonValueKind.String)
-            modelHint = mh.GetString();
+        var modelHint = AgenticToolArguments.GetString(root, "modelHint");
 
         var shared = SubagentSharedMemoryMode.None;
-        if (root.TryGetProperty("sharedMemory", out var sm)
-            && sm.ValueKind == JsonValueKind.String
-            && Enum.TryParse(sm.GetString(), ignoreCase: true, out SubagentSharedMemoryMode parsed))
+        if (Enum.TryParse(
+                AgenticToolArguments.GetString(root, "sharedMemory"),
+                ignoreCase: true,
+                out SubagentSharedMemoryMode parsed))
         {
             shared = parsed;
         }
 
-        var budget = 0;
-        if (root.TryGetProperty("budgetTokens", out var bt) && bt.TryGetInt32(out var budgetVal) && budgetVal > 0)
-            budget = budgetVal;
+        var budget = AgenticToolArguments.GetInt(root, "budgetTokens", 0);
 
         return new SubagentSpec
         {

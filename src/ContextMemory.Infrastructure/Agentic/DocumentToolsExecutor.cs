@@ -54,10 +54,8 @@ public sealed class DocumentToolsExecutor : ISessionScopedToolExecutor
             using var doc = JsonDocument.Parse(
                 string.IsNullOrWhiteSpace(toolCall.Function.Arguments) ? "{}" : toolCall.Function.Arguments);
             var root = doc.RootElement;
-            if (root.TryGetProperty("artifactId", out var a))
-                artifactId = a.GetString();
-            if (root.TryGetProperty("persistToWiki", out var p) && p.ValueKind is JsonValueKind.True or JsonValueKind.False)
-                persistOverride = p.GetBoolean();
+            artifactId = AgenticToolArguments.GetString(root, "artifactId");
+            persistOverride = AgenticToolArguments.GetBool(root, "persistToWiki");
         }
         catch
         {

@@ -41,13 +41,23 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
     {
         _ = report;
         var name = toolCall.Function.Name;
-        using var doc = JsonDocument.Parse(
-            string.IsNullOrWhiteSpace(toolCall.Function.Arguments) ? "{}" : toolCall.Function.Arguments);
+        JsonDocument parsed;
+        try
+        {
+            parsed = JsonDocument.Parse(
+                string.IsNullOrWhiteSpace(toolCall.Function.Arguments) ? "{}" : toolCall.Function.Arguments);
+        }
+        catch (JsonException)
+        {
+            return Fail($"Invalid JSON arguments for {name}.");
+        }
+
+        using var doc = parsed;
         var root = doc.RootElement;
 
         if (string.Equals(name, SessionDiscoveryTools.ArtifactRead, StringComparison.OrdinalIgnoreCase))
         {
-            var id = GetString(root, "artifactId");
+            var id = AgenticToolArguments.GetString(root, "artifactId");
             if (string.IsNullOrWhiteSpace(id))
                 return Fail("artifact_read requires artifactId.");
             var content = await _artifacts.ReadAsync(appId, userId, sessionId, id, cancellationToken)
@@ -59,10 +69,10 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
 
         if (string.Equals(name, SessionDiscoveryTools.ArtifactTail, StringComparison.OrdinalIgnoreCase))
         {
-            var id = GetString(root, "artifactId");
+            var id = AgenticToolArguments.GetString(root, "artifactId");
             if (string.IsNullOrWhiteSpace(id))
                 return Fail("artifact_tail requires artifactId.");
-            var maxChars = GetInt(root, "maxChars", 2000);
+            var maxChars = AgenticToolArguments.GetInt(root, "maxChars", 2000);
             var content = await _artifacts.TailAsync(appId, userId, sessionId, id, maxChars, cancellationToken)
                 .ConfigureAwait(false);
             return content is null
@@ -72,10 +82,10 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
 
         if (string.Equals(name, SessionDiscoveryTools.SkillSearch, StringComparison.OrdinalIgnoreCase))
         {
-            var query = GetString(root, "query");
+            var query = AgenticToolArguments.GetString(root, "query");
             if (string.IsNullOrWhiteSpace(query))
                 return Fail("skill_search requires query.");
-            var maxResults = GetInt(root, "maxResults", 8);
+            var maxResults = AgenticToolArguments.GetInt(root, "maxResults", 8);
             return Ok(SearchCatalog(
                 runtimeConfig.ResolvedPolicy.ActiveSkills.Where(s => AgenticSkillActivation.IsSkill(s.Activation)),
                 query,
@@ -85,7 +95,7 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
 
         if (string.Equals(name, SessionDiscoveryTools.SkillRead, StringComparison.OrdinalIgnoreCase))
         {
-            var skillId = GetString(root, "skillId");
+            var skillId = AgenticToolArguments.GetString(root, "skillId");
             if (string.IsNullOrWhiteSpace(skillId))
                 return Fail("skill_read requires skillId.");
 
@@ -104,10 +114,10 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
 
         if (string.Equals(name, SessionDiscoveryTools.RuleSearch, StringComparison.OrdinalIgnoreCase))
         {
-            var query = GetString(root, "query");
+            var query = AgenticToolArguments.GetString(root, "query");
             if (string.IsNullOrWhiteSpace(query))
                 return Fail("rule_search requires query.");
-            var maxResults = GetInt(root, "maxResults", 8);
+            var maxResults = AgenticToolArguments.GetInt(root, "maxResults", 8);
             return Ok(SearchCatalog(
                 runtimeConfig.ResolvedPolicy.ActiveSkills.Where(s => AgenticSkillActivation.IsRequestable(s.Activation)),
                 query,
@@ -117,7 +127,7 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
 
         if (string.Equals(name, SessionDiscoveryTools.RuleRead, StringComparison.OrdinalIgnoreCase))
         {
-            var ruleId = GetString(root, "ruleId");
+            var ruleId = AgenticToolArguments.GetString(root, "ruleId");
             if (string.IsNullOrWhiteSpace(ruleId))
                 return Fail("rule_read requires ruleId.");
 
@@ -136,11 +146,11 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
 
         if (string.Equals(name, SessionDiscoveryTools.ToolSearch, StringComparison.OrdinalIgnoreCase))
         {
-            var query = GetString(root, "query");
+            var query = AgenticToolArguments.GetString(root, "query");
             if (string.IsNullOrWhiteSpace(query))
                 return Fail("tool_search requires query.");
             var defaultMax = LlmCapabilitiesResolver.ResolveMaxMcpTools(runtimeConfig);
-            var maxResults = GetInt(root, "maxResults", defaultMax);
+            var maxResults = AgenticToolArguments.GetInt(root, "maxResults", defaultMax);
             maxResults = Math.Clamp(maxResults, 1, LlmCapabilitiesResolver.AbsoluteMaxMcpToolsPerTurn);
             return Ok(await SearchMcpToolsAsync(runtimeConfig, query, maxResults, cancellationToken)
                 .ConfigureAwait(false));
@@ -149,9 +159,9 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
         if (string.Equals(name, SessionDiscoveryTools.ToolDescribe, StringComparison.OrdinalIgnoreCase))
         {
             // Models often use name/tool instead of toolName with open schemas.
-            var toolName = GetString(root, "toolName")
-                ?? GetString(root, "name")
-                ?? GetString(root, "tool");
+            var toolName = AgenticToolArguments.GetString(root, "toolName")
+                ?? AgenticToolArguments.GetString(root, "name")
+                ?? AgenticToolArguments.GetString(root, "tool");
             if (string.IsNullOrWhiteSpace(toolName))
                 return Fail("tool_describe requires toolName (or name/tool).");
 
@@ -164,10 +174,10 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
 
         if (string.Equals(name, SessionDiscoveryTools.SessionLogSearch, StringComparison.OrdinalIgnoreCase))
         {
-            var query = GetString(root, "query");
+            var query = AgenticToolArguments.GetString(root, "query");
             if (string.IsNullOrWhiteSpace(query))
                 return Fail("session_log_search requires query.");
-            var maxChars = GetInt(root, "maxChars", 2000);
+            var maxChars = AgenticToolArguments.GetInt(root, "maxChars", 2000);
             var snapshot = await _sessionStore.LoadAsync(appId, userId, sessionId, cancellationToken)
                 .ConfigureAwait(false);
             var hits = SearchLog(snapshot.LogMd, query, maxChars);
@@ -381,14 +391,6 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
             joined = joined[..maxChars] + "\n…";
         return joined;
     }
-
-    private static string? GetString(JsonElement root, string name) =>
-        root.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.String
-            ? el.GetString()
-            : null;
-
-    private static int GetInt(JsonElement root, string name, int fallback) =>
-        root.TryGetProperty(name, out var el) && el.TryGetInt32(out var n) && n > 0 ? n : fallback;
 
     private static ToolExecutionResult Ok(string output) => new() { Output = output, ExitCode = 0 };
 
