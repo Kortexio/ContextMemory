@@ -75,6 +75,25 @@ public sealed class LlmCapabilitiesResolverTests
         var caps = LlmCapabilitiesResolver.From(config);
         Assert.Equal(ModelHarnessMode.Weak, caps.HarnessMode);
         Assert.True(caps.InlineEvidenceRules);
+        Assert.True(caps.PreferClientSideToolParsing);
+    }
+
+    [Fact]
+    public void From_Bonsai_OnOpenAiCompatible_UsesClientSideTools()
+    {
+        var config = new AppRuntimeConfig
+        {
+            AppId = "test",
+            LlmBackend = "openai-compatible",
+            LlmModel = "bonsai-27b",
+            LlmEndpoint = "https://server.kortexio.io/v1"
+        };
+
+        var caps = LlmCapabilitiesResolver.From(config);
+        Assert.Equal(AgenticPromptProfile.Qwen, AgenticPromptProfileResolver.Resolve(config));
+        Assert.Equal(ModelHarnessMode.Weak, caps.HarnessMode);
+        Assert.True(caps.PreferClientSideToolParsing);
+        Assert.False(caps.PreferNativeToolCalls);
     }
 
     [Fact]

@@ -114,7 +114,7 @@ public sealed class AgenticDuplicateToolCallGuardTests
     }
 
     [Fact]
-    public void Rejects_WikiAfterBudgetExhausted()
+    public void Rejects_WikiAfterBudgetExhausted_WithEvidence_ForcesAnswerNotMcp()
     {
         var config = Config(withMcp: true);
         var steps = new List<AgentExecutionStep>
@@ -134,7 +134,7 @@ public sealed class AgenticDuplicateToolCallGuardTests
                 Iteration = 2,
                 ToolName = "wiki_search",
                 Arguments = """{"query":"paccar"}""",
-                Output = "no hits",
+                Output = "Found 5 match(es)",
                 ExitCode = 0,
                 Success = true,
                 Duration = TimeSpan.FromMilliseconds(2)
@@ -150,7 +150,112 @@ public sealed class AgenticDuplicateToolCallGuardTests
 
         Assert.True(rejected);
         Assert.Contains("esgotado", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Responde AGORA", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ask_zuora", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Rejects_WikiAfterBudgetExhausted_WithoutEvidence_SuggestsMcp()
+    {
+        var config = Config(withMcp: true);
+        var steps = new List<AgentExecutionStep>
+        {
+            new()
+            {
+                Iteration = 1,
+                ToolName = "wiki_search",
+                Arguments = """{"query":"a"}""",
+                Output = "no hits",
+                ExitCode = 0,
+                Success = false,
+                Duration = TimeSpan.FromMilliseconds(2)
+            },
+            new()
+            {
+                Iteration = 2,
+                ToolName = "wiki_grep",
+                Arguments = """{"pattern":"a"}""",
+                Output = "no hits",
+                ExitCode = 0,
+                Success = false,
+                Duration = TimeSpan.FromMilliseconds(2)
+            }
+        };
+
+        var rejected = AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_search",
+            """{"query":"b"}""",
+            steps,
+            config,
+            out var feedback);
+
+        Assert.True(rejected);
+        Assert.Contains("esgotado", feedback, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ask_zuora", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ShouldForceAnswerAfterWikiBudget_AfterConsecutiveRejectionsWithEvidence()
+    {
+        var steps = new List<AgentExecutionStep>
+        {
+            Successful("wiki_search", """{"query":"paccar"}"""),
+            Successful("wiki_grep", """{"pattern":"ITD"}"""),
+            new()
+            {
+                Iteration = 3,
+                ToolName = "wiki_search",
+                Arguments = """{"query":"x"}""",
+                Output = "Rejected: wiki_search/wiki_grep budget exhausted this turn.",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero,
+                Summary = "Duplicate tool call rejected"
+            },
+            new()
+            {
+                Iteration = 4,
+                ToolName = "wiki_search",
+                Arguments = """{"query":"y"}""",
+                Output = "Rejected: wiki_search/wiki_grep budget exhausted this turn.",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero,
+                Summary = "Duplicate tool call rejected"
+            }
+        };
+
+        Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterWikiBudget(steps));
+    }
+
+    [Fact]
+    public void ShouldForceAnswerAfterWikiBudget_False_WithoutEvidence()
+    {
+        var steps = new List<AgentExecutionStep>
+        {
+            new()
+            {
+                Iteration = 1,
+                ToolName = "wiki_search",
+                Arguments = "{}",
+                Output = "Rejected: wiki_search/wiki_grep budget exhausted this turn.",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero
+            },
+            new()
+            {
+                Iteration = 2,
+                ToolName = "wiki_search",
+                Arguments = "{}",
+                Output = "Rejected: wiki_search/wiki_grep budget exhausted this turn.",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero
+            }
+        };
+
+        Assert.False(AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterWikiBudget(steps));
     }
 
     [Fact]

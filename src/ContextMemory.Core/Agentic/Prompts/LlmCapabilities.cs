@@ -37,12 +37,10 @@ public static partial class LlmCapabilitiesResolver
         var mode = ResolveHarnessMode(config, profile);
 
         var weak = mode == ModelHarnessMode.Weak;
-        // Ollama's native /api/chat Qwen chat-template XML tool parser 500s on format drift
-        // (e.g. "element <function> closed by </parameter>") even when tools[] is small/well-formed.
-        // Scope client-side tool parsing narrowly to that exact combo — other Weak/local models
-        // (llama3.2, mistral, granite, ...) still use native tool_calls and must not regress.
-        var isOllamaChatApi = backend is "ollama" or "ollama-native";
-        var clientSideTools = isOllamaChatApi && profile == AgenticPromptProfile.Qwen;
+        // Harness-based (not server/app specific): Weak models in the Qwen-family profile
+        // often emit malformed native tool_calls across backends. Prefer client-side JSON
+        // catalog for that profile on any llmBackend. Other Weak profiles keep native tools[].
+        var clientSideTools = weak && profile == AgenticPromptProfile.Qwen;
         var supportsVision = ResolveSupportsVision(config);
 
         return new LlmCapabilities(
@@ -58,8 +56,7 @@ public static partial class LlmCapabilitiesResolver
             InlineEvidenceRules: weak,
             PreferSkillDiscovery: !weak,
             SupportsVision: supportsVision,
-            // Weak local models (Bonsai/Qwen on Ollama *or* llama.cpp) burn the same context
-            // whether tools land in a client-side catalog or native tools[] — keep top-K tight.
+            // Weak harness burns context the same whether tools are inlined or native tools[].
             // Strong / frontier paths keep full tenant max (up to AbsoluteMax).
             MaxMcpToolsHint: weak ? WeakPromptMaxMcpTools : int.MaxValue,
             DefaultToolChoice: "auto");

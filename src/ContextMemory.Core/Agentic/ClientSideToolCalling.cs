@@ -38,6 +38,27 @@ public static class ClientSideToolCalling
         messages[idx] = system with { Content = content };
     }
 
+    /// <summary>
+    /// Removes the inlined tool catalog from the system prompt so a force-answer iteration
+    /// cannot keep promoting wiki/MCP calls from leftover catalog text.
+    /// </summary>
+    public static void ClearCatalogFromSystemPrompt(List<OllamaMessage> messages)
+    {
+        var system = messages.FirstOrDefault(m =>
+            string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase));
+        if (system is null)
+            return;
+
+        var content = system.Content ?? string.Empty;
+        var markerIdx = content.IndexOf(CatalogMarker, StringComparison.Ordinal);
+        if (markerIdx < 0)
+            return;
+
+        content = content[..markerIdx].TrimEnd();
+        var idx = messages.IndexOf(system);
+        messages[idx] = system with { Content = content };
+    }
+
     public static string BuildCatalog(IReadOnlyList<OllamaTool> tools)
     {
         var sb = new StringBuilder();
