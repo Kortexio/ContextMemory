@@ -73,6 +73,41 @@ public sealed class AgenticProgressFormatterTests
     }
 
     [Fact]
+    public void FromResult_HidesHarnessPolicyRejectionsFromPublicSteps()
+    {
+        var result = AgentResult.Succeeded(
+            "answer",
+            [
+                new AgentExecutionStep
+                {
+                    Iteration = 1,
+                    ToolName = "wiki_search",
+                    Arguments = """{"query":"paccar"}""",
+                    Output = "evidence",
+                    ExitCode = 0,
+                    Success = true
+                },
+                new AgentExecutionStep
+                {
+                    Iteration = 2,
+                    ToolName = "wiki_grep",
+                    Arguments = """{"pattern":"ITD"}""",
+                    Output = "Rejected: wiki_search/wiki_grep budget exhausted this turn.",
+                    ExitCode = 1,
+                    Success = false,
+                    Summary = AgenticDuplicateToolCallGuard.DuplicateRejectedSummary
+                }
+            ],
+            3);
+
+        var meta = AgenticStreamMetadata.FromResult(result);
+
+        var step = Assert.Single(meta.Steps!);
+        Assert.Equal("wiki_search", step.ToolName);
+        Assert.Contains("1 tool", meta.Label, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void FromProgress_AwaitingConfirmation_UsesDetailWhenPresent()
     {
         var meta = AgenticStreamMetadata.FromProgress(new AgenticProgressEvent
