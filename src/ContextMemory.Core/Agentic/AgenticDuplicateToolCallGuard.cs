@@ -28,10 +28,32 @@ public static class AgenticDuplicateToolCallGuard
     public const int MaxWikiAttemptsPerTurn = 2;
 
     /// <summary>
-    /// After this many consecutive wiki-budget rejections with successful wiki evidence already
-    /// collected, the loop must strip tools and force a final answer (stubborn models ignore feedback).
+    /// After this many consecutive wiki-budget rejections, strip tools and force a final answer.
     /// </summary>
     public const int MaxWikiBudgetRejectionsBeforeForceAnswer = 2;
+
+    /// <summary>
+    /// After this many rejections of an identical tool+args that already succeeded, force a final answer
+    /// from the evidence already in the turn (do not burn iterations on stubborn repeats).
+    /// </summary>
+    public const int MaxDuplicateAfterSuccessRejectionsBeforeForceAnswer = 1;
+
+    /// <summary>Step summary when an identical successful tool+args is rejected.</summary>
+    public const string DuplicateAfterSuccessSummary = "Duplicate after success rejected";
+
+    /// <summary>Generic duplicate rejection summary (empty wiki query, wiki identical, etc.).</summary>
+    public const string DuplicateRejectedSummary = "Duplicate tool call rejected";
+
+    /// <summary>
+    /// True when feedback from <see cref="TryReject"/> means the identical call already succeeded.
+    /// </summary>
+    public static bool FeedbackIndicatesDuplicateAfterSuccess(string? feedback)
+    {
+        if (string.IsNullOrWhiteSpace(feedback))
+            return false;
+        return feedback.Contains("already succeeded", StringComparison.OrdinalIgnoreCase)
+               || feedback.Contains("já teve sucesso", StringComparison.OrdinalIgnoreCase);
+    }
 
     public static bool TryReject(
         string toolName,
@@ -188,8 +210,51 @@ public static class AgenticDuplicateToolCallGuard
         return trailing >= MaxWikiBudgetRejectionsBeforeForceAnswer;
     }
 
+    /// <summary>
+    /// True when an identical tool+args that already succeeded was rejected again.
+    /// Caller should strip tools and answer from the successful result already in the turn.
+    /// </summary>
+    public static bool ShouldForceAnswerAfterDuplicateSuccess(IReadOnlyList<AgentExecutionStep> steps)
+    {
+        var trailing = 0;
+        for (var i = steps.Count - 1; i >= 0; i--)
+        {
+            if (!IsDuplicateAfterSuccessRejection(steps[i]))
+                break;
+            trailing++;
+        }
+
+        return trailing >= MaxDuplicateAfterSuccessRejectionsBeforeForceAnswer;
+    }
+
+    public static bool ShouldForceAnswer(IReadOnlyList<AgentExecutionStep> steps) =>
+        ShouldForceAnswerAfterWikiBudget(steps) || ShouldForceAnswerAfterDuplicateSuccess(steps);
+
+    public static bool IsDuplicateAfterSuccessRejection(AgentExecutionStep step)
+    {
+        if (step.Success)
+            return false;
+
+        if (string.Equals(step.Summary, DuplicateAfterSuccessSummary, StringComparison.Ordinal))
+            return true;
+
+        return FeedbackIndicatesDuplicateAfterSuccess(step.Output);
+    }
+
     public static string BuildForceAnswerNudge(AppRuntimeConfig runtimeConfig, IReadOnlyList<AgentExecutionStep> steps)
     {
+        if (ShouldForceAnswerAfterDuplicateSuccess(steps))
+        {
+            return TenantLocale.Select(
+                runtimeConfig.DefaultLanguage,
+                "STOP. That exact tool call already succeeded earlier this turn. "
+                + "Answer the user NOW from the tool result already gathered. "
+                + "Do NOT emit tool_calls or JSON tool invocations.",
+                "PARA. Essa chamada exacta de tool já teve sucesso neste turno. "
+                + "Responde AGORA ao utilizador com o resultado da tool já obtido. "
+                + "NÃO emitas tool_calls nem invocações JSON de tools.");
+        }
+
         if (HasSuccessfulWikiEvidence(steps))
         {
             return TenantLocale.Select(
@@ -302,11 +367,35 @@ public static class AgenticDuplicateToolCallGuard
     private static string BuildFeedback(string toolName, AppRuntimeConfig runtimeConfig, bool afterFailure)
     {
         var lang = runtimeConfig.DefaultLanguage;
-        var hasMcp = HasConfiguredMcp(runtimeConfig);
         var isWiki = QueryFocusedTools.Contains(NormalizeToolName(toolName));
-        var prior = afterFailure
-            ? TenantLocale.Select(lang, "already failed", "já falhou")
-            : TenantLocale.Select(lang, "already succeeded", "já teve sucesso");
+
+        // Identical call that already succeeded: stop tooling and answer from that result.
+        if (!afterFailure)
+        {
+            if (isWiki)
+            {
+                return TenantLocale.Select(
+                    lang,
+                    "Rejected: identical wiki_search already succeeded — do NOT repeat the same query. "
+                    + "Answer the user NOW from the wiki result already gathered. "
+                    + "No tool_calls, no JSON tool invocations.",
+                    "Rejeitado: wiki_search idêntica já teve sucesso — NÃO repitas a mesma query. "
+                    + "Responde AGORA ao utilizador com o resultado wiki já obtido. "
+                    + "Sem tool_calls, sem invocações JSON de tools.");
+            }
+
+            return TenantLocale.Select(
+                lang,
+                $"Rejected: identical `{toolName}` already succeeded — do NOT repeat the same arguments. "
+                + "Answer the user NOW from the tool result already gathered. "
+                + "No tool_calls, no JSON tool invocations.",
+                $"Rejeitado: `{toolName}` idêntica já teve sucesso — NÃO repitas os mesmos arguments. "
+                + "Responde AGORA ao utilizador com o resultado da tool já obtido. "
+                + "Sem tool_calls, sem invocações JSON de tools.");
+        }
+
+        var hasMcp = HasConfiguredMcp(runtimeConfig);
+        var prior = TenantLocale.Select(lang, "already failed", "já falhou");
 
         if (hasMcp && isWiki)
         {

@@ -56,11 +56,15 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
                 runtimeConfig,
                 out var duplicateFeedback))
         {
+            var afterSuccess = AgenticDuplicateToolCallGuard.FeedbackIndicatesDuplicateAfterSuccess(duplicateFeedback);
+            var summary = afterSuccess
+                ? AgenticDuplicateToolCallGuard.DuplicateAfterSuccessSummary
+                : AgenticDuplicateToolCallGuard.DuplicateRejectedSummary;
             var rejected = new ToolExecutionResult
             {
                 Output = duplicateFeedback,
                 ExitCode = 1,
-                Summary = "Duplicate tool call rejected"
+                Summary = summary
             };
             messages.Add(new OllamaMessage
             {
@@ -77,7 +81,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
                 ExitCode = 1,
                 Success = false,
                 Duration = TimeSpan.Zero,
-                Summary = "Duplicate tool call rejected"
+                Summary = summary
             });
             return new AgentToolCallOutcome { Result = rejected };
         }
