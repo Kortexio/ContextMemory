@@ -539,6 +539,23 @@ public sealed class AgenticDuplicateToolCallGuardTests
     }
 
     [Fact]
+    public void ShouldAcceptForceAnswerDespiteValidation_RejectsRepeatedSections()
+    {
+        var withEvidence = new List<AgentExecutionStep>
+        {
+            Successful("wiki_search", """{"query":"x"}""", "Regras PACCAR ITD.")
+        };
+        const string sentence =
+            "The API validates every required field before creating the PACCAR subscription.";
+        var repeated = $"{sentence} Other rules are described here. {sentence}";
+
+        Assert.False(AgenticDuplicateToolCallGuard.ShouldAcceptForceAnswerDespiteValidation(
+            forceAnswerOnly: true,
+            repeated,
+            withEvidence));
+    }
+
+    [Fact]
     public void TryBuildEvidenceFallbackAnswer_ReturnsSuccessfulOutputs()
     {
         var steps = new List<AgentExecutionStep>
