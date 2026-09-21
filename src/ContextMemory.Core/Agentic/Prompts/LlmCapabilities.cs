@@ -58,11 +58,12 @@ public static partial class LlmCapabilitiesResolver
             InlineEvidenceRules: weak,
             PreferSkillDiscovery: !weak,
             SupportsVision: supportsVision,
-            // Client-side catalogs dump every MCP name into the system prompt — keep top-K tight.
-            // Native tool_calls paths keep full tenant max (up to AbsoluteMax).
-            MaxMcpToolsHint: clientSideTools ? ClientSidePromptMaxMcpTools : int.MaxValue,
+            // Weak local models (Bonsai/Qwen on Ollama *or* llama.cpp) burn the same context
+            // whether tools land in a client-side catalog or native tools[] — keep top-K tight.
+            // Strong / frontier paths keep full tenant max (up to AbsoluteMax).
+            MaxMcpToolsHint: weak ? WeakPromptMaxMcpTools : int.MaxValue,
             DefaultToolChoice: "auto");
-    }
+        }
 
     public static bool ResolveSupportsVision(AppRuntimeConfig config)
     {
@@ -106,15 +107,18 @@ public static partial class LlmCapabilitiesResolver
     public const int AbsoluteMaxMcpToolsPerTurn = 12;
 
     /// <summary>
-    /// Soft cap when tools are inlined into the system prompt (client-side / Qwen+Ollama).
+    /// Soft cap for Weak harness models (local Qwen/Bonsai on Ollama, llama.cpp, LM Studio, …).
+    /// Applies whether tools are inlined in the system prompt or sent as native <c>tools[]</c>.
     /// Still selects via <c>McpToolSelector</c> — does not omit MCP or reintroduce lazy tool_search.
     /// </summary>
-    public const int ClientSidePromptMaxMcpTools = 6;
+    public const int WeakPromptMaxMcpTools = 6;
+
+    /// <summary>Alias kept for older call sites / tests.</summary>
+    public const int ClientSidePromptMaxMcpTools = WeakPromptMaxMcpTools;
 
     /// <summary>
     /// Effective max MCP tools from tenant config (<c>maxMcpToolsPerTurn</c>). Default 12 when unset; hard-capped at
-    /// <see cref="AbsoluteMaxMcpToolsPerTurn"/>. Client-side prompt catalogs also clamp to
-    /// <see cref="ClientSidePromptMaxMcpTools"/>.
+    /// <see cref="AbsoluteMaxMcpToolsPerTurn"/>. Weak harness also clamps to <see cref="WeakPromptMaxMcpTools"/>.
     /// </summary>
     public static int ResolveMaxMcpTools(AppRuntimeConfig config)
     {

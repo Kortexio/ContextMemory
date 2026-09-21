@@ -27,10 +27,12 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
         var tools = new List<OllamaTool>();
         tools.AddRange(AgenticToolRegistry.BuildExecutionTools(runtimeConfig, lazySchemas: true));
 
-        var wikiTool = AgenticToolRegistry.BuildWikiSearchTool(runtimeConfig, lazySchemas: true);
+        // Wiki schemas are tiny and required ("query"/"pattern") — never open-stub them.
+        // Lazy stubs caused weak models to emit wiki_search with {} forever.
+        var wikiTool = AgenticToolRegistry.BuildWikiSearchTool(runtimeConfig, lazySchemas: false);
         if (wikiTool is not null)
             tools.Add(wikiTool);
-        var wikiGrep = AgenticToolRegistry.BuildWikiGrepTool(runtimeConfig, lazySchemas: true);
+        var wikiGrep = AgenticToolRegistry.BuildWikiGrepTool(runtimeConfig, lazySchemas: false);
         if (wikiGrep is not null)
             tools.Add(wikiGrep);
 

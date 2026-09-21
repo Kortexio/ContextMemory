@@ -47,10 +47,47 @@ public sealed class AgenticDuplicateToolCallGuardTests
     }
 
     [Fact]
-    public void Allows_RetryAfterFailedCall()
+    public void Rejects_EmptyWikiSearchQuery_Immediately()
     {
-        var config = Config();
+        var config = Config(withMcp: true);
+
+        var rejected = AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_search",
+            "{}",
+            steps: [],
+            config,
+            out var feedback);
+
+        Assert.True(rejected);
+        Assert.Contains("não vazio", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("query", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ask_zuora", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Rejects_RetryAfterIdenticalFailedWikiSearch()
+    {
+        var config = Config(withMcp: true);
         var steps = new List<AgentExecutionStep>
+        {
+            new()
+            {
+                Iteration = 1,
+                ToolName = "wiki_search",
+                Arguments = "{}",
+                Output = "wiki_search requires a non-empty \"query\".",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero
+            }
+        };
+
+        // Empty args are rejected before looking at steps; also cover non-empty identical fail.
+        var emptyAgain = AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_search", "{}", steps, config, out _);
+        Assert.True(emptyAgain);
+
+        var failedOnce = new List<AgentExecutionStep>
         {
             new()
             {
@@ -64,9 +101,79 @@ public sealed class AgenticDuplicateToolCallGuardTests
             }
         };
 
-        var ok = AgenticDuplicateToolCallGuard.TryReject(
+        var rejected = AgenticDuplicateToolCallGuard.TryReject(
             "wiki_search",
             """{"query":"same"}""",
+            failedOnce,
+            config,
+            out var feedback);
+
+        Assert.True(rejected);
+        Assert.Contains("já falhou", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ask_zuora", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Rejects_WikiAfterBudgetExhausted()
+    {
+        var config = Config(withMcp: true);
+        var steps = new List<AgentExecutionStep>
+        {
+            new()
+            {
+                Iteration = 1,
+                ToolName = "wiki_search",
+                Arguments = "{}",
+                Output = "rejected empty",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero
+            },
+            new()
+            {
+                Iteration = 2,
+                ToolName = "wiki_search",
+                Arguments = """{"query":"paccar"}""",
+                Output = "no hits",
+                ExitCode = 0,
+                Success = true,
+                Duration = TimeSpan.FromMilliseconds(2)
+            }
+        };
+
+        var rejected = AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_search",
+            """{"query":"subscription rules"}""",
+            steps,
+            config,
+            out var feedback);
+
+        Assert.True(rejected);
+        Assert.Contains("esgotado", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ask_zuora", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Allows_RetryFailedNonWikiTool()
+    {
+        var config = Config();
+        var steps = new List<AgentExecutionStep>
+        {
+            new()
+            {
+                Iteration = 1,
+                ToolName = "shell_execute",
+                Arguments = """{"command":"echo x"}""",
+                Output = "error",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero
+            }
+        };
+
+        var ok = AgenticDuplicateToolCallGuard.TryReject(
+            "shell_execute",
+            """{"command":"echo x"}""",
             steps,
             config,
             out _);
