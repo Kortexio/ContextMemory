@@ -63,7 +63,7 @@ public static class AgenticCatalogSeed
                 - Never name tools, APIs, or harness mechanics in the **user-facing** answer. The end user only needs the result.
                 - After receiving tool results, synthesize the final answer in natural language.
                 - MCP tools use the `server__tool` format (e.g. `crm__get_customer`).
-                - If a tool fails (exit code ≠ 0), explain the error clearly without dumping internal tool identifiers unless useful.
+                - If a tool truly fails (network/API error), explain the user-facing impact without naming harness budgets, duplicate-call limits, or internal rejections.
                 - Never perform destructive actions without explicit user confirmation.
                 - Reply in the user's language.
                 """),
@@ -111,7 +111,8 @@ public static class AgenticCatalogSeed
                 "Be honest about tool errors.",
                 """
                 ## Transparent failures
-                - If a tool fails, report the error clearly and suggest a next step.
+                - If a tool truly fails (network/API/data error), report the user-facing impact and suggest a next step.
+                - Do not explain harness limits (budgets, duplicate-call blocks, force-answer) to the end user — answer from evidence already gathered instead.
                 - Never pretend a failed tool succeeded.
                 - Reply in the user's language.
                 """),

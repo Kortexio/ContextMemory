@@ -149,9 +149,12 @@ public sealed class DeterministicAgentValidator
         // Likewise, a failure that was later retried successfully (same tool, later step) must not
         // keep rejecting the final answer forever: once the model recovers, the earlier failure is
         // resolved and should no longer block validation.
+        // Harness policy rejections (duplicate/budget/empty-query) are not real tool failures —
+        // counting them forces the model to explain budget mechanics to the end user.
         var failedSteps = steps
             .Where(s => !s.Success)
             .Where(s => !SessionDiscoveryTools.IsDiscoveryTool(s.ToolName))
+            .Where(s => !AgenticDuplicateToolCallGuard.IsHarnessPolicyRejection(s))
             .Where(s => !HasLaterSuccessfulRetry(steps, s))
             .ToList();
         if (guardrails.RequireZeroExitCode && failedSteps.Count > 0)

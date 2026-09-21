@@ -634,7 +634,9 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            if (validation.IsValid)
+            var usableAnswer = AgenticDuplicateToolCallGuard.IsUsableForceAnswer(lastAnswer);
+
+            if (validation.IsValid && usableAnswer)
             {
                 loopState = ApplyTransition(loopState, AgentLoopEvent.Complete, trace);
                 trace.Complete(AgentRunState.Completed);
@@ -652,8 +654,55 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 return success;
             }
 
-            // Next turn: prefer forcing a tool call when the model answered without evidence.
-            requireToolChoice = request.Tools.Count > 0;
+            // Force-answer + evidence: finish without HITL. Prefer a usable model reply;
+            // otherwise surface the gathered tool outputs (never budget/duplicate meta-speak).
+            if (forceAnswerOnly && steps.Any(s => s.Success))
+            {
+                string? forcedText = null;
+                if (AgenticDuplicateToolCallGuard.ShouldAcceptForceAnswerDespiteValidation(
+                        forceAnswerOnly, lastAnswer, steps))
+                {
+                    _logger.LogWarning(
+                        "Accepting force-answer reply for {AppId} despite validation rejection: {Feedback}",
+                        request.AppId,
+                        validation.FeedbackForModel);
+                    forcedText = lastAnswer;
+                }
+                else
+                {
+                    forcedText = AgenticDuplicateToolCallGuard.TryBuildEvidenceFallbackAnswer(
+                        request.RuntimeConfig,
+                        steps);
+                    if (forcedText is not null)
+                    {
+                        _logger.LogWarning(
+                            "Force-answer for {AppId} was unusable (mechanics echo or tool leak); returning evidence fallback",
+                            request.AppId);
+                    }
+                }
+
+                if (forcedText is not null)
+                {
+                    loopState = ApplyTransition(loopState, AgentLoopEvent.Complete, trace);
+                    trace.Complete(AgentRunState.Completed);
+                    var forced = AttachDiscovery(
+                        AgentResult.Succeeded(forcedText, steps, iteration + 1),
+                        messages, steps, staticPromptChars, compactionCount, llmCalls,
+                        promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel)
+                        .WithTrace(trace);
+                    Report(request.Report, new AgenticProgressEvent
+                    {
+                        Phase = AgenticProgressPhase.Completed,
+                        Iteration = iteration + 1,
+                        Detail = AgenticMessages.LoopCompleted(iteration + 1, steps.Count, request.RuntimeConfig)
+                    });
+                    return forced;
+                }
+            }
+
+            // Next turn: prefer forcing a tool call when the model answered without evidence —
+            // but never when we already stripped tools for force-answer.
+            requireToolChoice = !forceAnswerOnly && request.Tools.Count > 0;
             loopState = ApplyTransition(loopState, AgentLoopEvent.ValidationRejected, trace);
 
             Report(request.Report, new AgenticProgressEvent

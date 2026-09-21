@@ -76,10 +76,18 @@ public sealed class AgenticWikiBudgetE2ETests : IClassFixture<AgenticStubWebAppl
             answer = contentEl.GetString() ?? "";
         }
 
+        Assert.False(
+            string.IsNullOrWhiteSpace(answer),
+            $"esperava resposta final; bodyPrefix={body[..Math.Min(400, body.Length)]}");
+
+        // Stub returns budget meta-speak; harness must replace with wiki evidence, not echo it.
+        Assert.DoesNotContain("Como corrigir", answer, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("orçamento de chamadas", answer, StringComparison.OrdinalIgnoreCase);
         Assert.True(
-            answer.Contains("FORCE_ANSWER_OK", StringComparison.Ordinal)
-            || body.Contains("FORCE_ANSWER_OK", StringComparison.Ordinal),
-            $"esperava FORCE_ANSWER_OK no final; answer='{answer}'; steps={stepList.Count}; bodyPrefix={body[..Math.Min(400, body.Length)]}");
+            answer.Contains("PACCAR", StringComparison.OrdinalIgnoreCase)
+            || answer.Contains("ITD", StringComparison.OrdinalIgnoreCase)
+            || answer.Contains("subscription", StringComparison.OrdinalIgnoreCase),
+            $"esperava evidência wiki na resposta; answer='{answer}'");
     }
 
     private async Task EnableWikiAndMcpAsync()

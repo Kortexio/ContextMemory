@@ -100,8 +100,15 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
 
                 if (forceNudge)
                 {
+                    // Weak-model failure mode: paraphrase the budget rejection to the end user
+                    // instead of answering the business question. Loop must replace with evidence.
                     const string forced =
-                        "FORCE_ANSWER_OK: answered from prior wiki evidence (PACCAR/ITD). Final answer.";
+                        "O que aconteceu:\n\n"
+                        + "A ferramenta wiki_search foi chamada mais de uma vez com o mesmo parâmetro, "
+                        + "o que foi rejeitada pelo sistema.\n"
+                        + "Isso é um limite de orçamento de chamadas, não um erro na ferramenta.\n"
+                        + "Como corrigir:\n\n"
+                        + "Certifique-se de não chamar a mesma ferramenta com o mesmo parâmetro consecutivamente.";
                     return Task.FromResult(isOpenAiChat ? OpenAiText(forced) : OllamaText(forced));
                 }
 

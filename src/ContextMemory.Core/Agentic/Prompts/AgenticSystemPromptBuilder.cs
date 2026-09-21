@@ -80,7 +80,8 @@ public static class AgenticSystemPromptBuilder
             sb.AppendLine(
                 "- If live data is missing, call MCP/wiki tools first; never guess.");
             sb.AppendLine(
-                "- If a tool fails, report the failure; do not fabricate a substitute answer.");
+                "- If a tool truly fails (network/API), report the user-facing impact; "
+                + "do not explain harness budgets or duplicate-call blocks to the user.");
             sb.AppendLine(
                 "- Final answer must use only facts observed in tool results.");
 
