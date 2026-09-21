@@ -78,9 +78,11 @@ public sealed class HttpToolsExecutor : IToolExecutor
         {
             using var doc = JsonDocument.Parse(Args(toolCall));
             var root = doc.RootElement;
-            query = root.TryGetProperty("query", out var q) ? q.GetString() ?? string.Empty : string.Empty;
-            if (root.TryGetProperty("maxResults", out var mr) && mr.TryGetInt32(out var n) && n > 0)
-                maxResults = Math.Clamp(n, 1, 20);
+            query = AgenticToolArguments.GetString(root, "query") ?? string.Empty;
+            maxResults = Math.Clamp(
+                AgenticToolArguments.GetInt(root, "maxResults", maxResults),
+                1,
+                20);
         }
         catch
         {
@@ -128,9 +130,7 @@ public sealed class HttpToolsExecutor : IToolExecutor
         try
         {
             using var doc = JsonDocument.Parse(Args(toolCall));
-            method = doc.RootElement.TryGetProperty("method", out var m)
-                ? m.GetString() ?? "GET"
-                : "GET";
+            method = AgenticToolArguments.GetString(doc.RootElement, "method") ?? "GET";
         }
         catch
         {
@@ -156,12 +156,13 @@ public sealed class HttpToolsExecutor : IToolExecutor
         {
             using var doc = JsonDocument.Parse(Args(toolCall));
             var root = doc.RootElement;
-            url = root.TryGetProperty("url", out var u) ? u.GetString() ?? string.Empty : string.Empty;
-            if (root.TryGetProperty("body", out var b) && b.ValueKind == JsonValueKind.String)
-                body = b.GetString();
-            if (root.TryGetProperty("maxChars", out var mc) && mc.TryGetInt32(out var n) && n > 0)
-                maxChars = Math.Min(n, maxChars);
-            if (root.TryGetProperty("headers", out var h) && h.ValueKind == JsonValueKind.Object)
+            url = AgenticToolArguments.GetString(root, "url") ?? string.Empty;
+            body = AgenticToolArguments.GetString(root, "body");
+            maxChars = Math.Min(
+                AgenticToolArguments.GetInt(root, "maxChars", maxChars),
+                maxChars);
+            if (AgenticToolArguments.TryGetProperty(root, "headers", out var h)
+                && h.ValueKind == JsonValueKind.Object)
             {
                 headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var prop in h.EnumerateObject())

@@ -10,7 +10,8 @@ namespace ContextMemory.Core.Agentic;
 /// <summary>
 /// Blocks empty / identical wiki_search (and similar) loops so weak models cannot spin
 /// on <c>{}</c> or the same query forever — whether the prior call succeeded or failed.
-/// Non-wiki tools still only block after an identical <em>successful</em> call.
+/// Non-wiki tools still only block after an identical <em>successful</em> call, except
+/// deterministic session-discovery retries, which are blocked after the first identical failure.
 /// </summary>
 public static class AgenticDuplicateToolCallGuard
 {
@@ -93,15 +94,27 @@ public static class AgenticDuplicateToolCallGuard
 
         var sameSignature = steps.Where(s =>
             string.Equals(NormalizeToolName(s.ToolName), name, StringComparison.Ordinal)
-            && string.Equals(BuildSignature(s.ToolName, s.Arguments), signature, StringComparison.Ordinal));
+            && string.Equals(BuildSignature(s.ToolName, s.Arguments), signature, StringComparison.Ordinal))
+            .ToList();
 
         if (QueryFocusedTools.Contains(name))
         {
             // Empty/identical wiki retries never help — block after any prior attempt.
-            if (!sameSignature.Any())
+            if (sameSignature.Count == 0)
                 return false;
 
             feedback = BuildFeedback(toolName, runtimeConfig, afterFailure: sameSignature.All(s => !s.Success));
+            return true;
+        }
+
+        // Discovery calls are local, deterministic reads/searches. Repeating the exact failed
+        // arguments cannot recover and previously burned every remaining iteration (for example
+        // artifact_read with a malformed field name).
+        if (SessionDiscoveryTools.IsDiscoveryTool(name)
+            && sameSignature.Count > 0
+            && sameSignature.All(s => !s.Success))
+        {
+            feedback = BuildFeedback(toolName, runtimeConfig, afterFailure: true);
             return true;
         }
 
@@ -122,8 +135,81 @@ public static class AgenticDuplicateToolCallGuard
             return name + "|q=" + NormalizeText(query);
         }
 
-        return name + "|a=" + NormalizeText(argumentsJson ?? string.Empty);
+        return name + "|a=" + NormalizeArguments(argumentsJson);
     }
+
+    private static string NormalizeArguments(string? argumentsJson)
+    {
+        if (string.IsNullOrWhiteSpace(argumentsJson))
+            return string.Empty;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(argumentsJson);
+            var builder = new StringBuilder(argumentsJson.Length);
+            AppendCanonicalJson(doc.RootElement, builder);
+            return builder.ToString();
+        }
+        catch (JsonException)
+        {
+            return NormalizeText(argumentsJson);
+        }
+    }
+
+    private static void AppendCanonicalJson(JsonElement element, StringBuilder builder)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                builder.Append('{');
+                var firstProperty = true;
+                foreach (var property in element.EnumerateObject()
+                             .OrderBy(p => NormalizeArgumentName(p.Name), StringComparer.Ordinal))
+                {
+                    if (!firstProperty)
+                        builder.Append(',');
+                    firstProperty = false;
+                    builder.Append(JsonSerializer.Serialize(NormalizeArgumentName(property.Name)));
+                    builder.Append(':');
+                    AppendCanonicalJson(property.Value, builder);
+                }
+                builder.Append('}');
+                break;
+
+            case JsonValueKind.Array:
+                builder.Append('[');
+                var firstItem = true;
+                foreach (var item in element.EnumerateArray())
+                {
+                    if (!firstItem)
+                        builder.Append(',');
+                    firstItem = false;
+                    AppendCanonicalJson(item, builder);
+                }
+                builder.Append(']');
+                break;
+
+            case JsonValueKind.String:
+                builder.Append(JsonSerializer.Serialize(NormalizeText(element.GetString())));
+                break;
+
+            case JsonValueKind.Number:
+            case JsonValueKind.True:
+            case JsonValueKind.False:
+            case JsonValueKind.Null:
+                builder.Append(element.GetRawText().ToLowerInvariant());
+                break;
+
+            default:
+                builder.Append(element.GetRawText());
+                break;
+        }
+    }
+
+    private static string NormalizeArgumentName(string name) =>
+        name.Replace("_", string.Empty, StringComparison.Ordinal)
+            .Replace("-", string.Empty, StringComparison.Ordinal)
+            .ToLowerInvariant();
 
     internal static string NormalizeText(string? value)
     {
@@ -227,8 +313,27 @@ public static class AgenticDuplicateToolCallGuard
         return trailing >= MaxDuplicateAfterSuccessRejectionsBeforeForceAnswer;
     }
 
+    /// <summary>
+    /// A deterministic discovery call failed and the model immediately repeated the exact call.
+    /// If some evidence already succeeded this turn, stop tooling and answer from that evidence.
+    /// </summary>
+    public static bool ShouldForceAnswerAfterRepeatedDiscoveryFailure(
+        IReadOnlyList<AgentExecutionStep> steps)
+    {
+        if (steps.Count == 0)
+            return false;
+
+        var last = steps[^1];
+        return !last.Success
+               && SessionDiscoveryTools.IsDiscoveryTool(last.ToolName)
+               && string.Equals(last.Summary, DuplicateRejectedSummary, StringComparison.Ordinal)
+               && steps.Take(steps.Count - 1).Any(s => s.Success);
+    }
+
     public static bool ShouldForceAnswer(IReadOnlyList<AgentExecutionStep> steps) =>
-        ShouldForceAnswerAfterWikiBudget(steps) || ShouldForceAnswerAfterDuplicateSuccess(steps);
+        ShouldForceAnswerAfterWikiBudget(steps)
+        || ShouldForceAnswerAfterDuplicateSuccess(steps)
+        || ShouldForceAnswerAfterRepeatedDiscoveryFailure(steps);
 
     /// <summary>
     /// After tools were stripped for force-answer, accept a non-empty model reply when successful
@@ -379,6 +484,19 @@ public static class AgenticDuplicateToolCallGuard
                 + "Do NOT emit tool_calls or JSON tool invocations.",
                 "PARA. Essa chamada exacta de tool já teve sucesso neste turno. "
                 + "Responde AGORA ao utilizador com o resultado da tool já obtido. "
+                + "NÃO emitas tool_calls nem invocações JSON de tools.")
+                + antiMeta;
+        }
+
+        if (ShouldForceAnswerAfterRepeatedDiscoveryFailure(steps))
+        {
+            return TenantLocale.Select(
+                runtimeConfig.DefaultLanguage,
+                "STOP. The same internal discovery read failed and was blocked. "
+                + "Answer the user's original question NOW from evidence already gathered. "
+                + "Do NOT emit tool_calls or JSON tool invocations.",
+                "PARA. A mesma leitura interna de descoberta falhou e foi bloqueada. "
+                + "Responde AGORA à pergunta original do utilizador com a evidência já recolhida. "
                 + "NÃO emitas tool_calls nem invocações JSON de tools.")
                 + antiMeta;
         }

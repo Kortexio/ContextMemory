@@ -52,13 +52,12 @@ public sealed class GlobalWikiToolExecutor : IToolExecutor
             using var doc = JsonDocument.Parse(
                 string.IsNullOrWhiteSpace(toolCall.Function.Arguments) ? "{}" : toolCall.Function.Arguments);
             var root = doc.RootElement;
-            query = root.TryGetProperty("query", out var q) ? q.GetString() ?? string.Empty : string.Empty;
-            if (root.TryGetProperty("sourceId", out var s) && s.ValueKind == JsonValueKind.String)
-                sourceId = s.GetString();
-            if (root.TryGetProperty("topK", out var t) && t.TryGetInt32(out var topKVal) && topKVal > 0)
-                topK = topKVal;
-            if (root.TryGetProperty("asOf", out var a) && a.ValueKind == JsonValueKind.String
-                && DateTimeOffset.TryParse(a.GetString(), out var asOfVal))
+            query = AgenticToolArguments.GetString(root, "query") ?? string.Empty;
+            sourceId = AgenticToolArguments.GetString(root, "sourceId");
+            topK = AgenticToolArguments.GetInt(root, "topK", topK);
+            if (DateTimeOffset.TryParse(
+                    AgenticToolArguments.GetString(root, "asOf"),
+                    out var asOfVal))
                 asOf = asOfVal;
         }
         catch
@@ -129,13 +128,12 @@ public sealed class GlobalWikiToolExecutor : IToolExecutor
             using var doc = JsonDocument.Parse(
                 string.IsNullOrWhiteSpace(toolCall.Function.Arguments) ? "{}" : toolCall.Function.Arguments);
             var root = doc.RootElement;
-            pattern = root.TryGetProperty("pattern", out var p) ? p.GetString() ?? string.Empty : string.Empty;
-            if (root.TryGetProperty("sourceId", out var s) && s.ValueKind == JsonValueKind.String)
-                sourceId = s.GetString();
-            if (root.TryGetProperty("maxHits", out var m) && m.TryGetInt32(out var maxHitsVal) && maxHitsVal > 0)
-                maxHits = maxHitsVal;
-            if (root.TryGetProperty("asOf", out var a) && a.ValueKind == JsonValueKind.String
-                && DateTimeOffset.TryParse(a.GetString(), out var asOfVal))
+            pattern = AgenticToolArguments.GetString(root, "pattern") ?? string.Empty;
+            sourceId = AgenticToolArguments.GetString(root, "sourceId");
+            maxHits = AgenticToolArguments.GetInt(root, "maxHits", maxHits);
+            if (DateTimeOffset.TryParse(
+                    AgenticToolArguments.GetString(root, "asOf"),
+                    out var asOfVal))
                 asOf = asOfVal;
         }
         catch

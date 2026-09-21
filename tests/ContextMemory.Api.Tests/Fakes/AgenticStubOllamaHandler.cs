@@ -16,6 +16,7 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
     private readonly List<string> _chatRequestBodies = [];
 
     public bool InfiniteToolLoop { get; set; }
+    public bool VaryInfiniteToolLoopArguments { get; set; }
     public bool RejectFirstFinalAnswer { get; set; }
 
     /// <summary>
@@ -25,6 +26,7 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
     public bool StubbornWikiBudgetLoop { get; set; }
 
     private int _finalAnswerCount;
+    private int _infiniteToolCallCount;
 
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
@@ -144,12 +146,15 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
 
             if (InfiniteToolLoop && (hasNativeTools || hasClientCatalog))
             {
+                var loopArgs = VaryInfiniteToolLoopArguments
+                    ? $$"""{"command":"echo loop-{{Interlocked.Increment(ref _infiniteToolCallCount)}}"}"""
+                    : """{"command":"echo loop"}""";
                 if (useClientSideReply)
-                    return Task.FromResult(OllamaClientSideToolCall("shell_execute", """{"command":"echo loop"}"""));
+                    return Task.FromResult(OllamaClientSideToolCall("shell_execute", loopArgs));
 
                 return Task.FromResult(isOpenAiChat
-                    ? OpenAiToolCall("shell_execute", """{"command":"echo loop"}""")
-                    : OllamaToolCall("shell_execute", """{"command":"echo loop"}"""));
+                    ? OpenAiToolCall("shell_execute", loopArgs)
+                    : OllamaToolCall("shell_execute", loopArgs));
             }
 
             if (awaitingToolResult)
