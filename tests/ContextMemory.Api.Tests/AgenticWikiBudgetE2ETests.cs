@@ -59,10 +59,12 @@ public sealed class AgenticWikiBudgetE2ETests : IClassFixture<AgenticStubWebAppl
         var stepList = steps.EnumerateArray().ToList();
         Assert.True(stepList.Count >= 2, $"esperava wiki_search+wiki_grep; steps={stepList.Count}");
 
+        // Harness budget rejections remain in the internal audit log, but are not tool failures
+        // and therefore must not leak into the user-facing steps timeline.
         var budgetRejections = stepList.Count(s =>
             s.TryGetProperty("summary", out var summary)
             && summary.GetString()?.Contains("Duplicate", StringComparison.OrdinalIgnoreCase) == true);
-        Assert.True(budgetRejections >= 2, $"esperava >=2 rejeições de budget; got {budgetRejections}");
+        Assert.Equal(0, budgetRejections);
 
         // Circuit breaker must stop the burn — not run to the full maxIterations wall.
         Assert.True(

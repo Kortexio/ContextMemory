@@ -55,6 +55,12 @@ public record AgenticStreamMetadata
 
     public static AgenticStreamMetadata FromResult(AgentResult result, string? defaultLanguage = null)
     {
+        // Budget/duplicate rejections are harness control signals, not tool executions.
+        // Keep them in the internal run log, but do not present them as failed tools to users.
+        var visibleSteps = result.Steps
+            .Where(s => !AgenticDuplicateToolCallGuard.IsHarnessPolicyRejection(s))
+            .ToList();
+
         if (result.AwaitingConfirmation)
         {
             return new AgenticStreamMetadata
@@ -75,7 +81,7 @@ public record AgenticStreamMetadata
                         Phase = AgenticProgressPhase.AwaitingConfirmation,
                         Detail = AgenticMessages.ProgressDestructiveBlocked(defaultLanguage)
                     }, defaultLanguage),
-                Steps = result.Steps.Select(s => AgenticStepSummary.FromStep(s, defaultLanguage)).ToList()
+                Steps = visibleSteps.Select(s => AgenticStepSummary.FromStep(s, defaultLanguage)).ToList()
             };
         }
 
@@ -101,10 +107,10 @@ public record AgenticStreamMetadata
                     Phase = AgenticProgressPhase.Completed,
                     Detail = AgenticMessages.ProgressCompletedWithStats(
                         result.Iterations,
-                        result.Steps.Count,
+                        visibleSteps.Count,
                         defaultLanguage)
                 }, defaultLanguage),
-            Steps = result.Steps.Select(s => AgenticStepSummary.FromStep(s, defaultLanguage)).ToList()
+            Steps = visibleSteps.Select(s => AgenticStepSummary.FromStep(s, defaultLanguage)).ToList()
         };
     }
 }

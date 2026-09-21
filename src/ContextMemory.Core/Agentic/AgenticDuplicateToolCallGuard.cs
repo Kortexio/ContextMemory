@@ -25,13 +25,16 @@ public static class AgenticDuplicateToolCallGuard
         "wiki_grep"
     };
 
-    /// <summary>Max wiki_search/wiki_grep attempts (success or fail) before forcing a pivot.</summary>
-    public const int MaxWikiAttemptsPerTurn = 2;
+    /// <summary>
+    /// Max wiki_search/wiki_grep attempts (success or fail) before forcing a pivot.
+    /// Three permits the common search → refined search → grep workflow while remaining bounded.
+    /// </summary>
+    public const int MaxWikiAttemptsPerTurn = 3;
 
     /// <summary>
     /// After this many consecutive wiki-budget rejections, strip tools and force a final answer.
     /// </summary>
-    public const int MaxWikiBudgetRejectionsBeforeForceAnswer = 2;
+    public const int MaxWikiBudgetRejectionsBeforeForceAnswer = 1;
 
     /// <summary>
     /// After this many rejections of an identical tool+args that already succeeded, force a final answer

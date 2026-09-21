@@ -138,6 +138,16 @@ public sealed class AgenticDuplicateToolCallGuardTests
                 ExitCode = 0,
                 Success = true,
                 Duration = TimeSpan.FromMilliseconds(2)
+            },
+            new()
+            {
+                Iteration = 3,
+                ToolName = "wiki_grep",
+                Arguments = """{"pattern":"ITD"}""",
+                Output = "Found 3 match(es)",
+                ExitCode = 0,
+                Success = true,
+                Duration = TimeSpan.FromMilliseconds(2)
             }
         };
 
@@ -175,6 +185,16 @@ public sealed class AgenticDuplicateToolCallGuardTests
                 Iteration = 2,
                 ToolName = "wiki_grep",
                 Arguments = """{"pattern":"a"}""",
+                Output = "no hits",
+                ExitCode = 0,
+                Success = false,
+                Duration = TimeSpan.FromMilliseconds(2)
+            },
+            new()
+            {
+                Iteration = 3,
+                ToolName = "wiki_search",
+                Arguments = """{"query":"different"}""",
                 Output = "no hits",
                 ExitCode = 0,
                 Success = false,
@@ -222,6 +242,28 @@ public sealed class AgenticDuplicateToolCallGuardTests
                 Success = false,
                 Duration = TimeSpan.Zero,
                 Summary = "Duplicate tool call rejected"
+            }
+        };
+
+        Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterWikiBudget(steps));
+    }
+
+    [Fact]
+    public void ShouldForceAnswerAfterWikiBudget_AfterFirstBudgetRejection()
+    {
+        var steps = new List<AgentExecutionStep>
+        {
+            Successful("wiki_search", """{"query":"paccar"}"""),
+            new()
+            {
+                Iteration = 2,
+                ToolName = "wiki_grep",
+                Arguments = """{"pattern":"ITD"}""",
+                Output = "Rejected: wiki_search/wiki_grep budget exhausted this turn.",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero,
+                Summary = AgenticDuplicateToolCallGuard.DuplicateRejectedSummary
             }
         };
 
