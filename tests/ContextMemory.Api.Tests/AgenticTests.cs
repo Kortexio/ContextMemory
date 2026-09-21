@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text;
 using ContextMemory.Core.Agentic;
 using ContextMemory.Core.Agentic.Mcp;
+using ContextMemory.Core.Agentic.ToolProviders;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 using ContextMemory.Infrastructure.Agentic;
@@ -621,7 +622,19 @@ public sealed class McpJsonRpcClientTests
             new() { ServerName = "zuora", Name = "zuora_graphql", Description = "GraphQL" }
         };
         var catalog = new StubMcpCatalog(mcpTools);
-        var registry = new AgenticToolRegistryService(catalog, new CapabilityPolicyFilter());
+        var registry = new AgenticToolRegistryService(
+            [
+                new ExecutionToolProvider(),
+                new WikiToolProvider(),
+                new DiscoveryToolProvider(),
+                new HttpToolProvider(),
+                new VisionToolProvider(),
+                new BrowserToolProvider(),
+                new DocumentToolProvider(),
+                new CanvasToolProvider(),
+                new McpToolProvider(catalog)
+            ],
+            new CapabilityPolicyFilter());
         var config = new AppRuntimeConfig
         {
             AppId = "demo",

@@ -233,6 +233,38 @@ public sealed class ProseToolCallParserTests
     }
 
     [Fact]
+    public void FilterAgainstCatalog_SurfacesAmbiguousShortMcpNames()
+    {
+        var catalog = new List<OllamaTool>
+        {
+            new("function", new OllamaFunction("zuora-a__get_account", null, null)),
+            new("function", new OllamaFunction("zuora-b__get_account", null, null))
+        };
+
+        var raw = new List<OllamaToolCall>
+        {
+            new(new OllamaFunctionCall("get_account", """{"id":"1"}"""))
+        };
+
+        var filtered = ProseToolCallParser.FilterAgainstCatalog(
+            raw,
+            catalog,
+            maxPerTurn: 6,
+            out var droppedUnknown,
+            out _,
+            out _,
+            out var droppedAmbiguous,
+            out var hints);
+
+        Assert.Null(filtered);
+        Assert.Equal(0, droppedUnknown);
+        Assert.Equal(1, droppedAmbiguous);
+        Assert.Single(hints);
+        Assert.Contains("zuora-a__get_account", hints[0], StringComparison.Ordinal);
+        Assert.Contains("zuora-b__get_account", hints[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FilterAgainstCatalog_ReturnsNull_WhenCatalogEmpty()
     {
         var raw = new List<OllamaToolCall>

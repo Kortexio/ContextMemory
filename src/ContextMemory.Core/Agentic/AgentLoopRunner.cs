@@ -476,19 +476,39 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                         maxPerTurn,
                         out var droppedUnknown,
                         out var droppedInvalidArgs,
-                        out var droppedCapped);
+                        out var droppedCapped,
+                        out var droppedAmbiguous,
+                        out var ambiguousHints);
 
-                    if (droppedUnknown > 0 || droppedInvalidArgs > 0 || droppedCapped > 0)
+                    if (droppedUnknown > 0 || droppedInvalidArgs > 0 || droppedCapped > 0 || droppedAmbiguous > 0)
                     {
                         _logger.LogWarning(
-                            "Dropped prose tool call(s) for {AppId}: unknown={Unknown}, invalidArgs={InvalidArgs}, capped={Capped} (raw={Raw}, kept={Kept}, maxPerTurn={Max})",
+                            "Dropped prose tool call(s) for {AppId}: unknown={Unknown}, invalidArgs={InvalidArgs}, capped={Capped}, ambiguous={Ambiguous} (raw={Raw}, kept={Kept}, maxPerTurn={Max})",
                             request.AppId,
                             droppedUnknown,
                             droppedInvalidArgs,
                             droppedCapped,
+                            droppedAmbiguous,
                             rawPromoted.Count,
                             promoted?.Count ?? 0,
                             maxPerTurn);
+                    }
+
+                    if (droppedAmbiguous > 0 && ambiguousHints.Count > 0)
+                    {
+                        var hint = string.Join("; ", ambiguousHints);
+                        messages.Add(new OllamaMessage
+                        {
+                            Role = "user",
+                            Content = TenantLocale.Select(
+                                request.RuntimeConfig.DefaultLanguage,
+                                "Rejected: short MCP tool name is ambiguous across servers. "
+                                + "Call as `server__tool` (qualified). Candidates: "
+                                + hint,
+                                "Rejeitado: nome curto MCP ambíguo entre servidores. "
+                                + "Chama como `server__tool` (qualificado). Candidatos: "
+                                + hint)
+                        });
                     }
 
                     if (promoted is { Count: > 0 })
@@ -546,17 +566,20 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     loopState = ApplyTransition(loopState, AgentLoopEvent.ToolCall, trace);
                     var toolOutcome = await _toolCallProcessor
                         .ProcessAsync(
-                            toolCall,
-                            request.AppId,
-                            request.UserId,
-                            request.SessionId,
-                            request.RuntimeConfig,
-                            iteration + 1,
-                            steps,
-                            messages,
-                            request.Report,
-                            skipConfirmation: false,
-                            turnCatalog: toolsForRequest,
+                            new AgentToolCallContext
+                            {
+                                ToolCall = toolCall,
+                                AppId = request.AppId,
+                                UserId = request.UserId,
+                                SessionId = request.SessionId,
+                                RuntimeConfig = request.RuntimeConfig,
+                                Iteration = iteration + 1,
+                                Steps = steps,
+                                Messages = messages,
+                                Report = request.Report,
+                                SkipConfirmation = false,
+                                TurnCatalog = toolsForRequest
+                            },
                             cancellationToken)
                         .ConfigureAwait(false);
 
