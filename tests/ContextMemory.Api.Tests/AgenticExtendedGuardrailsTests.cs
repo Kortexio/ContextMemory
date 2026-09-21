@@ -209,6 +209,24 @@ public sealed class AgenticExtendedGuardrailsTests
     }
 
     [Fact]
+    public void DuplicateSentence_DetectsRepeatedNonConsecutiveSection()
+    {
+        const string repeated =
+            "The API validates the complete incoming message before creating the subscription.";
+        var answer = $"{repeated} A different validation is explained here. "
+                     + "Several other business rules appear between both copies. "
+                     + repeated;
+
+        var ok = AgenticDuplicateSentenceGuardrail.TryGetRejectionFeedback(
+            answer,
+            "{}",
+            Config(),
+            out _);
+
+        Assert.True(ok);
+    }
+
+    [Fact]
     public async Task ExtendedRunner_RespectsInactiveKinds()
     {
         var request = new AgentValidationRequest

@@ -386,7 +386,8 @@ public static class AgenticDuplicateToolCallGuard
     public static bool IsUsableForceAnswer(string? finalAnswer) =>
         !string.IsNullOrWhiteSpace(finalAnswer)
         && !IsGuardrailMechanicsEcho(finalAnswer)
-        && !AgenticToolIntentNarrationGuardrail.ContainsToolName(finalAnswer);
+        && !AgenticToolIntentNarrationGuardrail.ContainsToolName(finalAnswer)
+        && !AgenticDuplicateSentenceGuardrail.ContainsDuplicateContent(finalAnswer);
 
     /// <summary>
     /// Last-resort user-visible reply from successful tool outputs when the model only
