@@ -23,7 +23,7 @@ public partial class ScrubUrlFetchPortugueseMarkers : Migration
                   "feedback": "Rejected: you described a website/URL without fetching it. Hosts in the user message: {hosts}. Emit tool_calls first, then answer ONLY from tool output.",
                   "aboutSiteMarkers": ["this site","this website","this page","this url","this link","the website","the site","what is","what''s this","whats this","what about","open ","visit ","fetch","scrape","summary","content of"],
                   "fetchToolMarkers": ["python_execute","shell_execute","node_execute","web_search","fetch_url","http_request","browser_navigate","browser_snapshot","browser_screenshot","read_image","brave","tavily","ddgs","duckduckgo","playwright","httpx","requests","curl"]
-                }'::text,
+                }'::jsonb,
                 "UpdatedAt" = NOW()
             WHERE "Id" = 'url-fetch-required' AND "IsSystem" = TRUE;
             """);

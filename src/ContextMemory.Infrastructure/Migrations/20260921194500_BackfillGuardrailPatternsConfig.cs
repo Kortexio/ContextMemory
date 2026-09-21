@@ -24,7 +24,7 @@ public partial class BackfillGuardrailPatternsConfig : Migration
                     '{patterns}',
                     '["ignore previous instructions","ignore all previous","disregard previous","forget your instructions","you are now dan","jailbreak","bypass your safety","override your system","reveal your system prompt","show your system prompt","print your system prompt","ignora as instruções anteriores","ignora instruções anteriores","esquece as tuas instruções","revela o system prompt","mostra o system prompt"]'::jsonb,
                     true
-                )::text,
+                )::jsonb,
                 "UpdatedAt" = NOW()
             WHERE "Id" = 'prompt-injection'
               AND (
@@ -42,7 +42,7 @@ public partial class BackfillGuardrailPatternsConfig : Migration
                     '{patterns}',
                     '["child porn","childporn","rape porn","bestiality"]'::jsonb,
                     true
-                )::text,
+                )::jsonb,
                 "UpdatedAt" = NOW()
             WHERE "Id" = 'inappropriate-content'
               AND (
@@ -60,7 +60,7 @@ public partial class BackfillGuardrailPatternsConfig : Migration
                     '{patterns}',
                     '["kys","kill yourself","nigger","faggot"]'::jsonb,
                     true
-                )::text,
+                )::jsonb,
                 "UpdatedAt" = NOW()
             WHERE "Id" = 'offensive-language'
               AND (
