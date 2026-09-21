@@ -659,6 +659,21 @@ public sealed class McpJsonRpcClientTests
         Assert.DoesNotContain("zuora__query_objects", summary, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void WikiSearchTool_ExposesRequiredQuerySchema_NotOpenStub()
+    {
+        var tool = AgenticToolRegistry.BuildWikiSearchTool(
+            new AppRuntimeConfig { AppId = "demo", GlobalWikiEnabled = true },
+            lazySchemas: false);
+        Assert.NotNull(tool);
+        Assert.False(McpPinnedToolFactory.IsOpenStubParameters(tool!.Function.Parameters));
+
+        var catalog = ClientSideToolCalling.BuildCatalog([tool]);
+        Assert.Contains("`wiki_search`", catalog, StringComparison.Ordinal);
+        Assert.Contains("params:", catalog, StringComparison.Ordinal);
+        Assert.Contains("query", catalog, StringComparison.Ordinal);
+    }
+
     private sealed class StubMcpCatalog(IReadOnlyList<McpToolDefinition> tools) : IMcpToolCatalog
     {
         public Task<IReadOnlyList<McpToolDefinition>> GetToolsAsync(

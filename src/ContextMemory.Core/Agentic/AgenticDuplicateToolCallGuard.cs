@@ -8,8 +8,9 @@ using ContextMemory.Core.Models;
 namespace ContextMemory.Core.Agentic;
 
 /// <summary>
-/// Blocks identical successful tool calls (same name + normalized args) so weak models
-/// cannot spin on the same wiki_search / query forever. Returns an actionable observation.
+/// Blocks empty / identical wiki_search (and similar) loops so weak models cannot spin
+/// on <c>{}</c> or the same query forever — whether the prior call succeeded or failed.
+/// Non-wiki tools still only block after an identical <em>successful</em> call.
 /// </summary>
 public static class AgenticDuplicateToolCallGuard
 {
@@ -23,6 +24,9 @@ public static class AgenticDuplicateToolCallGuard
         "wiki_grep"
     };
 
+    /// <summary>Max wiki_search/wiki_grep attempts (success or fail) before forcing a pivot.</summary>
+    public const int MaxWikiAttemptsPerTurn = 2;
+
     public static bool TryReject(
         string toolName,
         string? argumentsJson,
@@ -31,22 +35,53 @@ public static class AgenticDuplicateToolCallGuard
         out string feedback)
     {
         feedback = string.Empty;
-        if (string.IsNullOrWhiteSpace(toolName) || steps.Count == 0)
+        if (string.IsNullOrWhiteSpace(toolName))
+            return false;
+
+        var name = NormalizeToolName(toolName);
+        if (QueryFocusedTools.Contains(name))
+        {
+            var wikiAttempts = steps.Count(s => QueryFocusedTools.Contains(NormalizeToolName(s.ToolName)));
+            if (wikiAttempts >= MaxWikiAttemptsPerTurn)
+            {
+                feedback = BuildWikiBudgetFeedback(runtimeConfig);
+                return true;
+            }
+
+            var query = ExtractQuery(argumentsJson);
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                feedback = BuildEmptyQueryFeedback(name, runtimeConfig);
+                return true;
+            }
+        }
+
+        if (steps.Count == 0)
             return false;
 
         var signature = BuildSignature(toolName, argumentsJson);
         if (string.IsNullOrEmpty(signature))
             return false;
 
-        var alreadySucceeded = steps.Any(s =>
-            s.Success
-            && string.Equals(NormalizeToolName(s.ToolName), NormalizeToolName(toolName), StringComparison.Ordinal)
+        var sameSignature = steps.Where(s =>
+            string.Equals(NormalizeToolName(s.ToolName), name, StringComparison.Ordinal)
             && string.Equals(BuildSignature(s.ToolName, s.Arguments), signature, StringComparison.Ordinal));
 
+        if (QueryFocusedTools.Contains(name))
+        {
+            // Empty/identical wiki retries never help — block after any prior attempt.
+            if (!sameSignature.Any())
+                return false;
+
+            feedback = BuildFeedback(toolName, runtimeConfig, afterFailure: sameSignature.All(s => !s.Success));
+            return true;
+        }
+
+        var alreadySucceeded = sameSignature.Any(s => s.Success);
         if (!alreadySucceeded)
             return false;
 
-        feedback = BuildFeedback(toolName, runtimeConfig);
+        feedback = BuildFeedback(toolName, runtimeConfig, afterFailure: false);
         return true;
     }
 
@@ -104,36 +139,105 @@ public static class AgenticDuplicateToolCallGuard
         try
         {
             using var doc = JsonDocument.Parse(argumentsJson);
-            if (doc.RootElement.ValueKind == JsonValueKind.Object
-                && doc.RootElement.TryGetProperty("query", out var q)
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return string.Empty;
+
+            // wiki_search uses "query"; wiki_grep uses "pattern".
+            if (doc.RootElement.TryGetProperty("query", out var q)
                 && q.ValueKind == JsonValueKind.String)
             {
                 return q.GetString() ?? string.Empty;
             }
+
+            if (doc.RootElement.TryGetProperty("pattern", out var p)
+                && p.ValueKind == JsonValueKind.String)
+            {
+                return p.GetString() ?? string.Empty;
+            }
+
+            // {} or object without query/pattern → empty (do not fall back to raw JSON).
+            return string.Empty;
         }
         catch (JsonException)
         {
-            // Fall through to raw normalize.
+            return string.Empty;
         }
-
-        return argumentsJson;
     }
 
-    private static string BuildFeedback(string toolName, AppRuntimeConfig runtimeConfig)
+    private static string BuildWikiBudgetFeedback(AppRuntimeConfig runtimeConfig)
+    {
+        var lang = runtimeConfig.DefaultLanguage;
+        var hasMcp = HasConfiguredMcp(runtimeConfig);
+        if (hasMcp)
+        {
+            return TenantLocale.Select(
+                lang,
+                "Rejected: wiki_search/wiki_grep budget exhausted this turn. "
+                + "Do NOT call wiki again. Call a configured MCP tool now as ONLY JSON "
+                + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
+                + "(e.g. …__ask_zuora, …__query_objects).",
+                "Rejeitado: orçamento wiki_search/wiki_grep esgotado neste turno. "
+                + "NÃO chames wiki outra vez. Chama agora uma tool MCP como APENAS JSON "
+                + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
+                + "(ex. …__ask_zuora, …__query_objects).");
+        }
+
+        return TenantLocale.Select(
+            lang,
+            "Rejected: wiki_search/wiki_grep budget exhausted this turn. "
+            + "Answer from evidence already gathered or change approach — do not call wiki again.",
+            "Rejeitado: orçamento wiki_search/wiki_grep esgotado neste turno. "
+            + "Responde com a evidência já recolhida ou muda de abordagem — não chames wiki outra vez.");
+    }
+
+    private static string BuildEmptyQueryFeedback(string toolName, AppRuntimeConfig runtimeConfig)
+    {
+        var lang = runtimeConfig.DefaultLanguage;
+        var hasMcp = HasConfiguredMcp(runtimeConfig);
+        var field = string.Equals(toolName, "wiki_grep", StringComparison.Ordinal) ? "pattern" : "query";
+
+        if (hasMcp)
+        {
+            return TenantLocale.Select(
+                lang,
+                $"Rejected: `{toolName}` needs a non-empty \"{field}\". "
+                + $"Retry as ONLY JSON {{\"tool\":\"{toolName}\",\"arguments\":{{\"{field}\":\"concrete keywords\"}}}} "
+                + "OR call a configured MCP tool now "
+                + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
+                + "(e.g. …__ask_zuora, …__query_objects).",
+                $"Rejeitado: `{toolName}` precisa de \"{field}\" não vazio. "
+                + $"Repete como APENAS JSON {{\"tool\":\"{toolName}\",\"arguments\":{{\"{field}\":\"palavras concretas\"}}}} "
+                + "OU chama agora uma tool MCP "
+                + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
+                + "(ex. …__ask_zuora, …__query_objects).");
+        }
+
+        return TenantLocale.Select(
+            lang,
+            $"Rejected: `{toolName}` needs a non-empty \"{field}\". "
+            + $"Retry as ONLY JSON {{\"tool\":\"{toolName}\",\"arguments\":{{\"{field}\":\"concrete keywords\"}}}}.",
+            $"Rejeitado: `{toolName}` precisa de \"{field}\" não vazio. "
+            + $"Repete como APENAS JSON {{\"tool\":\"{toolName}\",\"arguments\":{{\"{field}\":\"palavras concretas\"}}}}.");
+    }
+
+    private static string BuildFeedback(string toolName, AppRuntimeConfig runtimeConfig, bool afterFailure)
     {
         var lang = runtimeConfig.DefaultLanguage;
         var hasMcp = HasConfiguredMcp(runtimeConfig);
         var isWiki = QueryFocusedTools.Contains(NormalizeToolName(toolName));
+        var prior = afterFailure
+            ? TenantLocale.Select(lang, "already failed", "já falhou")
+            : TenantLocale.Select(lang, "already succeeded", "já teve sucesso");
 
         if (hasMcp && isWiki)
         {
             return TenantLocale.Select(
                 lang,
-                "Rejected: identical wiki_search already succeeded — do NOT repeat the same query. "
+                $"Rejected: identical wiki_search {prior} — do NOT repeat the same query. "
                 + "Either change the query substantially OR call a configured MCP tool now as ONLY JSON "
                 + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
                 + "(e.g. …__ask_zuora, …__query_objects; tool_describe if the schema is unclear).",
-                "Rejeitado: wiki_search idêntica já teve sucesso — NÃO repitas a mesma query. "
+                $"Rejeitado: wiki_search idêntica {prior} — NÃO repitas a mesma query. "
                 + "Ou muda a query de forma substancial OU chama agora uma tool MCP configurada como APENAS JSON "
                 + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
                 + "(ex. …__ask_zuora, …__query_objects; tool_describe se o schema for unclear).");
@@ -143,10 +247,10 @@ public static class AgenticDuplicateToolCallGuard
         {
             return TenantLocale.Select(
                 lang,
-                $"Rejected: identical `{toolName}` already succeeded — do NOT repeat the same arguments. "
+                $"Rejected: identical `{toolName}` {prior} — do NOT repeat the same arguments. "
                 + "Try different arguments or another MCP/catalog tool as ONLY JSON "
                 + "{\"tool\":\"name\",\"arguments\":{...}}.",
-                $"Rejeitado: `{toolName}` idêntica já teve sucesso — NÃO repitas os mesmos arguments. "
+                $"Rejeitado: `{toolName}` idêntica {prior} — NÃO repitas os mesmos arguments. "
                 + "Tenta arguments diferentes ou outra tool MCP/catálogo como APENAS JSON "
                 + "{\"tool\":\"nome\",\"arguments\":{...}}.");
         }
@@ -155,17 +259,17 @@ public static class AgenticDuplicateToolCallGuard
         {
             return TenantLocale.Select(
                 lang,
-                "Rejected: identical wiki_search already succeeded — do NOT repeat. "
+                $"Rejected: identical wiki_search {prior} — do NOT repeat. "
                 + "Change the query substantially or answer from the evidence you already have.",
-                "Rejeitado: wiki_search idêntica já teve sucesso — NÃO repitas. "
+                $"Rejeitado: wiki_search idêntica {prior} — NÃO repitas. "
                 + "Muda a query de forma substancial ou responde com a evidência que já tens.");
         }
 
         return TenantLocale.Select(
             lang,
-            $"Rejected: identical `{toolName}` already succeeded — do NOT repeat the same arguments. "
+            $"Rejected: identical `{toolName}` {prior} — do NOT repeat the same arguments. "
             + "Change arguments or answer from existing evidence.",
-            $"Rejeitado: `{toolName}` idêntica já teve sucesso — NÃO repitas os mesmos arguments. "
+            $"Rejeitado: `{toolName}` idêntica {prior} — NÃO repitas os mesmos arguments. "
             + "Muda os arguments ou responde com a evidência existente.");
     }
 

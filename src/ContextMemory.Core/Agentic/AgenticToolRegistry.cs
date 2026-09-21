@@ -23,7 +23,11 @@ public static class AgenticToolRegistry
     public static List<OllamaTool> BuildTools(AppRuntimeConfig runtimeConfig) =>
         BuildExecutionTools(runtimeConfig, lazySchemas: true);
 
-    public static OllamaTool? BuildWikiSearchTool(AppRuntimeConfig runtimeConfig, bool lazySchemas = true)
+    /// <summary>
+    /// Global wiki search. Prefer <paramref name="lazySchemas"/> = false: the schema is tiny and
+    /// <c>query</c> is required — open stubs lead weak models to emit <c>{}</c> forever.
+    /// </summary>
+    public static OllamaTool? BuildWikiSearchTool(AppRuntimeConfig runtimeConfig, bool lazySchemas = false)
     {
         if (!runtimeConfig.GlobalWikiEnabled)
             return null;
@@ -73,7 +77,10 @@ public static class AgenticToolRegistry
                 }));
     }
 
-    public static OllamaTool? BuildWikiGrepTool(AppRuntimeConfig runtimeConfig, bool lazySchemas = true)
+    /// <summary>
+    /// Global wiki regex. Prefer <paramref name="lazySchemas"/> = false — same rationale as wiki_search.
+    /// </summary>
+    public static OllamaTool? BuildWikiGrepTool(AppRuntimeConfig runtimeConfig, bool lazySchemas = false)
     {
         if (!runtimeConfig.GlobalWikiEnabled)
             return null;
