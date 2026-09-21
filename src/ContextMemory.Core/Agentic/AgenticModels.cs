@@ -465,6 +465,12 @@ public sealed class AgentExecutionStep
     public string? Summary { get; init; }
     public Dictionary<string, string>? Entities { get; init; }
     public bool OutputTruncated { get; init; }
+
+    /// <summary>
+    /// True when the step was produced by a pre-execution guard (duplicate / required-args / …)
+    /// and must not consume per-turn tool budgets.
+    /// </summary>
+    public bool RejectedByGuard { get; init; }
 }
 
 public sealed class ValidationResult

@@ -556,6 +556,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                             messages,
                             request.Report,
                             skipConfirmation: false,
+                            turnCatalog: toolsForRequest,
                             cancellationToken)
                         .ConfigureAwait(false);
 

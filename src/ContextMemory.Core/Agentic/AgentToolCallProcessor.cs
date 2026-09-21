@@ -47,6 +47,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
         List<OllamaMessage> messages,
         Action<AgenticProgressEvent>? report,
         bool skipConfirmation,
+        IReadOnlyList<OllamaTool>? turnCatalog = null,
         CancellationToken cancellationToken = default)
     {
         if (AgenticDuplicateToolCallGuard.TryReject(
@@ -56,30 +57,31 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
                 runtimeConfig,
                 out var duplicateFeedback))
         {
-            var rejected = new ToolExecutionResult
-            {
-                Output = duplicateFeedback,
-                ExitCode = 1,
-                Summary = "Duplicate tool call rejected"
-            };
-            messages.Add(new OllamaMessage
-            {
-                Role = "tool",
-                Content = AgenticToolObservationFormatter.Format(
-                    toolCall.Function.Name, rejected, runtimeConfig)
-            });
-            steps.Add(new AgentExecutionStep
-            {
-                Iteration = iteration,
-                ToolName = toolCall.Function.Name,
-                Arguments = toolCall.Function.Arguments,
-                Output = duplicateFeedback,
-                ExitCode = 1,
-                Success = false,
-                Duration = TimeSpan.Zero,
-                Summary = "Duplicate tool call rejected"
-            });
-            return new AgentToolCallOutcome { Result = rejected };
+            return RejectByGuard(
+                toolCall,
+                iteration,
+                steps,
+                messages,
+                runtimeConfig,
+                duplicateFeedback,
+                "Duplicate tool call rejected");
+        }
+
+        if (AgenticRequiredArgumentsGuard.TryReject(
+                toolCall.Function.Name,
+                toolCall.Function.Arguments,
+                turnCatalog,
+                runtimeConfig,
+                out var requiredFeedback))
+        {
+            return RejectByGuard(
+                toolCall,
+                iteration,
+                steps,
+                messages,
+                runtimeConfig,
+                requiredFeedback,
+                "Required arguments missing");
         }
 
         var executionPolicy = PolicyLayersFactory
@@ -414,6 +416,42 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
         }
 
         return new AgentToolCallOutcome { Result = toolResult };
+    }
+
+    private static AgentToolCallOutcome RejectByGuard(
+        OllamaToolCall toolCall,
+        int iteration,
+        List<AgentExecutionStep> steps,
+        List<OllamaMessage> messages,
+        AppRuntimeConfig runtimeConfig,
+        string feedback,
+        string summary)
+    {
+        var rejected = new ToolExecutionResult
+        {
+            Output = feedback,
+            ExitCode = 1,
+            Summary = summary
+        };
+        messages.Add(new OllamaMessage
+        {
+            Role = "tool",
+            Content = AgenticToolObservationFormatter.Format(
+                toolCall.Function.Name, rejected, runtimeConfig)
+        });
+        steps.Add(new AgentExecutionStep
+        {
+            Iteration = iteration,
+            ToolName = toolCall.Function.Name,
+            Arguments = toolCall.Function.Arguments,
+            Output = feedback,
+            ExitCode = 1,
+            Success = false,
+            Duration = TimeSpan.Zero,
+            Summary = summary,
+            RejectedByGuard = true
+        });
+        return new AgentToolCallOutcome { Result = rejected };
     }
 
     private async Task<ToolExecutionResult> ExecuteToolAsync(

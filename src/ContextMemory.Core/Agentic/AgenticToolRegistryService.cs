@@ -25,7 +25,7 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
         CancellationToken cancellationToken = default)
     {
         var tools = new List<OllamaTool>();
-        tools.AddRange(AgenticToolRegistry.BuildExecutionTools(runtimeConfig, lazySchemas: true));
+        tools.AddRange(AgenticToolRegistry.BuildExecutionTools(runtimeConfig, lazySchemas: false));
 
         // Wiki schemas are tiny and required ("query"/"pattern") — never open-stub them.
         // Lazy stubs caused weak models to emit wiki_search with {} forever.

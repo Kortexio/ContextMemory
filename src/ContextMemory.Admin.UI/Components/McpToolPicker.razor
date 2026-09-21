@@ -1,0 +1,374 @@
+@using ContextMemory.Core.Agentic
+
+<div class="border rounded bg-light p-2 mt-2 mb-2">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+        <strong class="small mb-0">Tool access</strong>
+        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="LoadAsync" disabled="@_loading">
+            Reload catalog
+        </button>
+    </div>
+
+    <FieldHelp>
+        Empty allowlist means all tools are permitted (minus denylist). Use the radio to choose the default, then mark exceptions.
+    </FieldHelp>
+
+    @if (_loading)
+    {
+        <p class="text-muted small mb-0"><i class="fas fa-spinner fa-spin"></i> Loading catalog…</p>
+    }
+    else if (_error is not null)
+    {
+        <div class="alert alert-danger mb-2 py-1 small">@_error</div>
+    }
+    else if (_catalog.Count == 0)
+    {
+        <div class="alert alert-warning mb-2 py-1 small">
+            No tools in the persisted catalog for this server yet.
+            <button type="button" class="btn btn-sm btn-outline-primary ml-2" @onclick="RebuildAsync" disabled="@_rebuilding">
+                @(_rebuilding ? "Syncing…" : "Sync catalog")
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="mb-2">
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="@RadioGroupName" id="@($"{RadioGroupName}-all")"
+                       checked="@(_mode == PickerMode.All)" @onchange="() => SetMode(PickerMode.All)" />
+                <label class="form-check-label small" for="@($"{RadioGroupName}-all")">All tools</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="@RadioGroupName" id="@($"{RadioGroupName}-selected")"
+                       checked="@(_mode == PickerMode.Selected)" @onchange="() => SetMode(PickerMode.Selected)" />
+                <label class="form-check-label small" for="@($"{RadioGroupName}-selected")">Only selected</label>
+            </div>
+            <span class="badge badge-secondary ml-1">@PermittedCount permitted of @_catalog.Count</span>
+        </div>
+
+        <div class="form-row align-items-center mb-2">
+            <div class="col-md-8 form-group mb-0">
+                <input class="form-control form-control-sm" placeholder="Search tools…"
+                       value="@_filter" @oninput="OnFilterInput" />
+            </div>
+            <div class="col-md-4 text-right">
+                <button type="button" class="btn btn-sm btn-link" @onclick="ClearMarks">Clear marks</button>
+            </div>
+        </div>
+
+        <div style="max-height: 18rem; overflow-y: auto;" class="border rounded bg-white">
+            @foreach (var tool in FilteredTools)
+            {
+                var state = GetState(tool.ToolName);
+                <div class="d-flex align-items-start justify-content-between px-2 py-1 border-bottom">
+                    <div class="pr-2" style="min-width:0;">
+                        <code class="small">@tool.ToolName</code>
+                        @if (!string.IsNullOrWhiteSpace(tool.Description))
+                        {
+                            <div class="text-muted small text-truncate" style="max-width:28rem;" title="@tool.Description">
+                                @tool.Description
+                            </div>
+                        }
+                    </div>
+                    <div class="btn-group btn-group-sm flex-shrink-0" role="group">
+                        <button type="button"
+                                class="btn @(_mode == PickerMode.Selected && state == ToolMark.Allow ? "btn-success" : "btn-outline-secondary")"
+                                disabled="@(_mode != PickerMode.Selected)"
+                                title="@(_mode == PickerMode.Selected ? "Allow this tool" : "Switch to Only selected to allow individual tools")"
+                                @onclick="() => SetState(tool.ToolName, ToolMark.Allow)">
+                            Allow
+                        </button>
+                        <button type="button"
+                                class="btn @(state == ToolMark.Neutral ? "btn-secondary" : "btn-outline-secondary")"
+                                title="Default for current mode"
+                                @onclick="() => SetState(tool.ToolName, ToolMark.Neutral)">
+                            —
+                        </button>
+                        <button type="button"
+                                class="btn @(_mode == PickerMode.All && state == ToolMark.Deny ? "btn-danger" : "btn-outline-secondary")"
+                                disabled="@(_mode != PickerMode.All)"
+                                title="@(_mode == PickerMode.All ? "Block this tool" : "Block is redundant when using an allowlist")"
+                                @onclick="() => SetState(tool.ToolName, ToolMark.Deny)">
+                            Block
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (_orphans.Count > 0)
+        {
+            <div class="alert alert-warning mt-2 mb-0 py-1 small">
+                <strong>Obsolete in config (not in catalog):</strong>
+                @foreach (var name in _orphans)
+                {
+                    <span class="badge badge-warning mr-1">
+                        @name
+                        <button type="button" class="btn btn-link btn-sm p-0 ml-1 text-dark" @onclick="() => RemoveOrphan(name)">×</button>
+                    </span>
+                }
+            </div>
+        }
+    }
+
+    <details class="mt-2">
+        <summary class="small text-muted">Advanced (CSV)</summary>
+        <div class="form-row mt-2">
+            <div class="col-md-6 form-group mb-2">
+                <label>Tool allowlist (comma-separated)</label>
+                <InputText class="form-control form-control-sm"
+                           Value="@AllowlistText"
+                           ValueChanged="OnAllowlistCsvChanged"
+                           ValueExpression="() => AllowlistText" />
+            </div>
+            <div class="col-md-6 form-group mb-2">
+                <label>Tool denylist (comma-separated)</label>
+                <InputText class="form-control form-control-sm"
+                           Value="@DenylistText"
+                           ValueChanged="OnDenylistCsvChanged"
+                           ValueExpression="() => DenylistText" />
+            </div>
+        </div>
+    </details>
+</div>
+
+@code {
+    private enum PickerMode { All, Selected }
+    private enum ToolMark { Neutral, Allow, Deny }
+
+    [Parameter] public string AppId { get; set; } = string.Empty;
+    [Parameter] public string IntegrationName { get; set; } = string.Empty;
+    [Parameter] public string AllowlistText { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> AllowlistTextChanged { get; set; }
+    [Parameter] public string DenylistText { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> DenylistTextChanged { get; set; }
+
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+
+    private readonly List<McpCatalogToolAdminDto> _catalog = [];
+    private readonly Dictionary<string, ToolMark> _marks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _orphans = [];
+    private PickerMode _mode = PickerMode.All;
+    private string _filter = string.Empty;
+    private bool _loading = true;
+    private bool _rebuilding;
+    private string? _error;
+    private string _loadedKey = string.Empty;
+    private bool _syncingFromParent;
+
+    private string RadioGroupName => $"mcp-picker-{IntegrationName}";
+
+    private IEnumerable<McpCatalogToolAdminDto> FilteredTools
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_filter))
+                return _catalog;
+            return _catalog.Where(t =>
+                t.ToolName.Contains(_filter, StringComparison.OrdinalIgnoreCase)
+                || (t.Description?.Contains(_filter, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+    }
+
+    private int PermittedCount
+    {
+        get
+        {
+            if (_catalog.Count == 0)
+                return 0;
+            if (_mode == PickerMode.All)
+            {
+                var denied = _marks.Count(kv => kv.Value == ToolMark.Deny);
+                return Math.Max(0, _catalog.Count - denied);
+            }
+
+            return _marks.Count(kv => kv.Value == ToolMark.Allow
+                && _catalog.Any(c => string.Equals(c.ToolName, kv.Key, StringComparison.OrdinalIgnoreCase)));
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{AppId}|{IntegrationName}";
+        if (key != _loadedKey)
+        {
+            await LoadAsync();
+            return;
+        }
+
+        if (!_syncingFromParent)
+            SyncMarksFromCsv();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _catalog.Clear();
+        try
+        {
+            if (string.IsNullOrWhiteSpace(AppId) || string.IsNullOrWhiteSpace(IntegrationName))
+                return;
+
+            var rows = await Api.GetMcpCatalogToolsAsync(AppId, IntegrationName);
+            _catalog.AddRange(rows.OrderBy(r => r.ToolName, StringComparer.OrdinalIgnoreCase));
+            _loadedKey = $"{AppId}|{IntegrationName}";
+            SyncMarksFromCsv();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task RebuildAsync()
+    {
+        if (string.IsNullOrWhiteSpace(AppId) || string.IsNullOrWhiteSpace(IntegrationName))
+            return;
+
+        _rebuilding = true;
+        _error = null;
+        try
+        {
+            await Api.RebuildMcpCatalogAsync(AppId, IntegrationName);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _rebuilding = false;
+        }
+    }
+
+    private void SyncMarksFromCsv()
+    {
+        var allow = SplitCsv(AllowlistText);
+        var deny = SplitCsv(DenylistText);
+        _mode = allow.Count > 0 ? PickerMode.Selected : PickerMode.All;
+        _marks.Clear();
+
+        if (_mode == PickerMode.Selected)
+        {
+            foreach (var name in allow)
+                _marks[name] = ToolMark.Allow;
+        }
+        else
+        {
+            foreach (var name in deny)
+                _marks[name] = ToolMark.Deny;
+        }
+
+        var known = _catalog.Select(c => c.ToolName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _orphans.Clear();
+        foreach (var name in allow.Concat(deny).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!known.Contains(name))
+                _orphans.Add(name);
+        }
+    }
+
+    private ToolMark GetState(string toolName) =>
+        _marks.TryGetValue(toolName, out var mark) ? mark : ToolMark.Neutral;
+
+    private async Task SetMode(PickerMode mode)
+    {
+        if (_mode == mode)
+            return;
+        _mode = mode;
+        _marks.Clear();
+        await EmitCsvAsync();
+    }
+
+    private async Task SetState(string toolName, ToolMark mark)
+    {
+        if (mark == ToolMark.Neutral)
+            _marks.Remove(toolName);
+        else
+            _marks[toolName] = mark;
+        await EmitCsvAsync();
+    }
+
+    private async Task ClearMarks()
+    {
+        _marks.Clear();
+        await EmitCsvAsync();
+    }
+
+    private async Task RemoveOrphan(string name)
+    {
+        _marks.Remove(name);
+        _orphans.RemoveAll(o => string.Equals(o, name, StringComparison.OrdinalIgnoreCase));
+        await EmitCsvAsync();
+    }
+
+    private void OnFilterInput(ChangeEventArgs e) =>
+        _filter = e.Value?.ToString() ?? string.Empty;
+
+    private async Task OnAllowlistCsvChanged(string value)
+    {
+        _syncingFromParent = true;
+        await AllowlistTextChanged.InvokeAsync(value);
+        AllowlistText = value;
+        SyncMarksFromCsv();
+        _syncingFromParent = false;
+    }
+
+    private async Task OnDenylistCsvChanged(string value)
+    {
+        _syncingFromParent = true;
+        await DenylistTextChanged.InvokeAsync(value);
+        DenylistText = value;
+        SyncMarksFromCsv();
+        _syncingFromParent = false;
+    }
+
+    private async Task EmitCsvAsync()
+    {
+        string allow;
+        string deny;
+        if (_mode == PickerMode.Selected)
+        {
+            allow = string.Join(", ", _marks
+                .Where(kv => kv.Value == ToolMark.Allow)
+                .Select(kv => kv.Key)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+            deny = string.Empty;
+        }
+        else
+        {
+            allow = string.Empty;
+            deny = string.Join(", ", _marks
+                .Where(kv => kv.Value == ToolMark.Deny)
+                .Select(kv => kv.Key)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+        }
+
+        _syncingFromParent = true;
+        AllowlistText = allow;
+        DenylistText = deny;
+        await AllowlistTextChanged.InvokeAsync(allow);
+        await DenylistTextChanged.InvokeAsync(deny);
+        var known = _catalog.Select(c => c.ToolName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _orphans.Clear();
+        foreach (var name in SplitCsv(allow).Concat(SplitCsv(deny)).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!known.Contains(name))
+                _orphans.Add(name);
+        }
+        _syncingFromParent = false;
+    }
+
+    private static List<string> SplitCsv(string? text) =>
+        string.IsNullOrWhiteSpace(text)
+            ? []
+            : text.Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+}

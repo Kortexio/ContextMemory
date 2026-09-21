@@ -21,7 +21,7 @@ public static class AgenticToolRegistry
     };
 
     public static List<OllamaTool> BuildTools(AppRuntimeConfig runtimeConfig) =>
-        BuildExecutionTools(runtimeConfig, lazySchemas: true);
+        BuildExecutionTools(runtimeConfig, lazySchemas: false);
 
     /// <summary>
     /// Global wiki search. Prefer <paramref name="lazySchemas"/> = false: the schema is tiny and
@@ -130,7 +130,7 @@ public static class AgenticToolRegistry
                 }));
     }
 
-    public static List<OllamaTool> BuildExecutionTools(AppRuntimeConfig runtimeConfig, bool lazySchemas = true)
+    public static List<OllamaTool> BuildExecutionTools(AppRuntimeConfig runtimeConfig, bool lazySchemas = false)
     {
         var tools = new List<OllamaTool>();
 
