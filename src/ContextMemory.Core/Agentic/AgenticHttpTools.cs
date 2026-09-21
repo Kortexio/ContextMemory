@@ -40,7 +40,7 @@ public static class AgenticHttpTools
         {
             tools.Add(new OllamaTool("function", new OllamaFunction(
                 HttpRequest,
-                "HTTP request (GET/POST/PUT/PATCH/DELETE) to an allowlisted host. Do not invent OAuth — use MCP for Zuora and authenticated APIs.",
+                "HTTP request (GET/POST/PUT/PATCH/DELETE) to an allowlisted host. Do not invent OAuth — use configured MCP tools for authenticated APIs.",
                 new
                 {
                     type = "object",

@@ -7,6 +7,32 @@ namespace ContextMemory.Api.Tests;
 
 public sealed class ProseToolCallParserTests
 {
+    private static AgenticToolsConfig QueryObjectsToolsConfig() => new()
+    {
+        ArgumentNormalizers = new Dictionary<string, McpArgumentNormalizerConfig>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["query_objects"] = new McpArgumentNormalizerConfig
+            {
+                Aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["object_type"] = "objectType",
+                    ["ObjectType"] = "objectType",
+                    ["page_size"] = "pageSize",
+                    ["PageSize"] = "pageSize",
+                    ["limit"] = "pageSize",
+                    ["Limit"] = "pageSize",
+                    ["fields_to_return"] = "fields",
+                    ["FieldsToReturn"] = "fields",
+                    ["fieldsToReturn"] = "fields",
+                    ["filters"] = "filter",
+                    ["Filters"] = "filter"
+                },
+                DropKeys = ["fieldsToReturn", "fields_to_return", "FieldsToReturn", "object_type", "limit", "filters"],
+                LowercaseObjectType = true,
+                MaxPageSize = 99
+            }
+        }
+    };
     [Fact]
     public void TryParse_PromotesNarratedMcpToolJson()
     {
@@ -96,9 +122,7 @@ public sealed class ProseToolCallParserTests
             }
             """;
 
-        var normalized = McpQueryObjectsArgumentNormalizer.Normalize(
-            "zuora-developer-mcp-PACCAR-ACCP__query_objects",
-            raw);
+        var normalized = McpArgumentShaping.NormalizeArguments("zuora-developer-mcp-PACCAR-ACCP__query_objects", raw, QueryObjectsToolsConfig());
 
         Assert.Contains("\"objectType\":\"account\"", normalized, StringComparison.Ordinal);
         Assert.Contains("status.EQ:Canceled", normalized, StringComparison.Ordinal);
@@ -119,9 +143,7 @@ public sealed class ProseToolCallParserTests
             }
             """;
 
-        var normalized = McpQueryObjectsArgumentNormalizer.Normalize(
-            "zuora-developer-mcp-PACCAR-ACCP__query_objects",
-            raw);
+        var normalized = McpArgumentShaping.NormalizeArguments("zuora-developer-mcp-PACCAR-ACCP__query_objects", raw, QueryObjectsToolsConfig());
 
         Assert.Contains("\"fields\":[", normalized, StringComparison.Ordinal);
         Assert.Contains("accountNumber", normalized, StringComparison.Ordinal);
@@ -134,7 +156,7 @@ public sealed class ProseToolCallParserTests
         const string raw = """
             { "objectType": "account", "filter": ["status = 'Canceled'"], "pageSize": 1 }
             """;
-        var normalized = McpQueryObjectsArgumentNormalizer.Normalize("x__query_objects", raw);
+        var normalized = McpArgumentShaping.NormalizeArguments("x__query_objects", raw);
         Assert.Contains("status.EQ:Canceled", normalized, StringComparison.Ordinal);
         Assert.DoesNotContain("status =", normalized, StringComparison.Ordinal);
     }

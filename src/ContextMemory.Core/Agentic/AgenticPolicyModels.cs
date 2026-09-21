@@ -150,6 +150,8 @@ public static class AgenticGuardrailKinds
     /// instead of emitting tool_calls. End users should only see the result.
     /// </summary>
     public const string ToolSurfaceHidden = "tool-surface-hidden";
+    /// <summary>Reject chain-of-thought / meta-harness dumps in the user-facing answer.</summary>
+    public const string ThinkingLeak = "thinking-leak";
 
     // --- LLM Guardrails catalog (image) — default OFF in seed ---
     public const string InappropriateContent = "inappropriate-content";

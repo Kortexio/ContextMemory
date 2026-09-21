@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -33,11 +32,7 @@ public static partial class AgenticSqlGuardrail
         if (!dangerous && !unbalanced)
             return false;
 
-        feedback = AgenticGuardrailConfigReader.GetFeedback(configJson, runtimeConfig.DefaultLanguage)
-            ?? TenantLocale.Select(
-                runtimeConfig.DefaultLanguage,
-                "Rejected: SQL in the answer looks unsafe or malformed.",
-                "Rejeitado: SQL na resposta parece inseguro ou malformado.");
+        feedback = AgenticGuardrailConfigReader.ResolveFeedback(configJson, runtimeConfig.DefaultLanguage);
         return true;
     }
 

@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using ContextMemory.Core.Contracts;
-using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -48,11 +47,7 @@ public static partial class AgenticUrlAvailabilityGuardrail
         if (dead.Count == 0)
             return (false, string.Empty);
 
-        var feedback = AgenticGuardrailConfigReader.GetFeedback(configJson, runtimeConfig.DefaultLanguage)
-            ?? TenantLocale.Select(
-                runtimeConfig.DefaultLanguage,
-                $"Rejected: unreachable URL(s): {string.Join(", ", dead)}.",
-                $"Rejeitado: URL(s) inacessível(eis): {string.Join(", ", dead)}.");
+        var feedback = AgenticGuardrailConfigReader.ResolveFeedback(configJson, runtimeConfig.DefaultLanguage);
         return (true, feedback);
     }
 

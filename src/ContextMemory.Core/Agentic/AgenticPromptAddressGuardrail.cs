@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -38,11 +37,8 @@ public static partial class AgenticPromptAddressGuardrail
         if (missing.Count == 0)
             return false;
 
-        feedback = AgenticGuardrailConfigReader.GetFeedback(configJson, runtimeConfig.DefaultLanguage)
-            ?? TenantLocale.Select(
-                runtimeConfig.DefaultLanguage,
-                $"Rejected: answer does not address: {string.Join(", ", missing)}.",
-                $"Rejeitado: a resposta não cobre: {string.Join(", ", missing)}.");
+        var resolved = AgenticGuardrailConfigReader.ResolveFeedback(configJson, runtimeConfig.DefaultLanguage);
+        feedback = resolved.Replace("{missing}", string.Join(", ", missing), StringComparison.Ordinal);
         return true;
     }
 

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ContextMemory.Core.Agentic;
 using ContextMemory.Core.Models;
 using Xunit;
@@ -24,6 +25,7 @@ public sealed class AgenticUrlFetchGuardrailTests
             objective,
             answer,
             [],
+            UrlFetchConfigJson(),
             Config(),
             out var feedback);
 
@@ -53,6 +55,7 @@ public sealed class AgenticUrlFetchGuardrailTests
                     Duration = TimeSpan.FromMilliseconds(200)
                 }
             ],
+            UrlFetchConfigJson(),
             Config(),
             out _);
 
@@ -80,6 +83,7 @@ public sealed class AgenticUrlFetchGuardrailTests
                     Duration = TimeSpan.FromSeconds(5)
                 }
             ],
+            UrlFetchConfigJson(),
             Config(),
             out _);
 
@@ -93,6 +97,7 @@ public sealed class AgenticUrlFetchGuardrailTests
             "quantas contas há no Zuora?",
             "Há 3 contas.",
             [],
+            UrlFetchConfigJson(),
             Config(),
             out _);
 
@@ -103,6 +108,7 @@ public sealed class AgenticUrlFetchGuardrailTests
     public async Task DeterministicValidator_Rejects_Hallucinated_Site_Answer()
     {
         var validator = new DeterministicAgentValidator();
+        var urlGuardrail = AgenticCatalogSeed.Guardrails.First(g => g.Id == "url-fetch-required");
         var result = await validator.ValidateAsync(
             new AgentValidationRequest
             {
@@ -117,22 +123,35 @@ public sealed class AgenticUrlFetchGuardrailTests
                         {
                             AgenticGuardrailKinds.UrlFetch
                         },
-                        ActiveGuardrails =
-                        [
-                            new AgenticGuardrailDefinition
-                            {
-                                Id = "url-fetch-required",
-                                Name = "URL fetch required",
-                                Kind = AgenticGuardrailKinds.UrlFetch,
-                                ConfigJson = "{}"
-                            }
-                        ]
+                        ActiveGuardrails = [urlGuardrail with { ConfigJson = UrlFetchConfigJson() }]
                     }
                 },
                 UserObjective = "e esse site aqui? sobre o que é?\nhttps://www.kortexio.io/"
             });
 
         Assert.False(result.IsValid);
-        Assert.Contains("kortexio.io", result.FeedbackForModel ?? "", StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("without fetching", result.FeedbackForModel ?? "", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string UrlFetchConfigJson() =>
+        JsonSerializer.Serialize(new
+        {
+            kind = AgenticGuardrailKinds.UrlFetch,
+            feedback =
+                "Rejected: you described a website/URL without fetching it (hosts: {hosts}). "
+                + "Emit tool_calls first — e.g. python_execute with httpx/Playwright or web-search — "
+                + "then answer ONLY from tool output.",
+            aboutSiteMarkers = new[]
+            {
+                "this site", "this website", "this page", "this url", "this link",
+                "the website", "the site", "what is", "what's this", "whats this", "what about",
+                "open ", "visit ", "fetch", "scrape", "summary", "content of"
+            },
+            fetchToolMarkers = new[]
+            {
+                "python_execute", "shell_execute", "node_execute", "web_search", "fetch_url", "http_request",
+                "browser_navigate", "browser_snapshot", "browser_screenshot", "read_image", "brave", "tavily",
+                "ddgs", "duckduckgo", "playwright", "httpx", "requests", "curl"
+            }
+        });
 }

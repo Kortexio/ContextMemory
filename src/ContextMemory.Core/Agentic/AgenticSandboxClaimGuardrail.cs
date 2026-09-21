@@ -1,63 +1,15 @@
-using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
 
 /// <summary>
-/// Rejects model answers that invent false sandbox limitations
-/// (e.g. "Azure Container Apps has no network") when the tenant actually uses
-/// self-hosted-sandbox with outbound HTTP.
+/// Rejects fabricated sandbox limitations when the tenant uses self-hosted-sandbox.
+/// Markers and feedback come only from Admin <c>ConfigJson</c>
+/// (<c>acaMarkers</c>, <c>noNetworkMarkers</c>, <c>sandboxSubjectMarkers</c>, <c>hypotheticalMarkers</c>, <c>feedback</c>).
+/// Empty marker lists ⇒ no-op for that claim type.
 /// </summary>
 public static class AgenticSandboxClaimGuardrail
 {
-    private static readonly string[] AcaMarkers =
-    [
-        "azure container apps",
-        "azure container app",
-        "aca dynamic session",
-        "aca session",
-        "ambiente isolado (aca)",
-        "isolated azure container"
-    ];
-
-    private static readonly string[] NoNetworkMarkers =
-    [
-        "não tem acesso à rede",
-        "nao tem acesso a rede",
-        "sem acesso à rede",
-        "sem acesso a rede",
-        "não tem acesso a rede",
-        "no access to the network",
-        "no network access",
-        "without network access",
-        "cannot access the network",
-        "can't access the network",
-        "network egress",
-        "rede externa",
-        "external network",
-        "dns/timeout",
-        "dns timeout",
-        "falhará com erro de conexão",
-        "falhara com erro de conexao",
-        "will fail with a connection",
-        "não será executado com sucesso",
-        "nao sera executado com sucesso",
-        "will not be executed successfully",
-        "não há como contornar",
-        "nao ha como contornar",
-        "no way to work around"
-    ];
-
-    private static readonly string[] SandboxSubjectMarkers =
-    [
-        "python_execute",
-        "shell_execute",
-        "node_execute",
-        "sandbox",
-        "aca",
-        "azure container"
-    ];
-
     public static bool HasSelfHostedSandbox(AppRuntimeConfig runtimeConfig) =>
         runtimeConfig.Agentic.Tools.Execution.Any(e =>
             string.Equals(e.Type, "self-hosted-sandbox", StringComparison.OrdinalIgnoreCase)
@@ -66,6 +18,7 @@ public static class AgenticSandboxClaimGuardrail
     public static bool TryGetRejectionFeedback(
         string finalAnswer,
         IReadOnlyList<AgentExecutionStep> steps,
+        string configJson,
         AppRuntimeConfig runtimeConfig,
         out string feedback)
     {
@@ -73,37 +26,43 @@ public static class AgenticSandboxClaimGuardrail
         if (!HasSelfHostedSandbox(runtimeConfig) || string.IsNullOrWhiteSpace(finalAnswer))
             return false;
 
-        // If python/shell actually failed with a real network error, the model may describe it.
         if (HasObservedSandboxNetworkFailure(steps))
             return false;
 
+        var acaMarkers = AgenticGuardrailConfigReader.GetStringList(configJson, "acaMarkers");
+        var noNetworkMarkers = AgenticGuardrailConfigReader.GetStringList(configJson, "noNetworkMarkers");
+        var subjectMarkers = AgenticGuardrailConfigReader.GetStringList(configJson, "sandboxSubjectMarkers");
+        var hypotheticalMarkers = AgenticGuardrailConfigReader.GetStringList(configJson, "hypotheticalMarkers");
+
+        if (acaMarkers.Count == 0
+            && noNetworkMarkers.Count == 0
+            && hypotheticalMarkers.Count == 0)
+        {
+            return false;
+        }
+
         var text = finalAnswer;
-        var mentionsSandboxSubject = SandboxSubjectMarkers.Any(m =>
+        var mentionsSandboxSubject = subjectMarkers.Any(m =>
             text.Contains(m, StringComparison.OrdinalIgnoreCase));
 
-        var inventsAca = AcaMarkers.Any(m => text.Contains(m, StringComparison.OrdinalIgnoreCase))
+        var inventsAca = acaMarkers.Any(m => text.Contains(m, StringComparison.OrdinalIgnoreCase))
                          || (mentionsSandboxSubject
                              && text.Contains("aca", StringComparison.OrdinalIgnoreCase)
                              && (text.Contains("isolad", StringComparison.OrdinalIgnoreCase)
                                  || text.Contains("isolated", StringComparison.OrdinalIgnoreCase)));
 
         var inventsNoNetwork = mentionsSandboxSubject
-                               && NoNetworkMarkers.Any(m => text.Contains(m, StringComparison.OrdinalIgnoreCase));
+                               && noNetworkMarkers.Any(m => text.Contains(m, StringComparison.OrdinalIgnoreCase));
 
-        // Hypothetical "if I tried it would fail" without any execution step.
         var inventsHypotheticalFailure =
             steps.Count == 0
             && mentionsSandboxSubject
-            && (text.Contains("o que aconteceria", StringComparison.OrdinalIgnoreCase)
-                || text.Contains("what would happen", StringComparison.OrdinalIgnoreCase)
-                || text.Contains("se eu tentasse", StringComparison.OrdinalIgnoreCase)
-                || text.Contains("if i tried", StringComparison.OrdinalIgnoreCase)
-                || text.Contains("if i were to", StringComparison.OrdinalIgnoreCase));
+            && hypotheticalMarkers.Any(m => text.Contains(m, StringComparison.OrdinalIgnoreCase));
 
         if (!inventsAca && !inventsNoNetwork && !inventsHypotheticalFailure)
             return false;
 
-        feedback = BuildFeedback(runtimeConfig, inventsAca, inventsNoNetwork);
+        feedback = AgenticGuardrailConfigReader.ResolveFeedback(configJson, runtimeConfig.DefaultLanguage);
         return true;
     }
 
@@ -138,38 +97,4 @@ public static class AgenticSandboxClaimGuardrail
         string.Equals(toolName, AgenticToolRegistry.PythonExecuteToolName, StringComparison.OrdinalIgnoreCase)
         || string.Equals(toolName, AgenticToolRegistry.ShellExecuteToolName, StringComparison.OrdinalIgnoreCase)
         || string.Equals(toolName, AgenticToolRegistry.NodeExecuteToolName, StringComparison.OrdinalIgnoreCase);
-
-    private static string BuildFeedback(AppRuntimeConfig config, bool inventsAca, bool inventsNoNetwork)
-    {
-        var reasons = new List<string>();
-        if (inventsAca)
-        {
-            reasons.Add(TenantLocale.Select(
-                config.DefaultLanguage,
-                "this tenant uses self-hosted-sandbox, NOT Azure Container Apps",
-                "este tenant usa self-hosted-sandbox, NÃO Azure Container Apps"));
-        }
-
-        if (inventsNoNetwork)
-        {
-            reasons.Add(TenantLocale.Select(
-                config.DefaultLanguage,
-                "outbound HTTP(S) from python_execute DOES work",
-                "HTTP(S) externo a partir de python_execute FUNCIONA"));
-        }
-
-        var reasonText = string.Join("; ", reasons);
-        return TenantLocale.Select(
-            config.DefaultLanguage,
-            "Rejected: you invented false sandbox limitations ("
-            + reasonText
-            + "). Do NOT claim ACA isolation or no network. "
-            + "Call the real tools now: prefer configured MCP tools for Zuora (`server__tool`), "
-            + "or `python_execute` for ad-hoc HTTP. Emit tool_calls — do not narrate hypothetical failures.",
-            "Rejeitado: inventaste limitações falsas do sandbox ("
-            + reasonText
-            + "). NÃO digas que é ACA isolado nem que não há rede. "
-            + "Chama as tools reais agora: prefere MCP configurado para Zuora (`servidor__tool`), "
-            + "ou `python_execute` para HTTP ad-hoc. Emite tool_calls — não narres falhas hipotéticas.");
-    }
 }

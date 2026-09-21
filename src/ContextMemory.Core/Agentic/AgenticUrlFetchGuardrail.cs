@@ -1,82 +1,20 @@
 using System.Text.RegularExpressions;
-using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
 
 /// <summary>
-/// Rejects answers that describe an external web page/URL without any tool evidence
-/// that the page (or its host) was actually fetched/searched.
+/// Rejects answers that describe a URL/site without fetch evidence.
+/// Markers and feedback come only from Admin <c>ConfigJson</c>
+/// (<c>aboutSiteMarkers</c>, <c>fetchToolMarkers</c>, <c>feedback</c> — use <c>{hosts}</c> placeholder).
 /// </summary>
 public static partial class AgenticUrlFetchGuardrail
 {
-    private static readonly string[] AboutSiteMarkers =
-    [
-        "esse site",
-        "este site",
-        "o site",
-        "esse link",
-        "este link",
-        "esta página",
-        "esta pagina",
-        "essa página",
-        "essa pagina",
-        "this site",
-        "this website",
-        "this page",
-        "this url",
-        "this link",
-        "the website",
-        "the site",
-        "sobre o que",
-        "do que se trata",
-        "o que é",
-        "o que e",
-        "what is",
-        "what's this",
-        "whats this",
-        "what about",
-        "abre",
-        "abrir",
-        "visita",
-        "visitar",
-        "open ",
-        "visit ",
-        "fetch",
-        "scrape",
-        "resumo",
-        "summary",
-        "conteúdo",
-        "conteudo",
-        "content of"
-    ];
-
-    private static readonly string[] FetchToolMarkers =
-    [
-        "python_execute",
-        "shell_execute",
-        "node_execute",
-        "web_search",
-        "fetch_url",
-        "http_request",
-        "browser_navigate",
-        "browser_snapshot",
-        "browser_screenshot",
-        "read_image",
-        "brave",
-        "tavily",
-        "ddgs",
-        "duckduckgo",
-        "playwright",
-        "httpx",
-        "requests",
-        "curl"
-    ];
-
     public static bool TryGetRejectionFeedback(
         string? userObjective,
         string finalAnswer,
         IReadOnlyList<AgentExecutionStep> steps,
+        string configJson,
         AppRuntimeConfig runtimeConfig,
         out string feedback)
     {
@@ -84,35 +22,41 @@ public static partial class AgenticUrlFetchGuardrail
         if (string.IsNullOrWhiteSpace(userObjective) || string.IsNullOrWhiteSpace(finalAnswer))
             return false;
 
-        if (!RequiresUrlEvidence(userObjective))
+        var aboutMarkers = AgenticGuardrailConfigReader.GetStringList(configJson, "aboutSiteMarkers");
+        if (!RequiresUrlEvidence(userObjective, aboutMarkers))
             return false;
 
         var hosts = ExtractHosts(userObjective);
         if (hosts.Count == 0)
             return false;
 
-        if (HasFetchEvidence(hosts, steps))
+        var fetchMarkers = AgenticGuardrailConfigReader.GetStringList(configJson, "fetchToolMarkers");
+        if (HasFetchEvidence(hosts, steps, fetchMarkers))
             return false;
 
-        // If a fetch was attempted and failed, allow the model to report the failure.
-        if (HasFailedFetchAttempt(hosts, steps))
+        if (HasFailedFetchAttempt(hosts, steps, fetchMarkers))
             return false;
 
-        feedback = BuildFeedback(runtimeConfig, hosts);
+        var hostList = string.Join(", ", hosts);
+        var configured = AgenticGuardrailConfigReader.GetFeedback(configJson, runtimeConfig.DefaultLanguage);
+        feedback = string.IsNullOrWhiteSpace(configured)
+            ? AgenticGuardrailConfigReader.ResolveFeedback(configJson, runtimeConfig.DefaultLanguage)
+            : configured.Replace("{hosts}", hostList, StringComparison.Ordinal);
         return true;
     }
 
-    internal static bool RequiresUrlEvidence(string userObjective)
+    internal static bool RequiresUrlEvidence(string userObjective, IReadOnlyList<string> aboutSiteMarkers)
     {
         var text = userObjective.Trim();
         if (!HttpUrlRegex().IsMatch(text))
             return false;
 
         var lower = text.ToLowerInvariant();
-        if (AboutSiteMarkers.Any(m => lower.Contains(m, StringComparison.Ordinal)))
+        if (aboutSiteMarkers.Any(m =>
+                !string.IsNullOrWhiteSpace(m)
+                && lower.Contains(m.ToLowerInvariant(), StringComparison.Ordinal)))
             return true;
 
-        // Short prompts that are mostly a URL + short question (e.g. "e este?\nhttps://…")
         var withoutUrls = HttpUrlRegex().Replace(text, " ").Trim();
         return withoutUrls.Length <= 120;
     }
@@ -141,7 +85,10 @@ public static partial class AgenticUrlFetchGuardrail
         return hosts;
     }
 
-    private static bool HasFetchEvidence(IReadOnlyList<string> hosts, IReadOnlyList<AgentExecutionStep> steps)
+    private static bool HasFetchEvidence(
+        IReadOnlyList<string> hosts,
+        IReadOnlyList<AgentExecutionStep> steps,
+        IReadOnlyList<string> fetchMarkers)
     {
         foreach (var step in steps)
         {
@@ -152,14 +99,17 @@ public static partial class AgenticUrlFetchGuardrail
             if (!HostsMentioned(blob, hosts))
                 continue;
 
-            if (LooksLikeFetchTool(step.ToolName, blob))
+            if (LooksLikeFetchTool(step.ToolName, blob, fetchMarkers))
                 return true;
         }
 
         return false;
     }
 
-    private static bool HasFailedFetchAttempt(IReadOnlyList<string> hosts, IReadOnlyList<AgentExecutionStep> steps)
+    private static bool HasFailedFetchAttempt(
+        IReadOnlyList<string> hosts,
+        IReadOnlyList<AgentExecutionStep> steps,
+        IReadOnlyList<string> fetchMarkers)
     {
         foreach (var step in steps)
         {
@@ -167,7 +117,7 @@ public static partial class AgenticUrlFetchGuardrail
                 continue;
 
             var blob = $"{step.ToolName}\n{step.Arguments}\n{step.Output}";
-            if (HostsMentioned(blob, hosts) && LooksLikeFetchTool(step.ToolName, blob))
+            if (HostsMentioned(blob, hosts) && LooksLikeFetchTool(step.ToolName, blob, fetchMarkers))
                 return true;
         }
 
@@ -187,31 +137,18 @@ public static partial class AgenticUrlFetchGuardrail
         return false;
     }
 
-    private static bool LooksLikeFetchTool(string toolName, string blob)
+    private static bool LooksLikeFetchTool(string toolName, string blob, IReadOnlyList<string> fetchMarkers)
     {
         var lowerTool = toolName.ToLowerInvariant();
-        if (FetchToolMarkers.Any(m => lowerTool.Contains(m, StringComparison.Ordinal)))
+        if (fetchMarkers.Any(m =>
+                !string.IsNullOrWhiteSpace(m)
+                && lowerTool.Contains(m.ToLowerInvariant(), StringComparison.Ordinal)))
             return true;
 
         var lowerBlob = blob.ToLowerInvariant();
-        return FetchToolMarkers.Any(m => lowerBlob.Contains(m, StringComparison.Ordinal));
-    }
-
-    private static string BuildFeedback(AppRuntimeConfig config, IReadOnlyList<string> hosts)
-    {
-        var hostList = string.Join(", ", hosts);
-        return TenantLocale.Select(
-            config.DefaultLanguage,
-            "Rejected: you described a website/URL without fetching it. "
-            + $"Hosts in the user message: {hostList}. "
-            + "You do NOT know page content from memory. Emit tool_calls first — e.g. `python_execute` with httpx/BeautifulSoup "
-            + "or Playwright (JS pages), or a gateway web-search tool — then answer ONLY from the tool output. "
-            + "Do not invent product purpose, APIs, or comparisons.",
-            "Rejeitado: descreveste um site/URL sem o ires buscar. "
-            + $"Hosts na mensagem do utilizador: {hostList}. "
-            + "NÃO conheces o conteúdo da página de memória. Emite tool_calls primeiro — p.ex. `python_execute` com httpx/BeautifulSoup "
-            + "ou Playwright (páginas com JS), ou uma tool de web-search do gateway — e responde APENAS com base no output da tool. "
-            + "Não inventes propósito do produto, APIs ou comparações.");
+        return fetchMarkers.Any(m =>
+            !string.IsNullOrWhiteSpace(m)
+            && lowerBlob.Contains(m.ToLowerInvariant(), StringComparison.Ordinal));
     }
 
     [GeneratedRegex(@"https?://[^\s<>\""']+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

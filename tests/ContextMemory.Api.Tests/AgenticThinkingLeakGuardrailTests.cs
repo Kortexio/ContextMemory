@@ -15,6 +15,7 @@ public sealed class AgenticThinkingLeakGuardrailTests
 
         var ok = AgenticThinkingLeakGuardrail.TryGetRejectionFeedback(
             answer,
+            ThinkingLeakConfigJson(),
             Config(),
             out var feedback);
 
@@ -27,11 +28,15 @@ public sealed class AgenticThinkingLeakGuardrailTests
     {
         var ok = AgenticThinkingLeakGuardrail.TryGetRejectionFeedback(
             "Para criar uma subscrição na PACCAR é necessário um VIN válido e um produto ativo.",
+            ThinkingLeakConfigJson(),
             Config(),
             out _);
 
         Assert.False(ok);
     }
+
+    private static string ThinkingLeakConfigJson() =>
+        AgenticCatalogSeed.Guardrails.First(g => g.Id == "thinking-leak").ConfigJson;
 
     private static AppRuntimeConfig Config() =>
         new()

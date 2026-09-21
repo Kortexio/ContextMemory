@@ -11,6 +11,10 @@ public enum AgenticPromptProfile
     ComposerLike
 }
 
+/// <summary>
+/// Resolves harness profile from Admin <c>promptProfile</c> / model id.
+/// Tool-calling prose lives in Admin skills — not injected here.
+/// </summary>
 public static class AgenticPromptProfileResolver
 {
     public static AgenticPromptProfile Resolve(AppRuntimeConfig config)
@@ -72,21 +76,6 @@ public static class AgenticPromptProfileResolver
             AgenticPromptProfile.Qwen => 12,
             AgenticPromptProfile.OpenAi => 12,
             _ => 10
-        };
-
-    public static string ToolCallingHint(AgenticPromptProfile profile) =>
-        profile switch
-        {
-            AgenticPromptProfile.ComposerLike =>
-                "Prefer tool_describe → tool call → short observation. Never name tools in the user-facing answer; avoid dumping large payloads into chat.",
-            AgenticPromptProfile.Claude =>
-                "Use the function-calling interface silently. Call tool_describe before unfamiliar tools; never name tools in the user-facing answer.",
-            AgenticPromptProfile.Qwen =>
-                "When you need a tool, reply with ONLY one JSON object {\"tool\":\"name\",\"arguments\":{...}} — no prose. Call tool_describe before first use of unknown tools.",
-            AgenticPromptProfile.OpenAi =>
-                "Use OpenAI-style function calls silently. Call tool_describe before first use of unknown tools; never name tools in the user-facing answer.",
-            _ =>
-                "Emit valid tool/function call JSON silently when needed. Call tool_describe before unfamiliar tools; never narrate tool names to the user."
         };
 
     private static bool ContainsAny(string haystack, params string[] needles)

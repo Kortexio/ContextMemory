@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -66,11 +65,7 @@ public static partial class AgenticJsonSchemaGuardrail
     }
 
     private static string Feedback(string configJson, AppRuntimeConfig runtimeConfig) =>
-        AgenticGuardrailConfigReader.GetFeedback(configJson, runtimeConfig.DefaultLanguage)
-        ?? TenantLocale.Select(
-            runtimeConfig.DefaultLanguage,
-            "Rejected: answer does not satisfy JSON/schema requirements.",
-            "Rejeitado: a resposta não cumpre requisitos de JSON/schema.");
+        AgenticGuardrailConfigReader.ResolveFeedback(configJson, runtimeConfig.DefaultLanguage);
 
     private static bool TryExtractJson(string text, out string json)
     {

@@ -105,12 +105,12 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
                     // Weak-model failure mode: paraphrase the budget rejection to the end user
                     // instead of answering the business question. Loop must replace with evidence.
                     const string forced =
-                        "O que aconteceu:\n\n"
-                        + "A ferramenta wiki_search foi chamada mais de uma vez com o mesmo parâmetro, "
-                        + "o que foi rejeitada pelo sistema.\n"
-                        + "Isso é um limite de orçamento de chamadas, não um erro na ferramenta.\n"
-                        + "Como corrigir:\n\n"
-                        + "Certifique-se de não chamar a mesma ferramenta com o mesmo parâmetro consecutivamente.";
+                        "What happened:\n\n"
+                        + "The wiki_search tool was called more than once with the same parameter, "
+                        + "which was rejected by the system.\n"
+                        + "This is a wiki budget call limit, not a tool error.\n"
+                        + "How to fix:\n\n"
+                        + "Do not call the same tool with the same parameter consecutively.";
                     return Task.FromResult(isOpenAiChat ? OpenAiText(forced) : OllamaText(forced));
                 }
 

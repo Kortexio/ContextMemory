@@ -78,7 +78,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddHttpClient<SelfHostedSandboxClient>(client => client.Timeout = TimeSpan.FromMinutes(5));
         services.AddHttpClient<McpJsonRpcClient>(client => client.Timeout = TimeSpan.FromMinutes(2));
         services.AddHttpClient<McpOAuthTokenProvider>(client => client.Timeout = TimeSpan.FromSeconds(30));
-        // Must exceed typical Zuora Data Query / REMOTE_MCP_TIMEOUT_MS values (often 3–10 min).
+        // Must exceed typical remote MCP / REMOTE_MCP_TIMEOUT_MS values (often 3–10 min).
         services.AddHttpClient("McpRuntime", client => client.Timeout = TimeSpan.FromMinutes(15));
         services.AddSingleton<McpStdioClient>();
 

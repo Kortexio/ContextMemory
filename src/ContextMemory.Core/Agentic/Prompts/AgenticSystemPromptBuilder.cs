@@ -3,6 +3,10 @@ using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic.Prompts;
 
+/// <summary>
+/// Builds a thin harness scaffold. Policy prose lives in Admin skills (always-on / skill_read) —
+/// this class must not re-state MCP/evidence/sandbox rules that already exist in the catalog.
+/// </summary>
 public static class AgenticSystemPromptBuilder
 {
     public static string Build(
@@ -14,157 +18,106 @@ public static class AgenticSystemPromptBuilder
 
         var profile = AgenticPromptProfileResolver.Resolve(runtimeConfig);
         var capabilities = LlmCapabilitiesResolver.From(runtimeConfig);
-
-        var mcpServers = runtimeConfig.Agentic.Tools.Integrations
-            .Where(i => string.Equals(i.Type, "mcp", StringComparison.OrdinalIgnoreCase))
-            .Select(i => i.Name)
-            .Where(n => !string.IsNullOrWhiteSpace(n))
-            .ToList();
-
-        // Server names already appear in the compact tool summary / catalog — avoid a second full list.
-        var mcpLine = mcpServers.Count > 0
-            ? " Prefer listed MCP tools for live system data; tool_describe before unfamiliar schemas."
-            : string.Empty;
+        var hasMcp = runtimeConfig.Agentic.Tools.Integrations.Any(i =>
+            string.Equals(i.Type, "mcp", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(i.Name));
 
         var sb = new StringBuilder();
         sb.AppendLine("## Agentic mode");
         sb.AppendLine($"Harness profile: {profile} ({capabilities.HarnessMode}).");
-        sb.AppendLine($"Available tools: {toolNamesSummary}.{mcpLine}");
-        sb.AppendLine(AgenticPromptProfileResolver.ToolCallingHint(profile));
-        sb.AppendLine();
+        sb.AppendLine($"Available tools: {toolNamesSummary}.");
         sb.AppendLine(
-            "Dynamic context discovery: long tool outputs are stored as artifacts — "
-            + "use artifact_tail/artifact_read with artifactId from observations. "
-            + "Call tool_describe before the first invocation of any unfamiliar tool (MCP or built-in). "
-            + (capabilities.PreferSkillDiscovery
-                ? "Skills: use skill_search then skill_read. "
-                : "Critical evidence rules are inlined below; other skills via skill_search / skill_read. ")
-            + "Requestable rules: rule_search / rule_read. "
-            + "Heavy research: delegate_task (depth 1). "
-            + "Never narrate harness steps or tool names to the user. "
-            + "Always answer in the same language the user wrote in (latest user message) — "
-            + "do not switch to English just because tools or schemas are English. "
-            + "After tool results, answer with requested fields only — do not dump raw tool JSON.");
-
-        if (mcpServers.Count > 0)
-        {
-            sb.AppendLine();
-            sb.AppendLine("## MCP data access (mandatory)");
-            sb.AppendLine(
-                "Configured MCP servers give live access to external systems (e.g. Zuora). "
-                + "For questions about accounts, subscriptions, invoices, payments, or other live records:");
-            sb.AppendLine(
-                "- You MUST call the relevant MCP tools listed in Available tools / the tool catalog "
-                + "(e.g. `…__query_objects`, `…__zuora_graphql`, `…__get_account_summary`).");
-            sb.AppendLine(
-                "- Do NOT answer from imagination, refuse for lack of an ID, or claim tools are unavailable.");
-            sb.AppendLine(
-                "- If the schema is unclear, call `tool_describe` once, then call the tool with filters.");
-            sb.AppendLine(
-                "- Prefer MCP over wiki_search / sandbox HTTP for live Zuora records. "
-                + "If an MCP call fails, report the tool error without naming the harness.");
-            if (capabilities.PreferClientSideToolParsing)
-            {
-                sb.AppendLine(
-                    "- When calling a tool, your entire assistant message must be ONLY "
-                    + "{\"tool\":\"exact_name\",\"arguments\":{...}} (no prose).");
-            }
-        }
+            "Discover schemas with tool_describe; long outputs via artifact_tail/artifact_read. "
+            + "Skills/rules via skill_search|skill_read / rule_search|rule_read. "
+            + "Never narrate harness or tool names to the user. "
+            + "Answer in the user's language.");
 
         if (capabilities.InlineEvidenceRules)
-        {
-            sb.AppendLine();
-            sb.AppendLine("## Evidence rules (mandatory)");
-            sb.AppendLine(
-                "- Do not invent IDs, account numbers, statuses, amounts, or dates.");
-            sb.AppendLine(
-                "- If live data is missing, call MCP/wiki tools first; never guess.");
-            sb.AppendLine(
-                "- If a tool truly fails (network/API), report the user-facing impact; "
-                + "do not explain harness budgets or duplicate-call blocks to the user.");
-            sb.AppendLine(
-                "- Final answer must use only facts observed in tool results.");
+            AppendSkillBodies(sb, SelectEvidenceSkills(runtimeConfig), "Evidence skills (inlined)", 800);
+        else
+            AppendDefaultSkillIds(sb, runtimeConfig, hasMcp, capabilities.PreferSkillDiscovery);
 
-            AppendEvidenceSkillBodies(sb, runtimeConfig, maxChars: 800);
-        }
-
-        var skills = runtimeConfig.ResolvedPolicy.ActiveSkills
-            .Where(s => AgenticSkillActivation.IsSkill(s.Activation))
-            .ToList();
-        // Prefer integration / evidence skills in the short id list when MCP is configured.
-        var defaults = skills
-            .Where(s => s.IsDefaultEnabled)
-            .OrderByDescending(s => mcpServers.Count > 0 && IsMcpRelevantSkill(s.Id))
-            .ThenBy(s => s.SortOrder)
-            .Take(5)
-            .ToList();
-        if (defaults.Count > 0 && capabilities.PreferSkillDiscovery)
-        {
-            sb.AppendLine();
-            sb.AppendLine("## Default skills (ids — skill_search / skill_read for more)");
-            foreach (var skill in defaults)
-                sb.AppendLine($"- `{skill.Id}`: {skill.Name}");
-        }
-        else if (skills.Count > 0 && capabilities.PreferSkillDiscovery)
-        {
-            sb.AppendLine();
-            sb.AppendLine("Skills available via skill_search / skill_read (not inlined).");
-        }
-        else if (defaults.Count > 0 && !capabilities.PreferSkillDiscovery)
-        {
-            sb.AppendLine();
-            sb.AppendLine("## Other skill ids (optional — skill_read)");
-            foreach (var skill in defaults.Where(s => !IsEvidenceSkill(s.Id)).Take(3))
-                sb.AppendLine($"- `{skill.Id}`: {skill.Name}");
-        }
-
-        var alwaysOn = runtimeConfig.ResolvedPolicy.ActiveSkills
-            .Where(s => AgenticSkillActivation.IsAlwaysOn(s.Activation) && s.IsDefaultEnabled)
-            .OrderBy(s => s.SortOrder)
-            .ToList();
-        if (alwaysOn.Count > 0)
-        {
-            sb.AppendLine();
-            sb.AppendLine("## Always-on rules");
-            foreach (var rule in alwaysOn)
-            {
-                sb.AppendLine($"### {rule.Name} (`{rule.Id}`)");
-                var body = string.IsNullOrWhiteSpace(rule.PromptMarkdown)
-                    ? rule.Description
-                    : rule.PromptMarkdown.Trim();
-                if (body.Length > 1200)
-                    body = body[..1200] + "…";
-                sb.AppendLine(body);
-            }
-        }
+        AppendSkillBodies(
+            sb,
+            runtimeConfig.ResolvedPolicy.ActiveSkills
+                .Where(s => AgenticSkillActivation.IsAlwaysOn(s.Activation) && s.IsDefaultEnabled)
+                .OrderBy(s => s.SortOrder)
+                .ToList(),
+            "Always-on rules",
+            1200);
 
         var requestable = runtimeConfig.ResolvedPolicy.ActiveSkills
             .Count(s => AgenticSkillActivation.IsRequestable(s.Activation) && s.IsDefaultEnabled);
         if (requestable > 0)
         {
             sb.AppendLine();
-            sb.AppendLine($"Requestable rules: {requestable} available via rule_search / rule_read.");
+            sb.AppendLine($"Requestable rules: {requestable} via rule_search / rule_read.");
         }
 
         return sb.ToString().TrimEnd();
     }
 
-    private static void AppendEvidenceSkillBodies(
+    private static void AppendDefaultSkillIds(
         StringBuilder sb,
         AppRuntimeConfig runtimeConfig,
-        int maxChars)
+        bool hasMcp,
+        bool preferDiscovery)
     {
-        var evidence = runtimeConfig.ResolvedPolicy.ActiveSkills
+        var skills = runtimeConfig.ResolvedPolicy.ActiveSkills
+            .Where(s => AgenticSkillActivation.IsSkill(s.Activation))
+            .ToList();
+        var defaults = skills
+            .Where(s => s.IsDefaultEnabled)
+            .OrderByDescending(s => hasMcp && IsMcpRelevantSkill(s.Id))
+            .ThenBy(s => s.SortOrder)
+            .Take(5)
+            .ToList();
+
+        if (defaults.Count == 0)
+        {
+            if (skills.Count > 0 && preferDiscovery)
+            {
+                sb.AppendLine();
+                sb.AppendLine("Skills available via skill_search / skill_read.");
+            }
+
+            return;
+        }
+
+        if (!preferDiscovery)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Other skill ids (optional — skill_read)");
+            foreach (var skill in defaults.Where(s => !IsEvidenceSkill(s.Id)).Take(3))
+                sb.AppendLine($"- `{skill.Id}`: {skill.Name}");
+            return;
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("## Default skills (ids — skill_search / skill_read for more)");
+        foreach (var skill in defaults)
+            sb.AppendLine($"- `{skill.Id}`: {skill.Name}");
+    }
+
+    private static IReadOnlyList<AgenticSkillDefinition> SelectEvidenceSkills(AppRuntimeConfig runtimeConfig) =>
+        runtimeConfig.ResolvedPolicy.ActiveSkills
             .Where(s => s.IsDefaultEnabled && IsEvidenceSkill(s.Id))
             .OrderBy(s => s.SortOrder)
             .Take(3)
             .ToList();
-        if (evidence.Count == 0)
+
+    private static void AppendSkillBodies(
+        StringBuilder sb,
+        IReadOnlyList<AgenticSkillDefinition> skills,
+        string heading,
+        int maxChars)
+    {
+        if (skills.Count == 0)
             return;
 
         sb.AppendLine();
-        sb.AppendLine("## Evidence skills (inlined)");
-        foreach (var skill in evidence)
+        sb.AppendLine($"## {heading}");
+        foreach (var skill in skills)
         {
             sb.AppendLine($"### {skill.Name} (`{skill.Id}`)");
             var body = string.IsNullOrWhiteSpace(skill.PromptMarkdown)
@@ -185,6 +138,5 @@ public static class AgenticSystemPromptBuilder
 
     private static bool IsMcpRelevantSkill(string skillId) =>
         skillId.Contains("mcp", StringComparison.OrdinalIgnoreCase)
-        || skillId.Contains("zuora", StringComparison.OrdinalIgnoreCase)
         || IsEvidenceSkill(skillId);
 }

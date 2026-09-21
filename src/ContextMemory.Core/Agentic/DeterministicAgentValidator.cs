@@ -29,16 +29,17 @@ public sealed class DeterministicAgentValidator
 
         if (string.IsNullOrWhiteSpace(finalAnswer))
         {
-            if (AgenticLiveDataEvidenceGuardrail.IsLiveDataQuestion(
-                    request.UserObjective, request.RuntimeConfig)
-                && policy.HasKind(AgenticGuardrailKinds.LiveDataEvidence))
+            if (policy.HasKind(AgenticGuardrailKinds.LiveDataEvidence)
+                && AgenticLiveDataEvidenceGuardrail.IsLiveDataQuestion(
+                    request.UserObjective,
+                    AgenticGuardrailConfigReader.ForKind(policy, AgenticGuardrailKinds.LiveDataEvidence),
+                    request.RuntimeConfig))
             {
-                var configured = AgenticGuardrailConfigReader.GetFeedback(
-                    policy.FindByKind(AgenticGuardrailKinds.LiveDataEvidence)?.ConfigJson ?? "{}",
-                    request.RuntimeConfig.DefaultLanguage);
                 return ValidationResult.Reject(
                     ValidationMessages.LiveDataWithoutEvidence(
-                        configured ?? "Rejected: emit tool_calls (wiki_search / query_objects) before answering.",
+                        AgenticGuardrailConfigReader.ResolveFeedback(
+                            AgenticGuardrailConfigReader.ForKind(policy, AgenticGuardrailKinds.LiveDataEvidence),
+                            request.RuntimeConfig.DefaultLanguage),
                         request.RuntimeConfig));
             }
 
@@ -46,73 +47,11 @@ public sealed class DeterministicAgentValidator
                 ValidationMessages.EmptyFinalAnswer(request.RuntimeConfig));
         }
 
-        if (AgenticThinkingLeakGuardrail.TryGetRejectionFeedback(
-                finalAnswer, request.RuntimeConfig, out var thinkingFeedback))
-        {
-            return ValidationResult.Reject(thinkingFeedback);
-        }
+        var core = AgenticPolicyGuardrailPipeline.TryRejectCore(request);
+        if (core is not null)
+            return core;
 
-        if (policy.HasKind(AgenticGuardrailKinds.SandboxClaim)
-            && AgenticSandboxClaimGuardrail.TryGetRejectionFeedback(
-                finalAnswer,
-                steps,
-                request.RuntimeConfig,
-                out var sandboxFeedback))
-        {
-            var configured = AgenticGuardrailConfigReader.GetFeedback(
-                policy.FindByKind(AgenticGuardrailKinds.SandboxClaim)?.ConfigJson ?? "{}",
-                request.RuntimeConfig.DefaultLanguage);
-            return ValidationResult.Reject(
-                ValidationMessages.FabricatedSandboxLimitation(
-                    configured ?? sandboxFeedback,
-                    request.RuntimeConfig));
-        }
-
-        if (policy.HasKind(AgenticGuardrailKinds.UrlFetch)
-            && AgenticUrlFetchGuardrail.TryGetRejectionFeedback(
-                request.UserObjective,
-                finalAnswer,
-                steps,
-                request.RuntimeConfig,
-                out var urlFeedback))
-        {
-            var configured = AgenticGuardrailConfigReader.GetFeedback(
-                policy.FindByKind(AgenticGuardrailKinds.UrlFetch)?.ConfigJson ?? "{}",
-                request.RuntimeConfig.DefaultLanguage);
-            return ValidationResult.Reject(
-                ValidationMessages.UrlDescribedWithoutFetch(
-                    configured ?? urlFeedback,
-                    request.RuntimeConfig));
-        }
-
-        if (policy.HasKind(AgenticGuardrailKinds.LiveDataEvidence)
-            && AgenticLiveDataEvidenceGuardrail.TryGetRejectionFeedback(
-                request.UserObjective,
-                finalAnswer,
-                steps,
-                request.RuntimeConfig,
-                out var liveFeedback))
-        {
-            // Prefer code feedback (includes wiki_search example for client-side models).
-            return ValidationResult.Reject(
-                ValidationMessages.LiveDataWithoutEvidence(liveFeedback, request.RuntimeConfig));
-        }
-
-        if (policy.HasKind(AgenticGuardrailKinds.ToolSurfaceHidden)
-            && AgenticToolIntentNarrationGuardrail.TryGetRejectionFeedback(
-                finalAnswer,
-                steps,
-                request.RuntimeConfig,
-                out var toolIntentFeedback))
-        {
-            // Prefer code feedback (includes actionable tool_search JSON for lazy MCP / client-side).
-            return ValidationResult.Reject(
-                ValidationMessages.ToolIntentNarration(
-                    toolIntentFeedback,
-                    request.RuntimeConfig));
-        }
-
-        var extended = await AgenticExtendedGuardrailRunner.TryGetRejectionAsync(
+        var extended = await AgenticPolicyGuardrailPipeline.TryGetExtendedRejectionAsync(
                 request, _urlChecker, cancellationToken)
             .ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(extended))

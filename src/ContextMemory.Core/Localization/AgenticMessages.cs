@@ -4,283 +4,176 @@ using ContextMemory.Core.Models;
 namespace ContextMemory.Core.Localization;
 
 /// <summary>
-/// Localized agentic loop, validation, and HITL strings.
+/// Agentic loop, validation, and HITL strings (English only for model and harness context).
 /// </summary>
 public static class AgenticMessages
 {
     public static string ToolTimeout(AppRuntimeConfig config) =>
-        TenantLocale.Select(config.DefaultLanguage, "Timeout during tool execution.", "Timeout durante execução de tool.");
+        "Timeout during tool execution.";
 
     public static string LoopCompleted(int iterations, int toolCount, AppRuntimeConfig config) =>
-        TenantLocale.Select(
-            config.DefaultLanguage,
-            $"Completed in {iterations} iteration(s) · {toolCount} tool(s).",
-            $"Concluído em {iterations} iteração(ões) · {toolCount} tool(s).");
+        $"Completed in {iterations} iteration(s) · {toolCount} tool(s).";
 
     public static string InvalidResponseRetry(AppRuntimeConfig config) =>
-        TenantLocale.Select(
-            config.DefaultLanguage,
-            "The response is not valid. Fix it and try again.",
-            "A resposta não é válida. Corrige e tenta novamente.");
+        "The response is not valid. Fix it and try again.";
 
     public static string MaxIterationsExceeded(AppRuntimeConfig config) =>
-        TenantLocale.Select(
-            config.DefaultLanguage,
-            "Could not complete the task within the configured iteration limit. ",
-            "Não foi possível concluir a tarefa dentro do limite de iterações configurado. ");
+        "Could not complete the task within the configured iteration limit. ";
 
     public static string ConfirmationReceived(string toolName, AppRuntimeConfig config) =>
-        TenantLocale.Select(
-            config.DefaultLanguage,
-            $"Confirmation received for `{toolName}`.",
-            $"Confirmação recebida para `{toolName}`.");
+        $"Confirmation received for `{toolName}`.";
 
     public static string ValidationRejectedRetry(AppRuntimeConfig config) =>
-        TenantLocale.Select(
-            config.DefaultLanguage,
-            "Validation rejected — retrying…",
-            "Validação rejeitada — nova tentativa…");
+        "Validation rejected — retrying…";
 
     public static string BuildConfirmationPrompt(AgenticPendingState pending, AppRuntimeConfig config)
     {
         if (string.Equals(pending.Kind, AgenticPendingKinds.MaxIterations, StringComparison.OrdinalIgnoreCase))
             return BuildMaxIterationsPrompt(pending, config);
 
-        return TenantLocale.Select(
-            config.DefaultLanguage,
-            $"⚠️ **Human confirmation required** to execute `{pending.ToolName}` "
+        return $"⚠️ **Human confirmation required** to execute `{pending.ToolName}` "
             + $"(action related to «{pending.MatchedKeyword}»).\n\n"
             + $"Arguments: `{pending.Arguments}`\n\n"
             + $"Reply **confirm** or send `[CONFIRM:{pending.PendingId}]` to authorize. "
-            + $"Reply **cancel** to abort.",
-            $"⚠️ **Confirmação humana necessária** para executar `{pending.ToolName}` "
-            + $"(ação relacionada com «{pending.MatchedKeyword}»).\n\n"
-            + $"Argumentos: `{pending.Arguments}`\n\n"
-            + $"Responde **confirmo** ou envia `[CONFIRM:{pending.PendingId}]` para autorizar. "
-            + $"Responde **cancelo** para abortar.");
+            + $"Reply **cancel** to abort.";
     }
 
     private static string BuildMaxIterationsPrompt(AgenticPendingState pending, AppRuntimeConfig config)
     {
         var partial = string.IsNullOrWhiteSpace(pending.PartialAnswer)
             ? string.Empty
-            : TenantLocale.Select(
-                config.DefaultLanguage,
-                $"**Proposed partial answer:**\n{pending.PartialAnswer}\n\n",
-                $"**Resposta parcial proposta:**\n{pending.PartialAnswer}\n\n");
+            : $"**Proposed partial answer:**\n{pending.PartialAnswer}\n\n";
 
-        return TenantLocale.Select(
-            config.DefaultLanguage,
-            $"⚠️ **Human review required** — the agent reached the iteration limit "
+        return $"⚠️ **Human review required** — the agent reached the iteration limit "
             + $"({pending.Iteration}) without finishing confidently.\n\n"
             + partial
             + $"Reply **approve** or `[CONFIRM:{pending.PendingId}]` to accept the partial answer. "
-            + $"Reply **cancel** to reject.",
-            $"⚠️ **Revisão humana necessária** — o agente atingiu o limite de iterações "
-            + $"({pending.Iteration}) sem concluir com confiança.\n\n"
-            + partial
-            + $"Responde **aprovo** ou `[CONFIRM:{pending.PendingId}]` para aceitar a resposta parcial. "
-            + $"Responde **cancelo** para rejeitar.");
+            + $"Reply **cancel** to reject.";
     }
 
     public static string UserCancelledDestructive(string? language) =>
-        TenantLocale.Select(
-            language,
-            "Action cancelled by the user. No destructive tool was executed.",
-            "Ação cancelada pelo utilizador. Nenhuma tool destrutiva foi executada.");
+        "Action cancelled by the user. No destructive tool was executed.";
 
     public static string HumanReviewApprovedDetail(string? language) =>
-        TenantLocale.Select(
-            language,
-            "Human review approved — partial answer accepted.",
-            "Revisão humana aprovada — resposta parcial aceite.");
+        "Human review approved — partial answer accepted.";
 
     public static string PartialAnswerApproved(string? language) =>
-        TenantLocale.Select(
-            language,
-            "Partial answer approved by the user.",
-            "Resposta parcial aprovada pelo utilizador.");
+        "Partial answer approved by the user.";
 
     public static string TimeoutAfterIterations(int iterations, string? language) =>
-        TenantLocale.Select(
-            language,
-            $"Timeout after {iterations} iteration(s).",
-            $"Timeout após {iterations} iteração(ões).");
+        $"Timeout after {iterations} iteration(s).";
 
     public static string MaxIterationsReached(int maxIterations, string? language) =>
-        TenantLocale.Select(
-            language,
-            $"Limit of {maxIterations} iterations reached.",
-            $"Limite de {maxIterations} iterações atingido.");
+        $"Limit of {maxIterations} iterations reached.";
 
     public static string MaxIterationsFallbackSuffix(string? language) =>
-        TenantLocale.Select(
-            language,
-            "Please rephrase your request or contact support.",
-            "Por favor, reformula o pedido ou contacta suporte.");
+        "Please rephrase your request or contact support.";
 
     public static string NetworkEgressBlocked(string target, string? language) =>
-        TenantLocale.Select(
-            language,
-            $"Network egress blocked by tenant guardrail (networkEgress=restricted). "
-            + $"Unauthorized destination: {target}. "
-            + "Add the host to allowedEgressHosts or allowEgress on the tool.",
-            $"Egress de rede bloqueado pelo guardrail do tenant (networkEgress=restricted). "
-            + $"Destino não autorizado: {target}. "
-            + "Adiciona o host a allowedEgressHosts ou allowEgress na tool.");
+        $"Network egress blocked by tenant guardrail (networkEgress=restricted). "
+        + $"Unauthorized destination: {target}. "
+        + "Add the host to allowedEgressHosts or allowEgress on the tool.";
 
     public static string ProgressStarted(string? language) =>
-        TenantLocale.Select(language, "Starting agentic loop…", "A iniciar loop agentic…");
+        "Starting agentic loop…";
 
     public static string ProgressLlmRequest(int iteration, string? language) =>
-        TenantLocale.Select(
-            language,
-            $"Iteration {iteration} — querying model…",
-            $"Iteração {iteration} — a consultar o modelo…");
+        $"Iteration {iteration} — querying model…";
 
     public static string ProgressToolStarted(string toolName, string? language) =>
-        TenantLocale.Select(language, $"Running `{toolName}`…", $"A executar `{toolName}`…");
+        $"Running `{toolName}`…";
 
     public static string ProgressToolCompletedFallback(string toolName, string? language) =>
-        TenantLocale.Select(language, $"Tool `{toolName}` completed.", $"Tool `{toolName}` concluída.");
+        $"Tool `{toolName}` completed.";
 
     public static string ProgressValidating(string? language) =>
-        TenantLocale.Select(language, "Validating final answer…", "A validar resposta final…");
+        "Validating final answer…";
 
     public static string ProgressValidationRejected(string? language) =>
-        TenantLocale.Select(language, "Validation rejected — retrying…", "Validação rejeitada — nova tentativa…");
+        "Validation rejected — retrying…";
 
     public static string ProgressAwaitingConfirmation(string? language) =>
-        TenantLocale.Select(
-            language,
-            "Awaiting human confirmation before executing the action.",
-            "Aguarda confirmação humana antes de executar a ação.");
+        "Awaiting human confirmation before executing the action.";
 
     public static string ProgressDestructiveBlocked(string? language) =>
-        TenantLocale.Select(
-            language,
-            "Destructive action blocked until human confirmation.",
-            "Ação destrutiva bloqueada até confirmação humana.");
+        "Destructive action blocked until human confirmation.";
 
     public static string ProgressHumanReviewAfterMaxIterations(string? language) =>
-        TenantLocale.Select(
-            language,
-            "Human review required after iteration limit.",
-            "Revisão humana necessária após limite de iterações.");
+        "Human review required after iteration limit.";
 
     public static string ProgressConfirmationReceived(string? language) =>
-        TenantLocale.Select(
-            language,
-            "Confirmation received — executing pending action.",
-            "Confirmação recebida — a executar ação pendente.");
+        "Confirmation received — executing pending action.";
 
     public static string ProgressCompleted(string? language) =>
-        TenantLocale.Select(language, "Agentic loop completed.", "Loop agentic concluído.");
+        "Agentic loop completed.";
 
     public static string ProgressTimedOut(string? language) =>
-        TenantLocale.Select(language, "Time limit reached — partial answer.", "Limite de tempo atingido — resposta parcial.");
+        "Time limit reached — partial answer.";
 
     public static string ProgressMaxIterations(string? language) =>
-        TenantLocale.Select(language, "Iteration limit reached.", "Limite de iterações atingido.");
+        "Iteration limit reached.";
 
     public static string ProgressTimedOutDetail(string? language) =>
-        TenantLocale.Select(language, "Time limit reached.", "Limite de tempo atingido.");
+        "Time limit reached.";
 
     public static string ProgressMaxIterationsDetail(string? language) =>
-        TenantLocale.Select(language, "Iteration limit reached.", "Limite de iterações atingido.");
+        "Iteration limit reached.";
 
     public static string ProgressCompletedDetail(string? language) =>
-        TenantLocale.Select(language, "Completed.", "Concluído.");
+        "Completed.";
 
     public static string ProgressCompletedWithStats(int iterations, int toolCount, string? language) =>
-        TenantLocale.Select(
-            language,
-            $"Completed in {iterations} iteration(s) · {toolCount} tool(s).",
-            $"Concluído em {iterations} iteração(ões) · {toolCount} tool(s).");
+        $"Completed in {iterations} iteration(s) · {toolCount} tool(s).";
 
     public static string ProgressTimedOutWithStats(int iterations, string? language) =>
-        TenantLocale.Select(
-            language,
-            $"Completed in {iterations} iteration(s) with partial answer.",
-            $"Concluído em {iterations} iteração(ões) com resposta parcial.");
+        $"Completed in {iterations} iteration(s) with partial answer.";
 
     public static string ToolStepFailed(int exitCode, string? language) =>
-        TenantLocale.Select(language, $"failed (exit {exitCode})", $"falhou (exit {exitCode})");
+        $"failed (exit {exitCode})";
 
     public static string PartialResponseSuffix(string? language) =>
-        TenantLocale.Select(
-            language,
-            "_(Partial answer: the agentic loop time limit was reached before completion.)_",
-            "_(Resposta parcial: o limite de tempo do loop agentic foi atingido antes da conclusão.)_");
+        "_(Partial answer: the agentic loop time limit was reached before completion.)_";
 
     public static string TimeoutNoAnswer(string? language) =>
-        TenantLocale.Select(
-            language,
-            "The agentic loop reached the configured time limit before producing an answer. "
-            + "Please rephrase your request or try again.",
-            "O loop agentic atingiu o limite de tempo configurado antes de produzir uma resposta. "
-            + "Por favor, reformula o pedido ou tenta novamente.");
+        "The agentic loop reached the configured time limit before producing an answer. "
+        + "Please rephrase your request or try again.";
 
     public static string ContextWindowExceeded(int promptTokens, int nCtx, string? language) =>
-        TenantLocale.Select(
-            language,
-            $"The prompt ({promptTokens} tokens) exceeds the model context window (num_ctx={nCtx}). "
-            + "Raise num_ctx in the Playground advanced settings or in the app LLM config "
-            + "(for example 8192 or 32768) and retry.",
-            $"O prompt ({promptTokens} tokens) excede a janela de contexto do modelo (num_ctx={nCtx}). "
-            + "Aumenta o num_ctx nas opções avançadas do Playground ou na config LLM da app "
-            + "(por exemplo 8192 ou 32768) e tenta novamente.");
+        $"The prompt ({promptTokens} tokens) exceeds the model context window (num_ctx={nCtx}). "
+        + "Raise num_ctx in the Playground advanced settings or in the app LLM config "
+        + "(for example 8192 or 32768) and retry.";
 
     public static string TimeoutProgressHeader(string? language) =>
-        TenantLocale.Select(
-            language,
-            "The agentic loop reached the configured time limit. Progress so far:",
-            "O loop agentic atingiu o limite de tempo configurado. Segue o progresso até ao momento:");
+        "The agentic loop reached the configured time limit. Progress so far:";
 
     public static string TimeoutStepLine(string toolName, int iteration, int exitCode, string? language) =>
-        TenantLocale.Select(
-            language,
-            $"- **{toolName}** (iteration {iteration}, exit={exitCode})",
-            $"- **{toolName}** (iteração {iteration}, exit={exitCode})");
+        $"- **{toolName}** (iteration {iteration}, exit={exitCode})";
 
     public static string TimeoutPartialFooter(string? language) =>
-        TenantLocale.Select(
-            language,
-            "_Partial answer — the task was not completed within the available time._",
-            "_Resposta parcial — a tarefa não foi concluída dentro do tempo disponível._");
+        "_Partial answer — the task was not completed within the available time._";
 
     /// <summary>
     /// Short user-facing timeout message with unique tool counts (no per-step output dumps).
     /// </summary>
     public static string TimeoutShortSummary(string toolCountsSummary, string? language) =>
-        TenantLocale.Select(
-            language,
-            "I could not finish within the configured time limit"
-            + (string.IsNullOrWhiteSpace(toolCountsSummary)
-                ? "."
-                : $" (tools used: {toolCountsSummary}).")
-            + " Please try again with a narrower question, or continue in a new turn.",
-            "Não consegui concluir dentro do limite de tempo configurado"
-            + (string.IsNullOrWhiteSpace(toolCountsSummary)
-                ? "."
-                : $" (tools usadas: {toolCountsSummary}).")
-            + " Tenta de novo com uma pergunta mais focada, ou continua noutro turn.");
+        "I could not finish within the configured time limit"
+        + (string.IsNullOrWhiteSpace(toolCountsSummary)
+            ? "."
+            : $" (tools used: {toolCountsSummary}).")
+        + " Please try again with a narrower question, or continue in a new turn.";
 
     public static string JudgeDefaultReject(string? language) =>
-        TenantLocale.Select(
-            language,
-            "The answer does not satisfy the user objective. Review and improve it.",
-            "A resposta não satisfaz o objetivo do utilizador. Revisa e melhora.");
+        "The answer does not satisfy the user objective. Review and improve it.";
 
     public static string ExecutionLogStatus(AgentResult result, string? language)
     {
         if (result.Success)
-            return TenantLocale.Select(language, "success", "sucesso");
+            return "success";
         if (result.TimedOut)
-            return TenantLocale.Select(language, "timeout-partial", "timeout-parcial");
+            return "timeout-partial";
         if (result.MaxIterationsReached)
-            return TenantLocale.Select(language, "iteration-limit", "limite-iterações");
-        return TenantLocale.Select(language, "partial", "parcial");
+            return "iteration-limit";
+        return "partial";
     }
 
     public static string ExecutionLogHeader(
@@ -289,20 +182,17 @@ public static class AgenticMessages
         int toolCount,
         int iterations,
         string? language) =>
-        TenantLocale.Select(
-            language,
-            $"## [{timestamp}] agentic | {status} | {toolCount} tool(s) | {iterations} iteration(s)",
-            $"## [{timestamp}] agentic | {status} | {toolCount} tool(s) | {iterations} iteração(ões)");
+        $"## [{timestamp}] agentic | {status} | {toolCount} tool(s) | {iterations} iteration(s)";
 
     public static string ExecutionLogObjectiveLabel(string? language) =>
-        TenantLocale.Select(language, "**Objective:**", "**Objetivo:**");
+        "**Objective:**";
 
     public static string ExecutionLogNoObjective(string? language) =>
-        TenantLocale.Select(language, "(no objective)", "(sem objetivo)");
+        "(no objective)";
 
     public static string ExecutionLogStepsHeader(string? language) =>
-        TenantLocale.Select(language, "### Steps executed", "### Passos executados");
+        "### Steps executed";
 
     public static string ExecutionLogValidatedHeader(string? language) =>
-        TenantLocale.Select(language, "### Validated result", "### Resultado validado");
+        "### Validated result";
 }

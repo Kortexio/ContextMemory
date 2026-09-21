@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -45,22 +44,14 @@ public static partial class AgenticRelevanceGuardrail
         {
             if (!finalAnswer.Contains(m.Value, StringComparison.OrdinalIgnoreCase))
             {
-                feedback = AgenticGuardrailConfigReader.GetFeedback(configJson, runtimeConfig.DefaultLanguage)
-                    ?? TenantLocale.Select(
-                        runtimeConfig.DefaultLanguage,
-                        "Rejected: answer is not relevant to the user objective.",
-                        "Rejeitado: a resposta não é relevante para o objetivo.");
+                feedback = AgenticGuardrailConfigReader.ResolveFeedback(configJson, runtimeConfig.DefaultLanguage);
                 return true;
             }
         }
 
         if (ratio < minOverlap)
         {
-            feedback = AgenticGuardrailConfigReader.GetFeedback(configJson, runtimeConfig.DefaultLanguage)
-                ?? TenantLocale.Select(
-                    runtimeConfig.DefaultLanguage,
-                    "Rejected: answer is not relevant to the user objective.",
-                    "Rejeitado: a resposta não é relevante para o objetivo.");
+            feedback = AgenticGuardrailConfigReader.ResolveFeedback(configJson, runtimeConfig.DefaultLanguage);
             return true;
         }
 

@@ -39,14 +39,16 @@ public sealed class AgenticPolicyPackResolverTests
             g.Id == "numeric-grounding"
             && g.Kind == AgenticGuardrailKinds.NumericGrounding
             && !g.IsDefaultEnabled);
-        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
-            g.Id == "live-data-evidence-required" && g.IsDefaultEnabled);
+        Assert.DoesNotContain(AgenticCatalogSeed.Guardrails, g =>
+            g.Id == "live-data-evidence-required");
         Assert.Contains(AgenticCatalogSeed.Skills, s =>
             s.Id == "rule-always-evidence" && s.Activation == AgenticSkillActivation.AlwaysOn);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
             g.Id == "url-fetch-required" && g.Kind == AgenticGuardrailKinds.UrlFetch);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
-            g.Id == "live-data-evidence-required" && g.Kind == AgenticGuardrailKinds.LiveDataEvidence);
+            g.Id == "source-context-verifier" && g.Kind == AgenticGuardrailKinds.SourceContext);
+        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
+            g.Id == "thinking-leak" && g.Kind == AgenticGuardrailKinds.ThinkingLeak);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
             g.Id == "tool-surface-hidden" && g.Kind == AgenticGuardrailKinds.ToolSurfaceHidden);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>

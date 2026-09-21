@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ContextMemory.Core.Agentic;
 using ContextMemory.Core.Models;
 using Xunit;
@@ -14,6 +15,7 @@ public sealed class AgenticLiveDataEvidenceGuardrailTests
             "Find one canceled Zuora account",
             "Account A0001 is Canceled.",
             [],
+            LiveDataConfigJson(),
             config,
             out var feedback);
 
@@ -41,6 +43,7 @@ public sealed class AgenticLiveDataEvidenceGuardrailTests
             "Find one canceled Zuora account",
             "A00006681 Canceled",
             steps,
+            LiveDataConfigJson(),
             config,
             out _);
 
@@ -55,6 +58,7 @@ public sealed class AgenticLiveDataEvidenceGuardrailTests
             "What is the capital of Portugal?",
             "Lisbon",
             [],
+            LiveDataConfigJson(),
             config,
             out _);
 
@@ -69,6 +73,7 @@ public sealed class AgenticLiveDataEvidenceGuardrailTests
             "busque os tickets PAC-759, PAC-762 e PAC-769",
             "Vou buscar os tickets na wiki.",
             [],
+            LiveDataConfigJson(),
             config,
             out var feedback);
 
@@ -96,6 +101,7 @@ public sealed class AgenticLiveDataEvidenceGuardrailTests
             "busque os tickets PAC-759",
             "PAC-759: billing fix.",
             steps,
+            LiveDataConfigJson(),
             config,
             out _);
 
@@ -123,6 +129,7 @@ public sealed class AgenticLiveDataEvidenceGuardrailTests
             "busque os tickets PAC-759",
             "Não encontrei o ticket PAC-759 na wiki; a pesquisa falhou.",
             steps,
+            LiveDataConfigJson(),
             config,
             out _);
 
@@ -150,11 +157,41 @@ public sealed class AgenticLiveDataEvidenceGuardrailTests
             "busque os tickets PAC-759",
             "PAC-759 is about billing reconciliation and was closed yesterday.",
             steps,
+            LiveDataConfigJson(),
             config,
             out _);
 
         Assert.True(ok);
     }
+
+    private static string LiveDataConfigJson() =>
+        JsonSerializer.Serialize(new
+        {
+            kind = AgenticGuardrailKinds.LiveDataEvidence,
+            feedback =
+                "Rejected: live-data/wiki question without successful MCP/wiki evidence. Emit tool_calls now — "
+                + "prefer wiki_search for tickets/docs or a configured MCP tool (server__tool). "
+                + "Example: {\"tool\":\"wiki_search\",\"arguments\":{\"query\":\"TICKET-123\"}}",
+            liveDataMarkers = new[]
+            {
+                "account", "conta", "subscription", "assinatura", "invoice", "fatura", "payment", "pagamento",
+                "billing", "canceled", "cancelled", "cancelad", "customer", "cliente", "balance", "saldo",
+                "rate plan", "query_objects", "accountnumber", "account number", "ticket", "tickets", "jira",
+                "issue", "issues", "confluence", "wiki"
+            },
+            evidenceToolMarkers = new[]
+            {
+                "__", "query_objects", "get_account", "manage_customer",
+                "wiki_search", "wiki_grep", "wiki_get", "wiki_read"
+            },
+            honestUnknownMarkers = new[]
+            {
+                "não encontrei", "nao encontrei", "não foi possível", "nao foi possivel", "sem resultados",
+                "sem evidência", "sem evidencia", "não há dados", "nao ha dados", "not found", "no results",
+                "no evidence", "could not find", "couldn't find", "unable to find", "no matching", "empty result",
+                "tool failed", "tool error", "falhou", "failed"
+            }
+        });
 
     private static AppRuntimeConfig ConfigWithMcp() =>
         new()
