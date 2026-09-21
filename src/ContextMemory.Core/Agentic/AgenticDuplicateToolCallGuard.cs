@@ -27,6 +27,12 @@ public static class AgenticDuplicateToolCallGuard
     /// <summary>Max wiki_search/wiki_grep attempts (success or fail) before forcing a pivot.</summary>
     public const int MaxWikiAttemptsPerTurn = 2;
 
+    /// <summary>
+    /// After this many consecutive wiki-budget rejections with successful wiki evidence already
+    /// collected, the loop must strip tools and force a final answer (stubborn models ignore feedback).
+    /// </summary>
+    public const int MaxWikiBudgetRejectionsBeforeForceAnswer = 2;
+
     public static bool TryReject(
         string toolName,
         string? argumentsJson,
@@ -44,7 +50,7 @@ public static class AgenticDuplicateToolCallGuard
             var wikiAttempts = steps.Count(s => QueryFocusedTools.Contains(NormalizeToolName(s.ToolName)));
             if (wikiAttempts >= MaxWikiAttemptsPerTurn)
             {
-                feedback = BuildWikiBudgetFeedback(runtimeConfig);
+                feedback = BuildWikiBudgetFeedback(steps, runtimeConfig);
                 return true;
             }
 
@@ -164,9 +170,62 @@ public static class AgenticDuplicateToolCallGuard
         }
     }
 
-    private static string BuildWikiBudgetFeedback(AppRuntimeConfig runtimeConfig)
+    /// <summary>
+    /// True when wiki already returned successful evidence and the model keeps hitting the wiki budget.
+    /// Caller should strip tools and force a text answer on the next iteration.
+    /// </summary>
+    public static bool ShouldForceAnswerAfterWikiBudget(IReadOnlyList<AgentExecutionStep> steps)
+    {
+        if (!HasSuccessfulWikiEvidence(steps))
+            return false;
+
+        var trailing = 0;
+        for (var i = steps.Count - 1; i >= 0; i--)
+        {
+            if (!IsWikiBudgetRejection(steps[i]))
+                break;
+            trailing++;
+        }
+
+        return trailing >= MaxWikiBudgetRejectionsBeforeForceAnswer;
+    }
+
+    public static bool IsWikiBudgetRejection(AgentExecutionStep step)
+    {
+        if (step.Success || string.IsNullOrWhiteSpace(step.ToolName))
+            return false;
+        if (!QueryFocusedTools.Contains(NormalizeToolName(step.ToolName)))
+            return false;
+
+        var output = step.Output ?? string.Empty;
+        return output.Contains("budget exhausted", StringComparison.OrdinalIgnoreCase)
+               || output.Contains("orçamento", StringComparison.OrdinalIgnoreCase)
+               || output.Contains("esgotado", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool HasSuccessfulWikiEvidence(IReadOnlyList<AgentExecutionStep> steps) =>
+        steps.Any(s => s.Success && QueryFocusedTools.Contains(NormalizeToolName(s.ToolName)));
+
+    private static string BuildWikiBudgetFeedback(
+        IReadOnlyList<AgentExecutionStep> steps,
+        AppRuntimeConfig runtimeConfig)
     {
         var lang = runtimeConfig.DefaultLanguage;
+
+        // When wiki already succeeded, pushing MCP makes weak models loop on more tools
+        // instead of answering from the evidence they already have.
+        if (HasSuccessfulWikiEvidence(steps))
+        {
+            return TenantLocale.Select(
+                lang,
+                "Rejected: wiki_search/wiki_grep budget exhausted this turn. "
+                + "Do NOT call any tool. Answer the user NOW from the wiki evidence already gathered. "
+                + "No tool_calls, no JSON tool invocations.",
+                "Rejeitado: orçamento wiki_search/wiki_grep esgotado neste turno. "
+                + "NÃO chames nenhuma tool. Responde AGORA ao utilizador com a evidência wiki já recolhida. "
+                + "Sem tool_calls, sem invocações JSON de tools.");
+        }
+
         var hasMcp = HasConfiguredMcp(runtimeConfig);
         if (hasMcp)
         {

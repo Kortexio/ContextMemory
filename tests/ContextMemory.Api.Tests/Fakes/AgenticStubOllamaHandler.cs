@@ -18,6 +18,12 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
     public bool InfiniteToolLoop { get; set; }
     public bool RejectFirstFinalAnswer { get; set; }
 
+    /// <summary>
+    /// Simulates a weak model that keeps calling wiki_search after budget exhaustion
+    /// until the loop strips tools and forces a text answer.
+    /// </summary>
+    public bool StubbornWikiBudgetLoop { get; set; }
+
     private int _finalAnswerCount;
 
     protected override Task<HttpResponseMessage> SendAsync(
@@ -82,6 +88,52 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
             var useClientSideReply = isOllamaChat && hasClientCatalog && !hasNativeTools;
 
             var awaitingToolResult = (hasNativeTools || hasClientCatalog) && !hasToolResponseAlready;
+
+            if (StubbornWikiBudgetLoop)
+            {
+                // Force-answer iterations: catalog cleared, tools omitted, and/or explicit STOP nudge.
+                var forceNudge = body.Contains("Answer the user NOW", StringComparison.OrdinalIgnoreCase)
+                    || body.Contains("Responde AGORA", StringComparison.OrdinalIgnoreCase)
+                    || body.Contains("STOP. Wiki budget", StringComparison.OrdinalIgnoreCase)
+                    || body.Contains("PARA. O orçamento", StringComparison.OrdinalIgnoreCase)
+                    || (!hasNativeTools && !hasClientCatalog && hasToolResponseAlready);
+
+                if (forceNudge)
+                {
+                    const string forced =
+                        "FORCE_ANSWER_OK: answered from prior wiki evidence (PACCAR/ITD). Final answer.";
+                    return Task.FromResult(isOpenAiChat ? OpenAiText(forced) : OllamaText(forced));
+                }
+
+                if (hasNativeTools || hasClientCatalog || hasToolResponseAlready)
+                {
+                    var toolResults = CountOccurrences(body, "Tool result:");
+                    if (toolResults == 0)
+                        toolResults = CountOccurrences(body, "\"role\":\"tool\"")
+                            + CountOccurrences(body, "\"role\": \"tool\"");
+
+                    string name;
+                    string args;
+                    if (toolResults == 0)
+                    {
+                        name = "wiki_search";
+                        args = """{"query":"PACCAR subscription validation rules"}""";
+                    }
+                    else if (toolResults == 1)
+                    {
+                        name = "wiki_grep";
+                        args = """{"pattern":"ITD|subscription","maxHits":20}""";
+                    }
+                    else
+                    {
+                        // Keep hammering wiki after budget — reproduces the production loop.
+                        name = "wiki_search";
+                        args = """{"query":"PACCAR business rules"}""";
+                    }
+
+                    return Task.FromResult(EmitToolCall(name, args, useClientSideReply, isOpenAiChat));
+                }
+            }
 
             if (InfiniteToolLoop && (hasNativeTools || hasClientCatalog))
             {
@@ -242,6 +294,20 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
         || body.Contains("markdown wiki", StringComparison.OrdinalIgnoreCase)
         || body.Contains("Actualiza a wiki", StringComparison.OrdinalIgnoreCase)
         || body.Contains("Update the markdown wiki", StringComparison.OrdinalIgnoreCase);
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        if (string.IsNullOrEmpty(haystack) || string.IsNullOrEmpty(needle))
+            return 0;
+        var count = 0;
+        var idx = 0;
+        while ((idx = haystack.IndexOf(needle, idx, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            idx += needle.Length;
+        }
+        return count;
+    }
 
     private static HttpResponseMessage OpenAiText(string content) =>
         JsonResponse(

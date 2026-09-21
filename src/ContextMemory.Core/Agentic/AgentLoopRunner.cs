@@ -93,6 +93,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             ?.Content?.Length ?? 0;
         var compactionCount = 0;
         var llmCalls = 0;
+        var forceAnswerOnly = false;
 
         for (var iteration = request.StartIteration - 1; iteration < maxIterations; iteration++)
         {
@@ -124,14 +125,20 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             cancellationToken.ThrowIfCancellationRequested();
             EnsureUserMessagePresent(messages, request);
 
-            var toolsForRequest = toolsList.Count > 0 ? toolsList : null;
+            var toolsForRequest = forceAnswerOnly
+                ? null
+                : (toolsList.Count > 0 ? toolsList : null);
+            if (forceAnswerOnly)
+                ClientSideToolCalling.ClearCatalogFromSystemPrompt(messages);
             if (toolsForRequest is not null && capabilities.SanitizeSchemasAggressively)
             {
                 toolsForRequest = SanitizeToolSchemas(toolsForRequest);
                 schemaRepairLevel = MaxRepairLevel(schemaRepairLevel, "sanitize");
             }
 
-            var useClientSideTools = capabilities.PreferClientSideToolParsing && toolsForRequest is { Count: > 0 };
+            var useClientSideTools = !forceAnswerOnly
+                && capabilities.PreferClientSideToolParsing
+                && toolsForRequest is { Count: > 0 };
             if (useClientSideTools)
             {
                 ClientSideToolCalling.EnsureCatalogInSystemPrompt(messages, toolsForRequest!);
@@ -211,11 +218,11 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     .ConfigureAwait(false);
                 llmCalls++;
             }
-            catch (HttpRequestException ex) when (IsOllamaToolXmlParseError(ex) && toolsForRequest is { Count: > 0 })
+            catch (HttpRequestException ex) when (IsNativeToolCallParseError(ex) && toolsForRequest is { Count: > 0 })
             {
                 _logger.LogWarning(
                     ex,
-                    "Ollama XML tool parse failed for {AppId}; falling back to client-side tool parsing",
+                    "Native tool-call parse failed for {AppId}; falling back to client-side tool parsing",
                     request.AppId);
 
                 ClientSideToolCalling.EnsureCatalogInSystemPrompt(messages, toolsForRequest);
@@ -460,7 +467,8 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
             var assistantMessage = response.Message;
 
-            if (!skipProsePromotion
+            if (!forceAnswerOnly
+                && !skipProsePromotion
                 && (capabilities.EnableProseToolCallPromotion || useClientSideTools)
                 && assistantMessage is not null
                 && (assistantMessage.ToolCalls is null || assistantMessage.ToolCalls.Count == 0))
@@ -508,7 +516,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             }
 
             // When client-side, keep history as flat chat (avoid feeding tool_calls back to Ollama).
-            if (assistantMessage?.ToolCalls is { Count: > 0 } toolCalls)
+            if (!forceAnswerOnly && assistantMessage?.ToolCalls is { Count: > 0 } toolCalls)
             {
                 requireToolChoice = false;
                 if (useClientSideTools)
@@ -587,6 +595,26 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     }
 
                     loopState = ApplyTransition(loopState, AgentLoopEvent.ToolResult, trace);
+                }
+
+                if (!forceAnswerOnly
+                    && AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterWikiBudget(steps))
+                {
+                    forceAnswerOnly = true;
+                    requireToolChoice = false;
+                    _logger.LogWarning(
+                        "Forcing answer-only iteration for {AppId} after repeated wiki budget rejections with evidence",
+                        request.AppId);
+                    messages.Add(new OllamaMessage
+                    {
+                        Role = "user",
+                        Content = TenantLocale.Select(
+                            request.RuntimeConfig.DefaultLanguage,
+                            "STOP. Wiki budget is exhausted and evidence was already gathered. "
+                            + "Answer the user NOW in plain text. Do NOT emit tool_calls or JSON tool invocations.",
+                            "PARA. O orçamento wiki esgotou-se e já há evidência recolhida. "
+                            + "Responde AGORA ao utilizador em texto. NÃO emitas tool_calls nem invocações JSON de tools.")
+                    });
                 }
 
                 continue;
@@ -900,13 +928,21 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             steps,
             iterations);
 
-    private static bool IsOllamaToolXmlParseError(HttpRequestException ex)
+    private static bool IsNativeToolCallParseError(HttpRequestException ex)
     {
+        // Backend-agnostic: any native tool_calls wire failure → fall back to client-side catalog.
         var msg = ex.Message ?? string.Empty;
         return msg.Contains("XML syntax error", StringComparison.OrdinalIgnoreCase)
                || msg.Contains("element <function> closed by", StringComparison.OrdinalIgnoreCase)
-               || msg.Contains("qwen tool call parsing failed", StringComparison.OrdinalIgnoreCase);
+               || msg.Contains("qwen tool call parsing failed", StringComparison.OrdinalIgnoreCase)
+               || msg.Contains("Failed to parse tool call arguments as JSON", StringComparison.OrdinalIgnoreCase)
+               || msg.Contains("parse tool call arguments", StringComparison.OrdinalIgnoreCase)
+               || msg.Contains("json.exception.parse_error", StringComparison.OrdinalIgnoreCase)
+               || msg.Contains("tool call arguments as JSON", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool IsOllamaToolXmlParseError(HttpRequestException ex) =>
+        IsNativeToolCallParseError(ex);
 
     private static bool IsLlmGrammarError(HttpRequestException ex)
     {
