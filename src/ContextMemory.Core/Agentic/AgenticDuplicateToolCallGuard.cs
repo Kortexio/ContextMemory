@@ -230,6 +230,107 @@ public static class AgenticDuplicateToolCallGuard
     public static bool ShouldForceAnswer(IReadOnlyList<AgentExecutionStep> steps) =>
         ShouldForceAnswerAfterWikiBudget(steps) || ShouldForceAnswerAfterDuplicateSuccess(steps);
 
+    /// <summary>
+    /// After tools were stripped for force-answer, accept a non-empty model reply when successful
+    /// tool evidence already exists — even if soft validators reject — but never accept
+    /// guardrail/budget mechanics echoed to the end user, or answers that leak tool names.
+    /// </summary>
+    public static bool ShouldAcceptForceAnswerDespiteValidation(
+        bool forceAnswerOnly,
+        string? finalAnswer,
+        IReadOnlyList<AgentExecutionStep> steps) =>
+        forceAnswerOnly
+        && IsUsableForceAnswer(finalAnswer)
+        && steps.Any(s => s.Success);
+
+    /// <summary>
+    /// True when the model paraphrases harness rejections (budget, duplicate calls, "how to fix")
+    /// instead of answering the user's original question.
+    /// </summary>
+    public static bool IsGuardrailMechanicsEcho(string? finalAnswer)
+    {
+        if (string.IsNullOrWhiteSpace(finalAnswer))
+            return false;
+
+        foreach (var marker in GuardrailMechanicsEchoMarkers)
+        {
+            if (finalAnswer.Contains(marker, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    public static bool IsUsableForceAnswer(string? finalAnswer) =>
+        !string.IsNullOrWhiteSpace(finalAnswer)
+        && !IsGuardrailMechanicsEcho(finalAnswer)
+        && !AgenticToolIntentNarrationGuardrail.ContainsToolName(finalAnswer);
+
+    /// <summary>
+    /// Last-resort user-visible reply from successful tool outputs when the model only
+    /// echoes budget/duplicate mechanics after force-answer.
+    /// </summary>
+    public static string? TryBuildEvidenceFallbackAnswer(
+        AppRuntimeConfig runtimeConfig,
+        IReadOnlyList<AgentExecutionStep> steps,
+        int maxTotalChars = 6000)
+    {
+        var chunks = steps
+            .Where(s => s.Success && !string.IsNullOrWhiteSpace(s.Output))
+            .Select(s => TruncateForFallback(s.Output.Trim(), 2500))
+            .Where(o => o.Length > 0)
+            .TakeLast(4)
+            .ToList();
+
+        if (chunks.Count == 0)
+            return null;
+
+        var intro = TenantLocale.Select(
+            runtimeConfig.DefaultLanguage,
+            "Here is what was found:",
+            "Segue o que foi encontrado:");
+
+        var combined = intro + "\n\n" + string.Join("\n\n---\n\n", chunks);
+        return combined.Length <= maxTotalChars
+            ? combined
+            : combined[..maxTotalChars] + "…";
+    }
+
+    private static string TruncateForFallback(string text, int maxChars) =>
+        text.Length <= maxChars ? text : text[..maxChars] + "…";
+
+    private static readonly string[] GuardrailMechanicsEchoMarkers =
+    [
+        "budget exhausted",
+        "wiki budget",
+        "orçamento wiki",
+        "orçamento de chamadas",
+        "limite de orçamento",
+        "mesmo parâmetro",
+        "mesmos arguments",
+        "mesmos argumentos",
+        "same parameter",
+        "same arguments",
+        "não chamar a mesma",
+        "do not call the same",
+        "não repitas",
+        "do not repeat",
+        "rejeitada pelo sistema",
+        "rejeitado pelo sistema",
+        "rejected by the system",
+        "como corrigir",
+        "how to fix",
+        "how to correct",
+        "consecutivamente",
+        "consecutively",
+        "ferramenta foi chamada mais",
+        "tool was called more",
+        "identical tool call",
+        "chamada idêntica",
+        "duplicate tool",
+        "tool call already succeeded"
+    ];
+
     public static bool IsDuplicateAfterSuccessRejection(AgentExecutionStep step)
     {
         if (step.Success)
@@ -241,8 +342,34 @@ public static class AgenticDuplicateToolCallGuard
         return FeedbackIndicatesDuplicateAfterSuccess(step.Output);
     }
 
+    /// <summary>
+    /// Harness-only rejections (duplicate args, wiki budget, empty query) — not real tool failures.
+    /// Must not trip RequireZeroExitCode / tool-failure-disclosure or the model is pushed to
+    /// explain budget mechanics to the end user.
+    /// </summary>
+    public static bool IsHarnessPolicyRejection(AgentExecutionStep step)
+    {
+        if (step.Success)
+            return false;
+
+        if (string.Equals(step.Summary, DuplicateAfterSuccessSummary, StringComparison.Ordinal)
+            || string.Equals(step.Summary, DuplicateRejectedSummary, StringComparison.Ordinal))
+            return true;
+
+        return IsWikiBudgetRejection(step) || IsDuplicateAfterSuccessRejection(step);
+    }
+
     public static string BuildForceAnswerNudge(AppRuntimeConfig runtimeConfig, IReadOnlyList<AgentExecutionStep> steps)
     {
+        var antiMeta = TenantLocale.Select(
+            runtimeConfig.DefaultLanguage,
+            " CRITICAL: Answer ONLY the user's original question with facts from tool results. "
+            + "Do NOT explain budgets, duplicate calls, rejections, or how to call tools. "
+            + "Do NOT name tools (wiki_search, wiki_grep, …).",
+            " CRÍTICO: Responde APENAS à pergunta original do utilizador com factos dos resultados das tools. "
+            + "NÃO expliques orçamentos, chamadas duplicadas, rejeições, nem como chamar tools. "
+            + "NÃO nomes tools (wiki_search, wiki_grep, …).");
+
         if (ShouldForceAnswerAfterDuplicateSuccess(steps))
         {
             return TenantLocale.Select(
@@ -252,7 +379,8 @@ public static class AgenticDuplicateToolCallGuard
                 + "Do NOT emit tool_calls or JSON tool invocations.",
                 "PARA. Essa chamada exacta de tool já teve sucesso neste turno. "
                 + "Responde AGORA ao utilizador com o resultado da tool já obtido. "
-                + "NÃO emitas tool_calls nem invocações JSON de tools.");
+                + "NÃO emitas tool_calls nem invocações JSON de tools.")
+                + antiMeta;
         }
 
         if (HasSuccessfulWikiEvidence(steps))
@@ -262,7 +390,8 @@ public static class AgenticDuplicateToolCallGuard
                 "STOP. Wiki budget is exhausted and evidence was already gathered. "
                 + "Answer the user NOW in plain text. Do NOT emit tool_calls or JSON tool invocations.",
                 "PARA. O orçamento wiki esgotou-se e já há evidência recolhida. "
-                + "Responde AGORA ao utilizador em texto. NÃO emitas tool_calls nem invocações JSON de tools.");
+                + "Responde AGORA ao utilizador em texto. NÃO emitas tool_calls nem invocações JSON de tools.")
+                + antiMeta;
         }
 
         return TenantLocale.Select(
@@ -272,7 +401,8 @@ public static class AgenticDuplicateToolCallGuard
             + "Do NOT emit tool_calls or JSON tool invocations.",
             "PARA. O orçamento wiki esgotou-se e novas chamadas wiki estão bloqueadas. "
             + "Responde AGORA com honestidade com o que tens (ou diz que não obtiveste dados vivos). "
-            + "NÃO emitas tool_calls nem invocações JSON de tools.");
+            + "NÃO emitas tool_calls nem invocações JSON de tools.")
+            + antiMeta;
     }
 
     public static bool IsWikiBudgetRejection(AgentExecutionStep step)

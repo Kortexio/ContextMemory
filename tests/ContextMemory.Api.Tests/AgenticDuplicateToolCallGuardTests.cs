@@ -362,6 +362,112 @@ public sealed class AgenticDuplicateToolCallGuardTests
     }
 
     [Fact]
+    public void IsHarnessPolicyRejection_CoversDuplicateAndBudgetSummaries()
+    {
+        Assert.True(AgenticDuplicateToolCallGuard.IsHarnessPolicyRejection(new AgentExecutionStep
+        {
+            Iteration = 2,
+            ToolName = "wiki_search",
+            Arguments = """{"query":"x"}""",
+            Output = "Rejected: identical…",
+            ExitCode = 1,
+            Success = false,
+            Summary = AgenticDuplicateToolCallGuard.DuplicateAfterSuccessSummary
+        }));
+
+        Assert.True(AgenticDuplicateToolCallGuard.IsHarnessPolicyRejection(new AgentExecutionStep
+        {
+            Iteration = 3,
+            ToolName = "wiki_search",
+            Arguments = """{"query":"y"}""",
+            Output = "Rejected: wiki_search/wiki_grep budget exhausted this turn.",
+            ExitCode = 1,
+            Success = false,
+            Summary = AgenticDuplicateToolCallGuard.DuplicateRejectedSummary
+        }));
+
+        Assert.False(AgenticDuplicateToolCallGuard.IsHarnessPolicyRejection(new AgentExecutionStep
+        {
+            Iteration = 1,
+            ToolName = "zuora__query_objects",
+            Arguments = "{}",
+            Output = "connection refused",
+            ExitCode = 1,
+            Success = false
+        }));
+    }
+
+    [Fact]
+    public void ShouldAcceptForceAnswerDespiteValidation_RequiresEvidenceAndNonEmptyAnswer()
+    {
+        var withEvidence = new List<AgentExecutionStep>
+        {
+            Successful("wiki_search", """{"query":"x"}""", "Regras PACCAR ITD.")
+        };
+
+        Assert.True(AgenticDuplicateToolCallGuard.ShouldAcceptForceAnswerDespiteValidation(
+            forceAnswerOnly: true,
+            finalAnswer: "Resumo a partir da wiki.",
+            withEvidence));
+
+        Assert.False(AgenticDuplicateToolCallGuard.ShouldAcceptForceAnswerDespiteValidation(
+            forceAnswerOnly: false,
+            finalAnswer: "Resumo a partir da wiki.",
+            withEvidence));
+
+        Assert.False(AgenticDuplicateToolCallGuard.ShouldAcceptForceAnswerDespiteValidation(
+            forceAnswerOnly: true,
+            finalAnswer: "   ",
+            withEvidence));
+
+        Assert.False(AgenticDuplicateToolCallGuard.ShouldAcceptForceAnswerDespiteValidation(
+            forceAnswerOnly: true,
+            finalAnswer: "Resumo",
+            steps: []));
+    }
+
+    [Fact]
+    public void ShouldAcceptForceAnswerDespiteValidation_RejectsMechanicsEchoAndToolLeak()
+    {
+        var withEvidence = new List<AgentExecutionStep>
+        {
+            Successful("wiki_search", """{"query":"x"}""", "Regras PACCAR ITD.")
+        };
+
+        const string meta =
+            "A ferramenta wiki_search foi chamada mais de uma vez. "
+            + "Isso é um limite de orçamento de chamadas. Como corrigir: não chamar a mesma.";
+
+        Assert.True(AgenticDuplicateToolCallGuard.IsGuardrailMechanicsEcho(meta));
+        Assert.False(AgenticDuplicateToolCallGuard.IsUsableForceAnswer(meta));
+        Assert.False(AgenticDuplicateToolCallGuard.ShouldAcceptForceAnswerDespiteValidation(
+            forceAnswerOnly: true,
+            finalAnswer: meta,
+            withEvidence));
+
+        Assert.False(AgenticDuplicateToolCallGuard.ShouldAcceptForceAnswerDespiteValidation(
+            forceAnswerOnly: true,
+            finalAnswer: "Consultei wiki_search e encontrei as regras.",
+            withEvidence));
+    }
+
+    [Fact]
+    public void TryBuildEvidenceFallbackAnswer_ReturnsSuccessfulOutputs()
+    {
+        var steps = new List<AgentExecutionStep>
+        {
+            Successful("wiki_search", """{"query":"x"}""", "Business rules for PACCAR ITD validation.")
+        };
+
+        var fallback = AgenticDuplicateToolCallGuard.TryBuildEvidenceFallbackAnswer(Config(), steps);
+
+        Assert.NotNull(fallback);
+        Assert.Contains("PACCAR", fallback, StringComparison.Ordinal);
+        Assert.Contains("Segue o que foi encontrado", fallback, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Como corrigir", fallback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Signature_NormalizesWhitespaceAndCase()
     {
         var a = AgenticDuplicateToolCallGuard.BuildSignature(
@@ -374,13 +480,13 @@ public sealed class AgenticDuplicateToolCallGuardTests
         Assert.Equal(a, b);
     }
 
-    private static AgentExecutionStep Successful(string tool, string args) =>
+    private static AgentExecutionStep Successful(string tool, string args, string output = "ok") =>
         new()
         {
             Iteration = 1,
             ToolName = tool,
             Arguments = args,
-            Output = "ok",
+            Output = output,
             ExitCode = 0,
             Success = true,
             Duration = TimeSpan.FromMilliseconds(5)

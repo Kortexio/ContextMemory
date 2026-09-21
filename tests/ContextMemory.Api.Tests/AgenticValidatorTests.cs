@@ -130,6 +130,88 @@ public sealed class HybridAgentValidatorTests
     }
 
     [Fact]
+    public async Task Deterministic_IgnoresHarnessBudgetDuplicateRejections_ForRequireZeroExitCode()
+    {
+        // Successful wiki + harness duplicate/budget rejection must not force "explain the error"
+        // (that produces end-user meta about tool budgets).
+        var request = new AgentValidationRequest
+        {
+            FinalAnswer =
+                "As regras PACCAR para validação ITD recomendam testes directos via API.",
+            Steps =
+            [
+                new AgentExecutionStep
+                {
+                    Iteration = 1,
+                    ToolName = "wiki_search",
+                    Arguments = """{"query":"PACCAR ITD"}""",
+                    Success = true,
+                    ExitCode = 0,
+                    Output = "Business rules for PACCAR ITD validation via direct API testing."
+                },
+                new AgentExecutionStep
+                {
+                    Iteration = 2,
+                    ToolName = "wiki_search",
+                    Arguments = """{"query":"PACCAR ITD"}""",
+                    Success = false,
+                    ExitCode = 1,
+                    Output =
+                        "Rejected: identical wiki_search already succeeded — do NOT repeat. "
+                        + "Answer the user NOW from the wiki result already gathered.",
+                    Summary = AgenticDuplicateToolCallGuard.DuplicateAfterSuccessSummary
+                },
+                new AgentExecutionStep
+                {
+                    Iteration = 3,
+                    ToolName = "wiki_search",
+                    Arguments = """{"query":"other"}""",
+                    Success = false,
+                    ExitCode = 1,
+                    Output = "Rejected: wiki_search/wiki_grep budget exhausted this turn.",
+                    Summary = AgenticDuplicateToolCallGuard.DuplicateRejectedSummary
+                }
+            ],
+            RuntimeConfig = new AppRuntimeConfig
+            {
+                AppId = "test",
+                DefaultLanguage = "pt",
+                Agentic = new AgenticConfig
+                {
+                    Guardrails = new AgenticGuardrailsConfig
+                    {
+                        RequireZeroExitCode = true,
+                        ValidationMode = "deterministic"
+                    }
+                },
+                ResolvedPolicy = new ResolvedAgenticPolicy
+                {
+                    ActiveGuardrails =
+                    [
+                        new AgenticGuardrailDefinition
+                        {
+                            Id = "require-error-disclosure",
+                            Name = "Require error disclosure",
+                            Kind = AgenticGuardrailKinds.ToolFailureDisclosure,
+                            IsDefaultEnabled = true,
+                            ConfigJson = """{"kind":"tool-failure-disclosure"}"""
+                        }
+                    ],
+                    ActiveGuardrailKinds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        AgenticGuardrailKinds.ToolFailureDisclosure
+                    }
+                }
+            }
+        };
+
+        var result = await _deterministic.ValidateAsync(request);
+        Assert.True(result.IsValid, result.FeedbackForModel);
+        Assert.DoesNotContain("exit code", result.FeedbackForModel ?? "", StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("explica", result.FeedbackForModel ?? "", StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Deterministic_StillRejectsFailedNonDiscoveryTools_ForRequireZeroExitCode()
     {
         var request = new AgentValidationRequest
