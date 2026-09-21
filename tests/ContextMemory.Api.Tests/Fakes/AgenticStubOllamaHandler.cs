@@ -172,7 +172,11 @@ public sealed class AgenticStubOllamaHandler : HttpMessageHandler
             if (hasGetAccountResult)
                 return null;
 
-            var getAccountVisible = body.Contains("zuora-mcp__get_account", StringComparison.Ordinal);
+            var getAccountVisible = body.Contains("zuora-mcp__get_account", StringComparison.Ordinal)
+                || (body.Contains("MCP `zuora-mcp`", StringComparison.Ordinal)
+                    && body.Contains("`get_account`", StringComparison.Ordinal))
+                || (body.Contains("zuora-mcp:", StringComparison.Ordinal)
+                    && body.Contains("get_account", StringComparison.Ordinal));
             if (getAccountVisible)
             {
                 return EmitToolCall(

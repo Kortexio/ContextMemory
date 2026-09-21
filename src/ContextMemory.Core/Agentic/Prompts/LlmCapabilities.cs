@@ -58,8 +58,9 @@ public static partial class LlmCapabilitiesResolver
             InlineEvidenceRules: weak,
             PreferSkillDiscovery: !weak,
             SupportsVision: supportsVision,
-            // Catalog size is owned by tenant maxMcpToolsPerTurn — never silently cap Weak models.
-            MaxMcpToolsHint: int.MaxValue,
+            // Client-side catalogs dump every MCP name into the system prompt — keep top-K tight.
+            // Native tool_calls paths keep full tenant max (up to AbsoluteMax).
+            MaxMcpToolsHint: clientSideTools ? ClientSidePromptMaxMcpTools : int.MaxValue,
             DefaultToolChoice: "auto");
     }
 
@@ -105,8 +106,15 @@ public static partial class LlmCapabilitiesResolver
     public const int AbsoluteMaxMcpToolsPerTurn = 12;
 
     /// <summary>
+    /// Soft cap when tools are inlined into the system prompt (client-side / Qwen+Ollama).
+    /// Still selects via <c>McpToolSelector</c> — does not omit MCP or reintroduce lazy tool_search.
+    /// </summary>
+    public const int ClientSidePromptMaxMcpTools = 6;
+
+    /// <summary>
     /// Effective max MCP tools from tenant config (<c>maxMcpToolsPerTurn</c>). Default 12 when unset; hard-capped at
-    /// <see cref="AbsoluteMaxMcpToolsPerTurn"/>.
+    /// <see cref="AbsoluteMaxMcpToolsPerTurn"/>. Client-side prompt catalogs also clamp to
+    /// <see cref="ClientSidePromptMaxMcpTools"/>.
     /// </summary>
     public static int ResolveMaxMcpTools(AppRuntimeConfig config)
     {

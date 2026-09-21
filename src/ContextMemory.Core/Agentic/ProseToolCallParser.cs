@@ -75,13 +75,18 @@ public static partial class ProseToolCallParser
         foreach (var call in promoted)
         {
             var name = call.Function?.Name?.Trim();
-            var isMcpQualified = !string.IsNullOrWhiteSpace(name)
-                && McpToolNaming.TryParseQualifiedName(name, out _, out _);
+            if (string.IsNullOrWhiteSpace(name) || allowed.Count == 0)
+            {
+                droppedUnknown++;
+                continue;
+            }
+
+            // Catalog lists MCP short names under a server header; expand when unambiguous.
+            var resolved = ClientSideToolCalling.TryExpandShortMcpName(name, allowed) ?? name;
+            var isMcpQualified = McpToolNaming.TryParseQualifiedName(resolved, out _, out _);
             // Allow MCP-qualified names through even when not yet pinned so the executor can
             // reject invent-names with a tool_search hint (instead of silently dropping).
-            if (string.IsNullOrWhiteSpace(name)
-                || allowed.Count == 0
-                || (!allowed.Contains(name) && !isMcpQualified))
+            if (!allowed.Contains(resolved) && !isMcpQualified)
             {
                 droppedUnknown++;
                 continue;
@@ -94,7 +99,9 @@ public static partial class ProseToolCallParser
                 continue;
             }
 
-            kept.Add(call);
+            kept.Add(string.Equals(resolved, name, StringComparison.Ordinal)
+                ? call
+                : new OllamaToolCall(new OllamaFunctionCall(resolved, args)));
         }
 
         // Cap only when caller passes a positive limit (typically Admin maxMcpToolsPerTurn via ResolveMaxMcpTools).

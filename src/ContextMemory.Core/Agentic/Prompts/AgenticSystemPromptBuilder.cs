@@ -21,8 +21,9 @@ public static class AgenticSystemPromptBuilder
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .ToList();
 
+        // Server names already appear in the compact tool summary / catalog — avoid a second full list.
         var mcpLine = mcpServers.Count > 0
-            ? $"\nMCP servers: {string.Join(", ", mcpServers)} (use tool_describe before calling unfamiliar MCP tools)."
+            ? " Prefer listed MCP tools for live system data; tool_describe before unfamiliar schemas."
             : string.Empty;
 
         var sb = new StringBuilder();

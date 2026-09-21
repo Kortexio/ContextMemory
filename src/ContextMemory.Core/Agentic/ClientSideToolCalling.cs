@@ -13,6 +13,9 @@ public static class ClientSideToolCalling
 {
     public const string CatalogMarker = "## Tool catalog (JSON only; do not invent tools)";
 
+    /// <summary>Max chars per tool description in the client-side catalog.</summary>
+    public const int CatalogDescriptionMaxChars = 72;
+
     public static void EnsureCatalogInSystemPrompt(List<OllamaMessage> messages, IReadOnlyList<OllamaTool> tools)
     {
         if (tools.Count == 0)
@@ -49,29 +52,128 @@ public static class ClientSideToolCalling
             "Never emit XML tool tags (function/parameter/tool_call). JSON only.");
         sb.AppendLine();
 
+        var builtins = new List<OllamaTool>();
+        var mcpByServer = new SortedDictionary<string, List<(string ToolName, OllamaTool Tool)>>(
+            StringComparer.OrdinalIgnoreCase);
+
         foreach (var tool in tools)
         {
-            var fn = tool.Function;
-            sb.Append("- `").Append(fn.Name).Append('`');
-            if (!string.IsNullOrWhiteSpace(fn.Description))
+            var name = tool.Function.Name ?? string.Empty;
+            if (McpToolNaming.TryParseQualifiedName(name, out var server, out var shortName))
             {
-                var desc = NeutralizeXmlTriggers(fn.Description.Trim());
-                if (desc.Length > 160)
-                    desc = desc[..160] + "…";
-                sb.Append(": ").Append(desc);
+                if (!mcpByServer.TryGetValue(server, out var list))
+                    mcpByServer[server] = list = [];
+                list.Add((shortName, tool));
             }
+            else
+            {
+                builtins.Add(tool);
+            }
+        }
 
-            sb.AppendLine();
-            // Skip open stub schemas (empty properties) — full params appear after tool_describe pin.
-            if (McpPinnedToolFactory.IsOpenStubParameters(fn.Parameters))
-                continue;
+        foreach (var tool in builtins)
+            AppendToolLine(sb, tool.Function.Name, tool);
 
-            var schema = CompactSchema(fn.Parameters);
-            if (!string.IsNullOrWhiteSpace(schema))
-                sb.AppendLine("  params: " + NeutralizeXmlTriggers(schema));
+        foreach (var (server, entries) in mcpByServer)
+        {
+            sb.Append("MCP `").Append(server).AppendLine("` — call as `server__tool`:");
+            foreach (var (shortName, tool) in entries)
+                AppendToolLine(sb, shortName, tool, indent: "  ");
         }
 
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// Compact "Available tools" line: builtins comma-joined; MCP grouped as
+    /// <c>server: t1, t2</c> (short names) to avoid repeating long qualified prefixes.
+    /// </summary>
+    public static string FormatToolNamesSummary(IReadOnlyList<OllamaTool> tools)
+    {
+        var builtins = new List<string>();
+        var mcpByServer = new SortedDictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var tool in tools)
+        {
+            var name = tool.Function?.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            if (McpToolNaming.TryParseQualifiedName(name, out var server, out var shortName))
+            {
+                if (!mcpByServer.TryGetValue(server, out var list))
+                    mcpByServer[server] = list = [];
+                list.Add(shortName);
+            }
+            else
+            {
+                builtins.Add(name);
+            }
+        }
+
+        var parts = new List<string>(1 + mcpByServer.Count);
+        if (builtins.Count > 0)
+            parts.Add(string.Join(", ", builtins));
+        foreach (var (server, shortNames) in mcpByServer)
+            parts.Add($"{server}: {string.Join(", ", shortNames)}");
+
+        return string.Join(" | ", parts);
+    }
+
+    /// <summary>
+    /// Expands a short MCP tool name to the unique qualified catalog entry when unambiguous.
+    /// </summary>
+    public static string? TryExpandShortMcpName(string name, IReadOnlyCollection<string> catalogNames)
+    {
+        if (string.IsNullOrWhiteSpace(name) || catalogNames.Count == 0)
+            return null;
+
+        var trimmed = name.Trim();
+        if (catalogNames.Contains(trimmed, StringComparer.OrdinalIgnoreCase))
+            return catalogNames.First(n => string.Equals(n, trimmed, StringComparison.OrdinalIgnoreCase));
+
+        if (McpToolNaming.TryParseQualifiedName(trimmed, out _, out _))
+            return null;
+
+        string? match = null;
+        foreach (var candidate in catalogNames)
+        {
+            if (!McpToolNaming.TryParseQualifiedName(candidate, out _, out var shortName))
+                continue;
+            if (!string.Equals(shortName, trimmed, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (match is not null)
+                return null; // ambiguous
+            match = candidate;
+        }
+
+        return match;
+    }
+
+    private static void AppendToolLine(
+        StringBuilder sb,
+        string displayName,
+        OllamaTool tool,
+        string indent = "")
+    {
+        var fn = tool.Function;
+        sb.Append(indent).Append("- `").Append(displayName).Append('`');
+        if (!string.IsNullOrWhiteSpace(fn.Description))
+        {
+            var desc = NeutralizeXmlTriggers(fn.Description.Trim());
+            if (desc.Length > CatalogDescriptionMaxChars)
+                desc = desc[..CatalogDescriptionMaxChars] + "…";
+            sb.Append(": ").Append(desc);
+        }
+
+        sb.AppendLine();
+        // Skip open stub schemas (empty properties) — full params appear after tool_describe pin.
+        if (McpPinnedToolFactory.IsOpenStubParameters(fn.Parameters))
+            return;
+
+        var schema = CompactSchema(fn.Parameters);
+        if (!string.IsNullOrWhiteSpace(schema))
+            sb.Append(indent).Append("  params: ").AppendLine(NeutralizeXmlTriggers(schema));
     }
 
     /// <summary>

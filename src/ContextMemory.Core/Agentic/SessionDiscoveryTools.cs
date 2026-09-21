@@ -199,20 +199,19 @@ public static class SessionDiscoveryTools
         ];
     }
 
-    /// <summary>Short one-line MCP description for lazy discovery (full text via tool_describe).</summary>
-    public static string ShortenDescription(string? description, int maxChars = 120)
+    /// <summary>Short one-line MCP description for the prompt catalog (full text via tool_describe).</summary>
+    public static string ShortenDescription(string? description, int maxChars = 72)
     {
         if (string.IsNullOrWhiteSpace(description))
-            return "Use tool_describe for full schema/description.";
+            return "MCP tool";
 
         var trimmed = description.Trim().Replace("\r", " ").Replace("\n", " ");
         while (trimmed.Contains("  ", StringComparison.Ordinal))
             trimmed = trimmed.Replace("  ", " ", StringComparison.Ordinal);
 
         if (trimmed.Length <= maxChars)
-            return trimmed + " (tool_describe for full schema)";
+            return trimmed;
 
-        var keep = Math.Clamp(maxChars - 32, 1, trimmed.Length);
-        return trimmed[..keep].TrimEnd() + "… (tool_describe for full schema)";
+        return trimmed[..maxChars].TrimEnd() + "…";
     }
 }
