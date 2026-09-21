@@ -9,17 +9,7 @@ namespace ContextMemory.Core.Contracts;
 public interface IAgentToolCallProcessor
 {
     Task<AgentToolCallOutcome> ProcessAsync(
-        OllamaToolCall toolCall,
-        string appId,
-        string userId,
-        string sessionId,
-        AppRuntimeConfig runtimeConfig,
-        int iteration,
-        List<AgentExecutionStep> steps,
-        List<OllamaMessage> messages,
-        Action<AgenticProgressEvent>? report,
-        bool skipConfirmation,
-        IReadOnlyList<OllamaTool>? turnCatalog = null,
+        AgentToolCallContext context,
         CancellationToken cancellationToken = default);
 }
 

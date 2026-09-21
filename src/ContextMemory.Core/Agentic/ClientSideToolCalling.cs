@@ -121,33 +121,55 @@ public static class ClientSideToolCalling
     }
 
     /// <summary>
-    /// Expands a short MCP tool name to the unique qualified catalog entry when unambiguous.
+    /// Resolves a short or qualified MCP tool name against the turn catalog.
+    /// Ambiguous short names return candidates instead of silently failing.
     /// </summary>
-    public static string? TryExpandShortMcpName(string name, IReadOnlyCollection<string> catalogNames)
+    public static ShortMcpNameResolution ResolveShortMcpName(
+        string name,
+        IReadOnlyCollection<string> catalogNames)
     {
         if (string.IsNullOrWhiteSpace(name) || catalogNames.Count == 0)
-            return null;
+            return new ShortMcpNameResolution(ShortMcpNameKind.NotFound, null, []);
 
         var trimmed = name.Trim();
         if (catalogNames.Contains(trimmed, StringComparer.OrdinalIgnoreCase))
-            return catalogNames.First(n => string.Equals(n, trimmed, StringComparison.OrdinalIgnoreCase));
+        {
+            var exact = catalogNames.First(n =>
+                string.Equals(n, trimmed, StringComparison.OrdinalIgnoreCase));
+            return new ShortMcpNameResolution(ShortMcpNameKind.Exact, exact, []);
+        }
 
         if (McpToolNaming.TryParseQualifiedName(trimmed, out _, out _))
-            return null;
+            return new ShortMcpNameResolution(ShortMcpNameKind.AlreadyQualified, trimmed, []);
 
-        string? match = null;
+        var matches = new List<string>();
         foreach (var candidate in catalogNames)
         {
             if (!McpToolNaming.TryParseQualifiedName(candidate, out _, out var shortName))
                 continue;
-            if (!string.Equals(shortName, trimmed, StringComparison.OrdinalIgnoreCase))
-                continue;
-            if (match is not null)
-                return null; // ambiguous
-            match = candidate;
+            if (string.Equals(shortName, trimmed, StringComparison.OrdinalIgnoreCase))
+                matches.Add(candidate);
         }
 
-        return match;
+        return matches.Count switch
+        {
+            0 => new ShortMcpNameResolution(ShortMcpNameKind.NotFound, null, []),
+            1 => new ShortMcpNameResolution(ShortMcpNameKind.Unique, matches[0], matches),
+            _ => new ShortMcpNameResolution(ShortMcpNameKind.Ambiguous, null, matches)
+        };
+    }
+
+    /// <summary>
+    /// Expands a short MCP tool name to the unique qualified catalog entry when unambiguous.
+    /// Returns null for missing or ambiguous names — prefer <see cref="ResolveShortMcpName"/> when
+    /// callers need to surface ambiguity.
+    /// </summary>
+    public static string? TryExpandShortMcpName(string name, IReadOnlyCollection<string> catalogNames)
+    {
+        var resolved = ResolveShortMcpName(name, catalogNames);
+        return resolved.Kind is ShortMcpNameKind.Exact or ShortMcpNameKind.Unique
+            ? resolved.ResolvedName
+            : null;
     }
 
     private static void AppendToolLine(
