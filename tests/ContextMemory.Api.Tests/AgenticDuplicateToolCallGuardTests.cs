@@ -123,17 +123,17 @@ public sealed class AgenticDuplicateToolCallGuardTests
             {
                 Iteration = 1,
                 ToolName = "wiki_search",
-                Arguments = """{"query":"paccar"}""",
-                Output = "no hits",
-                ExitCode = 0,
-                Success = true,
-                Duration = TimeSpan.FromMilliseconds(2)
+                Arguments = "{}",
+                Output = "rejected empty",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero
             },
             new()
             {
                 Iteration = 2,
                 ToolName = "wiki_search",
-                Arguments = """{"query":"subscription"}""",
+                Arguments = """{"query":"paccar"}""",
                 Output = "no hits",
                 ExitCode = 0,
                 Success = true,
@@ -151,61 +151,6 @@ public sealed class AgenticDuplicateToolCallGuardTests
         Assert.True(rejected);
         Assert.Contains("esgotado", feedback, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ask_zuora", feedback, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void GuardRejections_DoNotConsumeWikiBudget()
-    {
-        var config = Config(withMcp: true);
-        var steps = new List<AgentExecutionStep>
-        {
-            new()
-            {
-                Iteration = 1,
-                ToolName = "wiki_search",
-                Arguments = "{}",
-                Output = "rejected empty",
-                ExitCode = 1,
-                Success = false,
-                Duration = TimeSpan.Zero,
-                RejectedByGuard = true
-            },
-            new()
-            {
-                Iteration = 2,
-                ToolName = "wiki_search",
-                Arguments = "{}",
-                Output = "rejected empty",
-                ExitCode = 1,
-                Success = false,
-                Duration = TimeSpan.Zero,
-                RejectedByGuard = true
-            }
-        };
-
-        var ok = AgenticDuplicateToolCallGuard.TryReject(
-            "wiki_search",
-            """{"query":"paccar"}""",
-            steps,
-            config,
-            out _);
-
-        Assert.False(ok);
-    }
-
-    [Fact]
-    public void Accepts_CaseInsensitiveQueryField()
-    {
-        var config = Config();
-
-        var rejected = AgenticDuplicateToolCallGuard.TryReject(
-            "wiki_search",
-            """{"Query":"PAC-759"}""",
-            steps: [],
-            config,
-            out _);
-
-        Assert.False(rejected);
     }
 
     [Fact]

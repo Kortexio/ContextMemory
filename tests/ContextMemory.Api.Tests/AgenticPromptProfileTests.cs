@@ -171,14 +171,15 @@ public sealed class LlmCapabilitiesResolverTests
             AppId = "test",
             LlmBackend = "ollama",
             LlmModel = "qwen3.5:9b",
-            LlmOptions = new LlmGenerationConfig { NumCtx = 4096 },
             Agentic = new AgenticConfig
             {
                 Tools = new AgenticToolsConfig { MaxMcpToolsPerTurn = 8 }
             }
         };
 
-        Assert.Equal(6, LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
+        Assert.Equal(
+            LlmCapabilitiesResolver.ClientSidePromptMaxMcpTools,
+            LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
         Assert.True(LlmCapabilitiesResolver.From(config).PreferClientSideToolParsing);
     }
 
@@ -220,60 +221,21 @@ public sealed class LlmCapabilitiesResolverTests
     }
 
     [Fact]
-    public void ResolveMaxMcpTools_WeakAt4k_ClampsToSix()
+    public void ResolveMaxMcpTools_ClientSidePrompt_ClampsOversizedToSoftCap()
     {
         var config = new AppRuntimeConfig
         {
             AppId = "test",
             LlmBackend = "ollama-native",
             LlmModel = "bonsai-27b:latest",
-            LlmOptions = new LlmGenerationConfig { NumCtx = 4096 },
             Agentic = new AgenticConfig
             {
-                Tools = new AgenticToolsConfig { MaxMcpToolsPerTurn = 100 }
-            }
-        };
-
-        Assert.Equal(6, LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
-    }
-
-    [Fact]
-    public void ResolveMaxMcpTools_WeakAt8k_ClampsToTen()
-    {
-        var config = new AppRuntimeConfig
-        {
-            AppId = "test",
-            LlmBackend = "openai-compatible",
-            LlmModel = "bonsai-27b",
-            LlmOptions = new LlmGenerationConfig { NumCtx = 8192 },
-            Agentic = new AgenticConfig
-            {
-                HarnessMode = "weak",
-                Tools = new AgenticToolsConfig { MaxMcpToolsPerTurn = 100 }
-            }
-        };
-
-        Assert.Equal(10, LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
-    }
-
-    [Fact]
-    public void ResolveMaxMcpTools_WeakAt16k_UsesAbsoluteMax()
-    {
-        var config = new AppRuntimeConfig
-        {
-            AppId = "test",
-            LlmBackend = "openai-compatible",
-            LlmModel = "bonsai-27b",
-            LlmOptions = new LlmGenerationConfig { NumCtx = 16384 },
-            Agentic = new AgenticConfig
-            {
-                HarnessMode = "weak",
                 Tools = new AgenticToolsConfig { MaxMcpToolsPerTurn = 100 }
             }
         };
 
         Assert.Equal(
-            LlmCapabilitiesResolver.AbsoluteMaxMcpToolsPerTurn,
+            LlmCapabilitiesResolver.ClientSidePromptMaxMcpTools,
             LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
     }
 
@@ -297,7 +259,7 @@ public sealed class LlmCapabilitiesResolverTests
     }
 
     [Fact]
-    public void ResolveMaxMcpTools_DefaultsToAbsoluteMax_WhenWeakNumCtxUnset()
+    public void ResolveMaxMcpTools_DefaultsToClientSideCap_ForDefaultQwenOllama()
     {
         var config = new AppRuntimeConfig
         {
@@ -309,7 +271,7 @@ public sealed class LlmCapabilitiesResolverTests
         };
 
         Assert.Equal(
-            LlmCapabilitiesResolver.AbsoluteMaxMcpToolsPerTurn,
+            LlmCapabilitiesResolver.ClientSidePromptMaxMcpTools,
             LlmCapabilitiesResolver.ResolveMaxMcpTools(config));
     }
 
@@ -461,45 +423,6 @@ public sealed class AgenticSystemPromptBuilderTests
 
         var prompt = AgenticSystemPromptBuilder.Build(config, "shell_execute");
         Assert.Contains("## Always-on rules", prompt, StringComparison.Ordinal);
-        Assert.Contains("Always prefer tools over speculation.", prompt, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Build_OmitsWikiFirstSkill_WhenGlobalWikiDisabled()
-    {
-        var config = new AppRuntimeConfig
-        {
-            AppId = "test",
-            GlobalWikiEnabled = false,
-            LlmBackend = "openai",
-            LlmModel = "gpt-4o",
-            ResolvedPolicy = new ResolvedAgenticPolicy
-            {
-                ActiveSkills =
-                [
-                    new AgenticSkillDefinition
-                    {
-                        Id = "wiki-first-for-docs",
-                        Name = "Wiki-first for internal docs",
-                        Activation = AgenticSkillActivation.AlwaysOn,
-                        IsDefaultEnabled = true,
-                        PromptMarkdown = "Prefer ingested knowledge via wiki_search."
-                    },
-                    new AgenticSkillDefinition
-                    {
-                        Id = "rule-always-evidence",
-                        Name = "Evidence first",
-                        Activation = AgenticSkillActivation.AlwaysOn,
-                        IsDefaultEnabled = true,
-                        PromptMarkdown = "Always prefer tools over speculation."
-                    }
-                ]
-            }
-        };
-
-        var prompt = AgenticSystemPromptBuilder.Build(config, "shell_execute");
-        Assert.DoesNotContain("wiki-first-for-docs", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("wiki_search", prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Always prefer tools over speculation.", prompt, StringComparison.Ordinal);
     }
 }

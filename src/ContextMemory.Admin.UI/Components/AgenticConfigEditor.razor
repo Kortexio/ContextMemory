@@ -277,30 +277,18 @@
                                    @bind-Value="Model.Tools.Integrations[index].Description" />
                     </div>
                 </div>
-                @if (!string.IsNullOrWhiteSpace(AppId))
-                {
-                    <McpToolPicker AppId="@AppId"
-                                   IntegrationName="@Model.Tools.Integrations[index].Name"
-                                   AllowlistText="@Model.Tools.Integrations[index].ToolAllowlistText"
-                                   AllowlistTextChanged="v => Model.Tools.Integrations[index].ToolAllowlistText = v"
-                                   DenylistText="@Model.Tools.Integrations[index].ToolDenylistText"
-                                   DenylistTextChanged="v => Model.Tools.Integrations[index].ToolDenylistText = v" />
-                }
-                else
-                {
-                    <div class="form-row">
-                        <div class="col-md-6 form-group mb-2">
-                            <label>Tool allowlist (comma-separated)</label>
-                            <InputText class="form-control form-control-sm"
-                                       @bind-Value="Model.Tools.Integrations[index].ToolAllowlistText" />
-                        </div>
-                        <div class="col-md-6 form-group mb-2">
-                            <label>Tool denylist (comma-separated)</label>
-                            <InputText class="form-control form-control-sm"
-                                       @bind-Value="Model.Tools.Integrations[index].ToolDenylistText" />
-                        </div>
+                <div class="form-row">
+                    <div class="col-md-6 form-group mb-2">
+                        <label>Tool allowlist (comma-separated)</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].ToolAllowlistText" />
                     </div>
-                }
+                    <div class="col-md-6 form-group mb-2">
+                        <label>Tool denylist (comma-separated)</label>
+                        <InputText class="form-control form-control-sm"
+                                   @bind-Value="Model.Tools.Integrations[index].ToolDenylistText" />
+                    </div>
+                </div>
                 <div class="form-check mt-2">
                     <InputCheckbox class="form-check-input"
                                    @bind-Value="Model.Tools.Integrations[index].Enabled" />

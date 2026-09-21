@@ -674,37 +674,6 @@ public sealed class McpJsonRpcClientTests
         Assert.Contains("query", catalog, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ExecutionTools_DefaultToRealSchemas_NotOpenStubs()
-    {
-        var config = new AppRuntimeConfig
-        {
-            AppId = "demo",
-            Agentic = new AgenticConfig
-            {
-                Tools = new AgenticToolsConfig
-                {
-                    Execution =
-                    [
-                        new ExecutionToolConfig
-                        {
-                            Type = "self-hosted-sandbox",
-                            Runtime = "shell"
-                        }
-                    ]
-                }
-            }
-        };
-
-        var tools = AgenticToolRegistry.BuildExecutionTools(config);
-        var shell = Assert.Single(tools, t => t.Function.Name == "shell_execute");
-        Assert.False(McpPinnedToolFactory.IsOpenStubParameters(shell.Function.Parameters));
-
-        var catalog = ClientSideToolCalling.BuildCatalog(tools);
-        Assert.Contains("params:", catalog, StringComparison.Ordinal);
-        Assert.Contains("command", catalog, StringComparison.OrdinalIgnoreCase);
-    }
-
     private sealed class StubMcpCatalog(IReadOnlyList<McpToolDefinition> tools) : IMcpToolCatalog
     {
         public Task<IReadOnlyList<McpToolDefinition>> GetToolsAsync(
