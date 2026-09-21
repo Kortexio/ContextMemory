@@ -250,6 +250,25 @@ public sealed class AgenticIntegrationTests : IClassFixture<AgenticStubWebApplic
 public sealed class AcaExecutionToolExecutorTests
 {
     [Fact]
+    public async Task ExecuteAsync_MalformedJson_FailsClosedWithoutExecutingRawText()
+    {
+        var client = new AcaDynamicSessionsClient(
+            new HttpClient(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AcaDynamicSessionsClient>.Instance);
+        var executor = new AcaExecutionToolExecutor(
+            client,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AcaExecutionToolExecutor>.Instance);
+
+        var result = await executor.ExecuteAsync(
+            new OllamaToolCall(new OllamaFunctionCall("shell_execute", """{"command":""")),
+            "test",
+            BuildConfig("shell"));
+
+        Assert.False(result.Success);
+        Assert.Contains("command", result.Output, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ShellMock_ReturnsSuccess()
     {
         var client = new AcaDynamicSessionsClient(
