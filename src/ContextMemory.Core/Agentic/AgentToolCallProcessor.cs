@@ -57,9 +57,12 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
                 out var duplicateFeedback))
         {
             var afterSuccess = AgenticDuplicateToolCallGuard.FeedbackIndicatesDuplicateAfterSuccess(duplicateFeedback);
+            var afterFailure = AgenticDuplicateToolCallGuard.FeedbackIndicatesDuplicateAfterFailure(duplicateFeedback);
             var summary = afterSuccess
                 ? AgenticDuplicateToolCallGuard.DuplicateAfterSuccessSummary
-                : AgenticDuplicateToolCallGuard.DuplicateRejectedSummary;
+                : afterFailure
+                    ? AgenticDuplicateToolCallGuard.DuplicateAfterFailureSummary
+                    : AgenticDuplicateToolCallGuard.DuplicateRejectedSummary;
             var rejected = new ToolExecutionResult
             {
                 Output = duplicateFeedback,

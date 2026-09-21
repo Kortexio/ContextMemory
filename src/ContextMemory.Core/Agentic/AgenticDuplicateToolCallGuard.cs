@@ -45,6 +45,9 @@ public static class AgenticDuplicateToolCallGuard
     /// <summary>Generic duplicate rejection summary (empty wiki query, wiki identical, etc.).</summary>
     public const string DuplicateRejectedSummary = "Duplicate tool call rejected";
 
+    /// <summary>Identical failed tool call rejected after its bounded retry allowance.</summary>
+    public const string DuplicateAfterFailureSummary = "Duplicate after failure rejected";
+
     /// <summary>
     /// True when feedback from <see cref="TryReject"/> means the identical call already succeeded.
     /// </summary>
@@ -54,6 +57,14 @@ public static class AgenticDuplicateToolCallGuard
             return false;
         return feedback.Contains("already succeeded", StringComparison.OrdinalIgnoreCase)
                || feedback.Contains("já teve sucesso", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool FeedbackIndicatesDuplicateAfterFailure(string? feedback)
+    {
+        if (string.IsNullOrWhiteSpace(feedback))
+            return false;
+        return feedback.Contains("already failed", StringComparison.OrdinalIgnoreCase)
+               || feedback.Contains("já falhou", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool TryReject(
@@ -113,6 +124,14 @@ public static class AgenticDuplicateToolCallGuard
         if (SessionDiscoveryTools.IsDiscoveryTool(name)
             && sameSignature.Count > 0
             && sameSignature.All(s => !s.Success))
+        {
+            feedback = BuildFeedback(toolName, runtimeConfig, afterFailure: true);
+            return true;
+        }
+
+        // Real MCP/sandbox/HTTP failures may be transient, so allow one identical retry.
+        // A third identical execution is almost certainly a model loop and must be cut.
+        if (sameSignature.Count >= 2 && sameSignature.All(s => !s.Success))
         {
             feedback = BuildFeedback(toolName, runtimeConfig, afterFailure: true);
             return true;
@@ -317,7 +336,7 @@ public static class AgenticDuplicateToolCallGuard
     /// A deterministic discovery call failed and the model immediately repeated the exact call.
     /// If some evidence already succeeded this turn, stop tooling and answer from that evidence.
     /// </summary>
-    public static bool ShouldForceAnswerAfterRepeatedDiscoveryFailure(
+    public static bool ShouldForceAnswerAfterRepeatedToolFailure(
         IReadOnlyList<AgentExecutionStep> steps)
     {
         if (steps.Count == 0)
@@ -325,15 +344,13 @@ public static class AgenticDuplicateToolCallGuard
 
         var last = steps[^1];
         return !last.Success
-               && SessionDiscoveryTools.IsDiscoveryTool(last.ToolName)
-               && string.Equals(last.Summary, DuplicateRejectedSummary, StringComparison.Ordinal)
-               && steps.Take(steps.Count - 1).Any(s => s.Success);
+               && string.Equals(last.Summary, DuplicateAfterFailureSummary, StringComparison.Ordinal);
     }
 
     public static bool ShouldForceAnswer(IReadOnlyList<AgentExecutionStep> steps) =>
         ShouldForceAnswerAfterWikiBudget(steps)
         || ShouldForceAnswerAfterDuplicateSuccess(steps)
-        || ShouldForceAnswerAfterRepeatedDiscoveryFailure(steps);
+        || ShouldForceAnswerAfterRepeatedToolFailure(steps);
 
     /// <summary>
     /// After tools were stripped for force-answer, accept a non-empty model reply when successful
@@ -401,6 +418,29 @@ public static class AgenticDuplicateToolCallGuard
             : combined[..maxTotalChars] + "…";
     }
 
+    /// <summary>
+    /// Honest terminal response when tooling has been disabled after repeated real failures and
+    /// no successful evidence exists. Avoids burning text-only iterations against evidence guards.
+    /// </summary>
+    public static string BuildFailureFallbackAnswer(
+        AppRuntimeConfig runtimeConfig,
+        IReadOnlyList<AgentExecutionStep> steps)
+    {
+        var lastRealFailure = steps.LastOrDefault(s =>
+            !s.Success
+            && !IsHarnessPolicyRejection(s)
+            && !string.IsNullOrWhiteSpace(s.Output));
+        var detail = lastRealFailure is null
+            ? string.Empty
+            : " " + TruncateForFallback(lastRealFailure.Output.Trim(), 1000);
+
+        return TenantLocale.Select(
+                   runtimeConfig.DefaultLanguage,
+                   "I could not obtain the requested data after repeated attempts. Last error:",
+                   "Não foi possível obter os dados pedidos após tentativas repetidas. Último erro:")
+               + detail;
+    }
+
     private static string TruncateForFallback(string text, int maxChars) =>
         text.Length <= maxChars ? text : text[..maxChars] + "…";
 
@@ -458,7 +498,8 @@ public static class AgenticDuplicateToolCallGuard
             return false;
 
         if (string.Equals(step.Summary, DuplicateAfterSuccessSummary, StringComparison.Ordinal)
-            || string.Equals(step.Summary, DuplicateRejectedSummary, StringComparison.Ordinal))
+            || string.Equals(step.Summary, DuplicateRejectedSummary, StringComparison.Ordinal)
+            || string.Equals(step.Summary, DuplicateAfterFailureSummary, StringComparison.Ordinal))
             return true;
 
         return IsWikiBudgetRejection(step) || IsDuplicateAfterSuccessRejection(step);
@@ -488,15 +529,17 @@ public static class AgenticDuplicateToolCallGuard
                 + antiMeta;
         }
 
-        if (ShouldForceAnswerAfterRepeatedDiscoveryFailure(steps))
+        if (ShouldForceAnswerAfterRepeatedToolFailure(steps))
         {
             return TenantLocale.Select(
                 runtimeConfig.DefaultLanguage,
-                "STOP. The same internal discovery read failed and was blocked. "
-                + "Answer the user's original question NOW from evidence already gathered. "
+                "STOP. The same tool call failed repeatedly and was blocked. "
+                + "Answer the user's original question NOW from evidence already gathered, "
+                + "or explain honestly that the requested data could not be obtained. "
                 + "Do NOT emit tool_calls or JSON tool invocations.",
-                "PARA. A mesma leitura interna de descoberta falhou e foi bloqueada. "
-                + "Responde AGORA à pergunta original do utilizador com a evidência já recolhida. "
+                "PARA. A mesma chamada de tool falhou repetidamente e foi bloqueada. "
+                + "Responde AGORA à pergunta original com a evidência já recolhida "
+                + "ou explica honestamente que não foi possível obter os dados pedidos. "
                 + "NÃO emitas tool_calls nem invocações JSON de tools.")
                 + antiMeta;
         }

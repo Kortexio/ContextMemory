@@ -88,6 +88,27 @@ public sealed class SessionDiscoveryToolExecutorTests
         Assert.Contains("Invalid JSON", result.Output, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task TodoWrite_MissingTodos_FailsInsteadOfSilentlyClearingList()
+    {
+        var executor = new SessionDiscoveryToolExecutor(
+            new StubArtifactStore(),
+            new StubSessionStore(),
+            new StubMcpCatalog());
+
+        var result = await executor.ExecuteAsync(
+            new OllamaToolCall(new OllamaFunctionCall(
+                SessionDiscoveryTools.TodoWrite,
+                "{}")),
+            "app",
+            "user",
+            "session",
+            new AppRuntimeConfig { AppId = "app" });
+
+        Assert.False(result.Success);
+        Assert.Contains("todos array", result.Output, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class StubArtifactStore : ISessionArtifactStore
     {
         private readonly Dictionary<string, string> _items = new(StringComparer.Ordinal);

@@ -188,9 +188,13 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
 
         if (string.Equals(name, SessionDiscoveryTools.TodoWrite, StringComparison.OrdinalIgnoreCase))
         {
-            var json = root.TryGetProperty("todos", out var todosEl)
-                ? todosEl.GetRawText()
-                : "[]";
+            if (!AgenticToolArguments.TryGetProperty(root, "todos", out var todosEl)
+                || todosEl.ValueKind != JsonValueKind.Array)
+            {
+                return Fail("todo_write requires a todos array.");
+            }
+
+            var json = todosEl.GetRawText();
             await _artifacts
                 .WriteAsync(appId, userId, sessionId, TodosArtifactId, json, cancellationToken)
                 .ConfigureAwait(false);

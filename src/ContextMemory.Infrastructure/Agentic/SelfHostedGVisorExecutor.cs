@@ -177,14 +177,13 @@ public sealed class SelfHostedGVisorExecutor : IToolExecutor
         try
         {
             using var doc = JsonDocument.Parse(argumentsJson);
-            if (doc.RootElement.TryGetProperty(propertyName, out var value))
-                return value.GetString() ?? string.Empty;
+            return AgenticToolArguments.GetString(doc.RootElement, propertyName) ?? string.Empty;
         }
         catch (JsonException)
         {
-            return argumentsJson.Trim();
+            // Never execute malformed JSON as raw shell/code text. Tool arguments are an
+            // untrusted model boundary; malformed payloads must fail closed.
+            return string.Empty;
         }
-
-        return string.Empty;
     }
 }

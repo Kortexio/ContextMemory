@@ -289,6 +289,27 @@ public sealed class AgenticDuplicateToolCallGuardTests
     }
 
     [Fact]
+    public void Rejects_ThirdIdenticalFailedNonWikiToolCall()
+    {
+        var args = """{"objectType":"Subscription","filter":"bad"}""";
+        var steps = new List<AgentExecutionStep>
+        {
+            Failed("zuora__query_objects", args, "invalid filter"),
+            Failed("zuora__query_objects", args, "invalid filter")
+        };
+
+        var rejected = AgenticDuplicateToolCallGuard.TryReject(
+            "zuora__query_objects",
+            args,
+            steps,
+            Config(withMcp: true),
+            out var feedback);
+
+        Assert.True(rejected);
+        Assert.True(AgenticDuplicateToolCallGuard.FeedbackIndicatesDuplicateAfterFailure(feedback));
+    }
+
+    [Fact]
     public void Rejects_IdenticalFailedDiscoveryCall()
     {
         var steps = new List<AgentExecutionStep>
@@ -342,14 +363,14 @@ public sealed class AgenticDuplicateToolCallGuardTests
                 ExitCode = 1,
                 Success = false,
                 Duration = TimeSpan.Zero,
-                Summary = AgenticDuplicateToolCallGuard.DuplicateRejectedSummary
+                Summary = AgenticDuplicateToolCallGuard.DuplicateAfterFailureSummary
             }
         };
 
-        Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterRepeatedDiscoveryFailure(steps));
+        Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterRepeatedToolFailure(steps));
         Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswer(steps));
         Assert.Contains(
-            "leitura interna",
+            "falhou repetidamente",
             AgenticDuplicateToolCallGuard.BuildForceAnswerNudge(Config(), steps),
             StringComparison.OrdinalIgnoreCase);
     }
@@ -534,6 +555,32 @@ public sealed class AgenticDuplicateToolCallGuardTests
     }
 
     [Fact]
+    public void BuildFailureFallbackAnswer_ReportsLastRealFailureWithoutHarnessMeta()
+    {
+        var steps = new List<AgentExecutionStep>
+        {
+            Failed("zuora__query_objects", "{}", "Invalid filter syntax."),
+            new()
+            {
+                Iteration = 3,
+                ToolName = "zuora__query_objects",
+                Arguments = "{}",
+                Output = "Rejected: identical call already failed.",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero,
+                Summary = AgenticDuplicateToolCallGuard.DuplicateAfterFailureSummary
+            }
+        };
+
+        var fallback = AgenticDuplicateToolCallGuard.BuildFailureFallbackAnswer(Config(), steps);
+
+        Assert.Contains("Não foi possível", fallback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Invalid filter syntax", fallback, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("identical", fallback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Signature_NormalizesWhitespaceAndCase()
     {
         var a = AgenticDuplicateToolCallGuard.BuildSignature(
@@ -568,6 +615,18 @@ public sealed class AgenticDuplicateToolCallGuardTests
             Output = output,
             ExitCode = 0,
             Success = true,
+            Duration = TimeSpan.FromMilliseconds(5)
+        };
+
+    private static AgentExecutionStep Failed(string tool, string args, string output) =>
+        new()
+        {
+            Iteration = 1,
+            ToolName = tool,
+            Arguments = args,
+            Output = output,
+            ExitCode = 1,
+            Success = false,
             Duration = TimeSpan.FromMilliseconds(5)
         };
 

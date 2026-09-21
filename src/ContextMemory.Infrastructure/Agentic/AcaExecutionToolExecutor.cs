@@ -205,14 +205,12 @@ public sealed class AcaExecutionToolExecutor : IToolExecutor
         try
         {
             using var doc = JsonDocument.Parse(argumentsJson);
-            if (doc.RootElement.TryGetProperty(propertyName, out var value))
-                return value.GetString() ?? string.Empty;
+            return AgenticToolArguments.GetString(doc.RootElement, propertyName) ?? string.Empty;
         }
         catch (JsonException)
         {
-            return argumentsJson.Trim();
+            // Fail closed: malformed model JSON must never become executable shell/code text.
+            return string.Empty;
         }
-
-        return string.Empty;
     }
 }

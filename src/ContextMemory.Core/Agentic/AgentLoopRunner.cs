@@ -654,9 +654,9 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 return success;
             }
 
-            // Force-answer + evidence: finish without HITL. Prefer a usable model reply;
-            // otherwise surface the gathered tool outputs (never budget/duplicate meta-speak).
-            if (forceAnswerOnly && steps.Any(s => s.Success))
+            // Force-answer: finish without HITL. Prefer a usable model reply backed by evidence;
+            // otherwise surface gathered evidence or an honest terminal tool-failure response.
+            if (forceAnswerOnly)
             {
                 string? forcedText = null;
                 if (AgenticDuplicateToolCallGuard.ShouldAcceptForceAnswerDespiteValidation(
@@ -671,6 +671,9 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 else
                 {
                     forcedText = AgenticDuplicateToolCallGuard.TryBuildEvidenceFallbackAnswer(
+                        request.RuntimeConfig,
+                        steps);
+                    forcedText ??= AgenticDuplicateToolCallGuard.BuildFailureFallbackAnswer(
                         request.RuntimeConfig,
                         steps);
                     if (forcedText is not null)
