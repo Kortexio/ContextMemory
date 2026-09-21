@@ -119,36 +119,11 @@ public sealed class AgenticDuplicateToolCallGuardTests
         var config = Config(withMcp: true);
         var steps = new List<AgentExecutionStep>
         {
-            new()
-            {
-                Iteration = 1,
-                ToolName = "wiki_search",
-                Arguments = "{}",
-                Output = "rejected empty",
-                ExitCode = 1,
-                Success = false,
-                Duration = TimeSpan.Zero
-            },
-            new()
-            {
-                Iteration = 2,
-                ToolName = "wiki_search",
-                Arguments = """{"query":"paccar"}""",
-                Output = "Found 5 match(es)",
-                ExitCode = 0,
-                Success = true,
-                Duration = TimeSpan.FromMilliseconds(2)
-            },
-            new()
-            {
-                Iteration = 3,
-                ToolName = "wiki_grep",
-                Arguments = """{"pattern":"ITD"}""",
-                Output = "Found 3 match(es)",
-                ExitCode = 0,
-                Success = true,
-                Duration = TimeSpan.FromMilliseconds(2)
-            }
+            Successful("wiki_search", """{"query":"q1"}"""),
+            Successful("wiki_search", """{"query":"q2"}"""),
+            Successful("wiki_grep", """{"pattern":"p1"}"""),
+            Successful("wiki_search", """{"query":"q3"}"""),
+            Successful("wiki_grep", """{"pattern":"p2"}""")
         };
 
         var rejected = AgenticDuplicateToolCallGuard.TryReject(
@@ -165,46 +140,60 @@ public sealed class AgenticDuplicateToolCallGuardTests
     }
 
     [Fact]
+    public void Allows_FifthDistinctWikiCall_WithinBudget()
+    {
+        var config = Config();
+        var steps = new List<AgentExecutionStep>
+        {
+            Successful("wiki_search", """{"query":"q1"}"""),
+            Successful("wiki_search", """{"query":"q2"}"""),
+            Successful("wiki_grep", """{"pattern":"p1"}"""),
+            Successful("wiki_search", """{"query":"q3"}""")
+        };
+
+        Assert.False(AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_grep",
+            """{"pattern":"p2"}""",
+            steps,
+            config,
+            out _));
+    }
+
+    [Fact]
+    public void Rejects_IdenticalWikiQuery_EvenWhenBudgetRemains()
+    {
+        var config = Config();
+        var steps = new List<AgentExecutionStep>
+        {
+            Successful("wiki_search", """{"query":"paccar ITD"}"""),
+            Successful("wiki_search", """{"query":"other"}""")
+        };
+
+        Assert.True(AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_search",
+            """{"query":"paccar ITD"}""",
+            steps,
+            config,
+            out var feedback));
+        Assert.Contains("já teve sucesso", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Rejects_WikiAfterBudgetExhausted_WithoutEvidence_SuggestsMcp()
     {
         var config = Config(withMcp: true);
         var steps = new List<AgentExecutionStep>
         {
-            new()
-            {
-                Iteration = 1,
-                ToolName = "wiki_search",
-                Arguments = """{"query":"a"}""",
-                Output = "no hits",
-                ExitCode = 0,
-                Success = false,
-                Duration = TimeSpan.FromMilliseconds(2)
-            },
-            new()
-            {
-                Iteration = 2,
-                ToolName = "wiki_grep",
-                Arguments = """{"pattern":"a"}""",
-                Output = "no hits",
-                ExitCode = 0,
-                Success = false,
-                Duration = TimeSpan.FromMilliseconds(2)
-            },
-            new()
-            {
-                Iteration = 3,
-                ToolName = "wiki_search",
-                Arguments = """{"query":"different"}""",
-                Output = "no hits",
-                ExitCode = 0,
-                Success = false,
-                Duration = TimeSpan.FromMilliseconds(2)
-            }
+            Failed("wiki_search", """{"query":"a"}""", "no hits"),
+            Failed("wiki_grep", """{"pattern":"a"}""", "no hits"),
+            Failed("wiki_search", """{"query":"b"}""", "no hits"),
+            Failed("wiki_grep", """{"pattern":"b"}""", "no hits"),
+            Failed("wiki_search", """{"query":"c"}""", "no hits")
         };
 
         var rejected = AgenticDuplicateToolCallGuard.TryReject(
             "wiki_search",
-            """{"query":"b"}""",
+            """{"query":"d"}""",
             steps,
             config,
             out var feedback);
