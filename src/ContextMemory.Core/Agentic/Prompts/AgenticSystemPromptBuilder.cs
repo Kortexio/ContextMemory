@@ -119,8 +119,6 @@ public static class AgenticSystemPromptBuilder
 
         var alwaysOn = runtimeConfig.ResolvedPolicy.ActiveSkills
             .Where(s => AgenticSkillActivation.IsAlwaysOn(s.Activation) && s.IsDefaultEnabled)
-            .Where(s => runtimeConfig.GlobalWikiEnabled
-                        || !string.Equals(s.Id, "wiki-first-for-docs", StringComparison.OrdinalIgnoreCase))
             .OrderBy(s => s.SortOrder)
             .ToList();
         if (alwaysOn.Count > 0)

@@ -79,18 +79,6 @@ public sealed class AdminApiClient
         return result ?? [];
     }
 
-    public async Task<IReadOnlyList<McpCatalogToolAdminDto>> GetMcpCatalogToolsAsync(
-        string appId,
-        string? integrationName = null,
-        CancellationToken cancellationToken = default)
-    {
-        var path = string.IsNullOrWhiteSpace(integrationName)
-            ? $"/admin/apps/{Uri.EscapeDataString(appId)}/mcp/catalog"
-            : $"/admin/apps/{Uri.EscapeDataString(appId)}/mcp/catalog?integration={Uri.EscapeDataString(integrationName)}";
-        var result = await GetAsync<List<McpCatalogToolAdminDto>>(path, cancellationToken).ConfigureAwait(false);
-        return result ?? [];
-    }
-
     public async Task<IReadOnlyList<McpCatalogSyncAdminDto>> RebuildMcpCatalogAsync(
         string appId,
         string? integrationName = null,

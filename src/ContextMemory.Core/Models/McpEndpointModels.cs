@@ -69,22 +69,6 @@ public sealed class McpCatalogSyncRequest
     public string? IntegrationName { get; init; }
 }
 
-/// <summary>Admin picker row from the raw persisted MCP catalog (unfiltered).</summary>
-public sealed class McpCatalogToolAdminDto
-{
-    [JsonPropertyName("integrationName")]
-    public string IntegrationName { get; init; } = string.Empty;
-
-    [JsonPropertyName("toolName")]
-    public string ToolName { get; init; } = string.Empty;
-
-    [JsonPropertyName("qualifiedName")]
-    public string QualifiedName { get; init; } = string.Empty;
-
-    [JsonPropertyName("description")]
-    public string Description { get; init; } = string.Empty;
-}
-
 public sealed class McpServerInfo
 {
     [JsonPropertyName("name")]

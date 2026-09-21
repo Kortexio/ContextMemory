@@ -19,7 +19,6 @@ public interface IAgentToolCallProcessor
         List<OllamaMessage> messages,
         Action<AgenticProgressEvent>? report,
         bool skipConfirmation,
-        IReadOnlyList<OllamaTool>? turnCatalog = null,
         CancellationToken cancellationToken = default);
 }
 

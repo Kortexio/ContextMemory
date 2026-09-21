@@ -104,32 +104,15 @@ public static partial class AgenticLiveDataEvidenceGuardrail
         if (HasEvidenceAttempt(steps) && LooksLikeHonestUnknown(finalAnswer))
             return false;
 
-        feedback = BuildRejectionFeedback(runtimeConfig);
-        return true;
-    }
-
-    private static string BuildRejectionFeedback(AppRuntimeConfig runtimeConfig)
-    {
-        if (runtimeConfig.GlobalWikiEnabled)
-        {
-            return TenantLocale.Select(
-                runtimeConfig.DefaultLanguage,
-                "Rejected: live-data/wiki question without successful MCP/wiki evidence. "
-                + "Emit tool_calls now — prefer wiki_search/wiki_grep for tickets/docs, or MCP query_objects for Zuora. "
-                + "Do not invent IDs or statuses. Example: {\"tool\":\"wiki_search\",\"arguments\":{\"query\":\"PAC-759\"}}",
-                "Rejeitado: pergunta live/wiki sem evidência MCP/wiki bem-sucedida. "
-                + "Emite tool_calls agora — prefere wiki_search/wiki_grep para tickets/docs, ou MCP query_objects para Zuora. "
-                + "Não inventes IDs nem estados. Exemplo: {\"tool\":\"wiki_search\",\"arguments\":{\"query\":\"PAC-759\"}}");
-        }
-
-        return TenantLocale.Select(
+        feedback = TenantLocale.Select(
             runtimeConfig.DefaultLanguage,
-            "Rejected: live-data question without successful MCP evidence. "
-            + "Emit tool_calls now — prefer MCP query_objects / ask_zuora / get_account_summary. "
-            + "Do not invent IDs or statuses. Example: {\"tool\":\"server__query_objects\",\"arguments\":{\"query\":\"SELECT Id FROM Account LIMIT 1\"}}",
-            "Rejeitado: pergunta live sem evidência MCP bem-sucedida. "
-            + "Emite tool_calls agora — prefere MCP query_objects / ask_zuora / get_account_summary. "
-            + "Não inventes IDs nem estados. Exemplo: {\"tool\":\"server__query_objects\",\"arguments\":{\"query\":\"SELECT Id FROM Account LIMIT 1\"}}");
+            "Rejected: live-data/wiki question without successful MCP/wiki evidence. "
+            + "Emit tool_calls now — prefer wiki_search/wiki_grep for tickets/docs, or MCP query_objects for Zuora. "
+            + "Do not invent IDs or statuses. Example: {\"tool\":\"wiki_search\",\"arguments\":{\"query\":\"PAC-759\"}}",
+            "Rejeitado: pergunta live/wiki sem evidência MCP/wiki bem-sucedida. "
+            + "Emite tool_calls agora — prefere wiki_search/wiki_grep para tickets/docs, ou MCP query_objects para Zuora. "
+            + "Não inventes IDs nem estados. Exemplo: {\"tool\":\"wiki_search\",\"arguments\":{\"query\":\"PAC-759\"}}");
+        return true;
     }
 
     public static bool IsLiveDataQuestion(string? userObjective, AppRuntimeConfig runtimeConfig)
