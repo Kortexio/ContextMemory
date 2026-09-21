@@ -598,12 +598,12 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                 }
 
                 if (!forceAnswerOnly
-                    && AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterWikiBudget(steps))
+                    && AgenticDuplicateToolCallGuard.ShouldForceAnswer(steps))
                 {
                     forceAnswerOnly = true;
                     requireToolChoice = false;
                     _logger.LogWarning(
-                        "Forcing answer-only iteration for {AppId} after repeated wiki budget rejections",
+                        "Forcing answer-only iteration for {AppId} after wiki-budget or duplicate-after-success rejections",
                         request.AppId);
                     messages.Add(new OllamaMessage
                     {

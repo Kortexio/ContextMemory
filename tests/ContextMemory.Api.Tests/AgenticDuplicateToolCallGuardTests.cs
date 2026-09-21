@@ -289,7 +289,7 @@ public sealed class AgenticDuplicateToolCallGuardTests
     }
 
     [Fact]
-    public void WithMcp_FeedbackPivotsToMcpJson()
+    public void IdenticalSuccessfulCall_FeedbackForcesAnswerNotMoreTools()
     {
         var config = Config(withMcp: true);
         var steps = new List<AgentExecutionStep>
@@ -305,9 +305,60 @@ public sealed class AgenticDuplicateToolCallGuardTests
             out var feedback);
 
         Assert.True(rejected);
-        Assert.Contains("{\"tool\"", feedback, StringComparison.Ordinal);
-        Assert.Contains("ask_zuora", feedback, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("query_objects", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.True(AgenticDuplicateToolCallGuard.FeedbackIndicatesDuplicateAfterSuccess(feedback));
+        Assert.Contains("Responde AGORA", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ask_zuora", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ShouldForceAnswerAfterDuplicateSuccess_OnFirstRejection()
+    {
+        var args = """{"objectType":"subscription","filter":["status.EQ:Cancelled"],"pageSize":5}""";
+        var steps = new List<AgentExecutionStep>
+        {
+            Successful("zuora-dev__query_objects", args),
+            new()
+            {
+                Iteration = 2,
+                ToolName = "zuora-dev__query_objects",
+                Arguments = args,
+                Output =
+                    "Rejected: identical `zuora-dev__query_objects` already succeeded — do NOT repeat the same arguments. "
+                    + "Answer the user NOW from the tool result already gathered.",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero,
+                Summary = AgenticDuplicateToolCallGuard.DuplicateAfterSuccessSummary
+            }
+        };
+
+        Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterDuplicateSuccess(steps));
+        Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswer(steps));
+        var nudge = AgenticDuplicateToolCallGuard.BuildForceAnswerNudge(Config(withMcp: true), steps);
+        Assert.Contains("já teve sucesso", nudge, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Rejects_IdenticalSuccessfulMcpQueryObjects()
+    {
+        var config = Config(withMcp: true);
+        var args = """{"objectType":"subscription","filter":["status.EQ:Cancelled"],"pageSize":5}""";
+        var steps = new List<AgentExecutionStep>
+        {
+            Successful("zuora-dev__query_objects", args)
+        };
+
+        var rejected = AgenticDuplicateToolCallGuard.TryReject(
+            "zuora-dev__query_objects",
+            args,
+            steps,
+            config,
+            out var feedback);
+
+        Assert.True(rejected);
+        Assert.True(AgenticDuplicateToolCallGuard.FeedbackIndicatesDuplicateAfterSuccess(feedback));
+        Assert.Contains("já teve sucesso", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Responde AGORA", feedback, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
