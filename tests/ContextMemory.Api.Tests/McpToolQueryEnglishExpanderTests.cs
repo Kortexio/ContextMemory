@@ -1,4 +1,4 @@
-using ContextMemory.Core.Agentic;
+﻿using ContextMemory.Core.Agentic;
 using ContextMemory.Core.Agentic.Mcp;
 using ContextMemory.Core.Models;
 using ContextMemory.Infrastructure.Agentic.Mcp;
@@ -8,11 +8,29 @@ namespace ContextMemory.Api.Tests;
 
 public sealed class McpToolQueryEnglishExpanderTests
 {
+    private static readonly Dictionary<string, string> TestLexicon = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["subscrição"] = "subscription",
+        ["subscricao"] = "subscription",
+        ["criação de subscrição"] = "subscription creation create",
+        ["criacao de subscricao"] = "subscription creation create",
+        ["regras de criação"] = "creation rules",
+        ["regras de criacao"] = "creation rules",
+        ["criação"] = "create creation",
+        ["criacao"] = "create creation",
+        ["criar"] = "create",
+        ["regras"] = "rules",
+        ["paccar"] = "paccar",
+        ["account"] = "account",
+        ["invoice"] = "invoice"
+    };
+
     [Fact]
     public void Expand_PortugueseSubscriptionQuery_AddsEnglishTokens()
     {
-        var expanded = McpToolQueryEnglishExpander.Expand(
-            "quais as regras de criação de uma subscrição na paccar?");
+        var expanded = McpArgumentShaping.ExpandQuery(
+            "quais as regras de criação de uma subscrição na paccar?",
+            TestLexicon);
 
         Assert.Contains("subscrição", expanded, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("subscription", expanded, StringComparison.OrdinalIgnoreCase);
@@ -22,13 +40,11 @@ public sealed class McpToolQueryEnglishExpanderTests
     }
 
     [Fact]
-    public void Expand_EnglishQuery_UnchangedWhenNoMapHits()
+    public void Expand_EmptyLexicon_ReturnsOriginal()
     {
-        var q = "list open invoices for account A-001";
-        // "account" and "invoice" are already English; map still appends synonyms for matching keys
-        var expanded = McpToolQueryEnglishExpander.Expand(q);
-        Assert.Contains("account", expanded, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("invoice", expanded, StringComparison.OrdinalIgnoreCase);
+        var q = "quais as regras de criação de uma subscrição";
+        var expanded = McpArgumentShaping.ExpandQuery(q, null);
+        Assert.Equal(q, expanded);
     }
 
     [Fact]
@@ -40,47 +56,21 @@ public sealed class McpToolQueryEnglishExpanderTests
             AppId = "demo",
             Agentic = new AgenticConfig
             {
-                Tools = new AgenticToolsConfig { MaxMcpToolsPerTurn = 5 }
+                Tools = new AgenticToolsConfig
+                {
+                    MaxMcpToolsPerTurn = 5,
+                    QueryLexicon = TestLexicon
+                }
             }
         };
         var tools = new[]
         {
-            new McpToolDefinition
-            {
-                ServerName = "zuora-developer-mcp-PACCAR-ACCP",
-                Name = "manage_analytics",
-                Description = "Analytics dashboards"
-            },
-            new McpToolDefinition
-            {
-                ServerName = "zuora-developer-mcp-PACCAR-ACCP",
-                Name = "create_subscriptions",
-                Description = "Enhanced subscription creation tool"
-            },
-            new McpToolDefinition
-            {
-                ServerName = "zuora-developer-mcp-PACCAR-ACCP",
-                Name = "ask_zuora",
-                Description = "Expert on Zuora product suite including subscriptions"
-            },
-            new McpToolDefinition
-            {
-                ServerName = "zuora-developer-mcp-PACCAR-ACCP",
-                Name = "query_objects",
-                Description = "Query any Zuora object including subscription"
-            },
-            new McpToolDefinition
-            {
-                ServerName = "zuora-developer-mcp-PACCAR-ACCP",
-                Name = "manage_journal_runs",
-                Description = "Journal runs"
-            },
-            new McpToolDefinition
-            {
-                ServerName = "other",
-                Name = "unrelated_tool",
-                Description = "Something else entirely"
-            }
+            new McpToolDefinition { ServerName = "zuora", Name = "manage_analytics", Description = "Analytics dashboards" },
+            new McpToolDefinition { ServerName = "zuora", Name = "create_subscriptions", Description = "Enhanced subscription creation tool" },
+            new McpToolDefinition { ServerName = "zuora", Name = "ask_zuora", Description = "Expert on Zuora including subscriptions" },
+            new McpToolDefinition { ServerName = "zuora", Name = "query_objects", Description = "Query any Zuora object including subscription" },
+            new McpToolDefinition { ServerName = "zuora", Name = "manage_journal_runs", Description = "Journal runs" },
+            new McpToolDefinition { ServerName = "other", Name = "unrelated_tool", Description = "Something else entirely" }
         };
 
         var selected = selector.SelectTools(

@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -26,15 +25,22 @@ public static class AgenticDuplicateToolCallGuard
     };
 
     /// <summary>
-    /// Max wiki_search/wiki_grep attempts (success or fail) before forcing a pivot.
+    /// Max wiki_search/wiki_grep attempts (success or real fail) before forcing a pivot.
+    /// Empty-query and budget-rejection steps do not consume this budget.
     /// Five permits search → refine → grep while remaining bounded; identical queries stay blocked.
     /// </summary>
     public const int MaxWikiAttemptsPerTurn = 5;
 
     /// <summary>
-    /// After this many consecutive wiki-budget rejections, strip tools and force a final answer.
+    /// When wiki evidence already exists: after this many consecutive budget rejections, force answer.
     /// </summary>
     public const int MaxWikiBudgetRejectionsBeforeForceAnswer = 1;
+
+    /// <summary>
+    /// When wiki found nothing useful: allow this many budget rejections so the model can pivot to MCP
+    /// before tools are stripped. One was killing agentic turns that still needed MCP.
+    /// </summary>
+    public const int MaxWikiBudgetRejectionsWithoutEvidenceBeforeForceAnswer = 3;
 
     /// <summary>
     /// After this many rejections of an identical tool+args that already succeeded, force a final answer
@@ -58,16 +64,14 @@ public static class AgenticDuplicateToolCallGuard
     {
         if (string.IsNullOrWhiteSpace(feedback))
             return false;
-        return feedback.Contains("already succeeded", StringComparison.OrdinalIgnoreCase)
-               || feedback.Contains("já teve sucesso", StringComparison.OrdinalIgnoreCase);
+        return feedback.Contains("already succeeded", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool FeedbackIndicatesDuplicateAfterFailure(string? feedback)
     {
         if (string.IsNullOrWhiteSpace(feedback))
             return false;
-        return feedback.Contains("already failed", StringComparison.OrdinalIgnoreCase)
-               || feedback.Contains("já falhou", StringComparison.OrdinalIgnoreCase);
+        return feedback.Contains("already failed", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool TryReject(
@@ -84,7 +88,7 @@ public static class AgenticDuplicateToolCallGuard
         var name = NormalizeToolName(toolName);
         if (QueryFocusedTools.Contains(name))
         {
-            var wikiAttempts = steps.Count(s => QueryFocusedTools.Contains(NormalizeToolName(s.ToolName)));
+            var wikiAttempts = steps.Count(IsRealWikiAttempt);
             if (wikiAttempts >= MaxWikiAttemptsPerTurn)
             {
                 feedback = BuildWikiBudgetFeedback(steps, runtimeConfig);
@@ -301,9 +305,9 @@ public static class AgenticDuplicateToolCallGuard
     }
 
     /// <summary>
-    /// True when the model keeps hitting the wiki budget (with or without prior wiki evidence).
-    /// Caller should strip tools and force a text answer — otherwise weak models burn all iterations
-    /// on repeated budget rejections (even when feedback asked for MCP).
+    /// True when the model keeps hitting the wiki budget.
+    /// With prior wiki evidence → force answer quickly.
+    /// Without evidence → wait longer so MCP/other tools can still run (budget nudge already asks for MCP).
     /// </summary>
     public static bool ShouldForceAnswerAfterWikiBudget(IReadOnlyList<AgentExecutionStep> steps)
     {
@@ -315,8 +319,35 @@ public static class AgenticDuplicateToolCallGuard
             trailing++;
         }
 
-        return trailing >= MaxWikiBudgetRejectionsBeforeForceAnswer;
+        if (trailing == 0)
+            return false;
+
+        var threshold = HasSuccessfulWikiEvidence(steps)
+            ? MaxWikiBudgetRejectionsBeforeForceAnswer
+            : MaxWikiBudgetRejectionsWithoutEvidenceBeforeForceAnswer;
+
+        return trailing >= threshold;
     }
+
+    /// <summary>
+    /// Counts toward the per-turn wiki budget: executed wiki calls with a real query.
+    /// Empty-query and budget-rejection harness steps do not burn the budget.
+    /// </summary>
+    private static bool IsRealWikiAttempt(AgentExecutionStep step)
+    {
+        if (!QueryFocusedTools.Contains(NormalizeToolName(step.ToolName)))
+            return false;
+        if (IsWikiBudgetRejection(step))
+            return false;
+        if (IsEmptyQueryRejection(step))
+            return false;
+        return true;
+    }
+
+    private static bool IsEmptyQueryRejection(AgentExecutionStep step) =>
+        !step.Success
+        && !string.IsNullOrWhiteSpace(step.Output)
+        && step.Output.Contains("needs a non-empty", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// True when an identical tool+args that already succeeded was rejected again.
@@ -389,8 +420,26 @@ public static class AgenticDuplicateToolCallGuard
     public static bool IsUsableForceAnswer(string? finalAnswer) =>
         !string.IsNullOrWhiteSpace(finalAnswer)
         && !IsGuardrailMechanicsEcho(finalAnswer)
-        && !AgenticToolIntentNarrationGuardrail.ContainsToolName(finalAnswer)
+        && !ContainsPlatformToolName(finalAnswer)
         && !AgenticDuplicateSentenceGuardrail.ContainsDuplicateContent(finalAnswer);
+
+    /// <summary>
+    /// Platform tool identifiers (not Admin policy) — keep force-answers free of harness tool leaks.
+    /// </summary>
+    private static bool ContainsPlatformToolName(string finalAnswer)
+    {
+        string[] names =
+        [
+            AgenticToolRegistry.WikiSearchToolName,
+            AgenticToolRegistry.WikiGrepToolName,
+            AgenticToolRegistry.PythonExecuteToolName,
+            AgenticToolRegistry.ShellExecuteToolName,
+            AgenticToolRegistry.NodeExecuteToolName,
+            "tool_calls",
+            "tool_call"
+        ];
+        return AgenticToolIntentNarrationGuardrail.ContainsToolName(finalAnswer, names);
+    }
 
     /// <summary>
     /// Last-resort user-visible reply from successful tool outputs when the model only
@@ -411,10 +460,7 @@ public static class AgenticDuplicateToolCallGuard
         if (chunks.Count == 0)
             return null;
 
-        var intro = TenantLocale.Select(
-            runtimeConfig.DefaultLanguage,
-            "Here is what was found:",
-            "Segue o que foi encontrado:");
+        var intro = "Here is what was found:";
 
         var combined = intro + "\n\n" + string.Join("\n\n---\n\n", chunks);
         return combined.Length <= maxTotalChars
@@ -430,6 +476,7 @@ public static class AgenticDuplicateToolCallGuard
         AppRuntimeConfig runtimeConfig,
         IReadOnlyList<AgentExecutionStep> steps)
     {
+        _ = runtimeConfig;
         var lastRealFailure = steps.LastOrDefault(s =>
             !s.Success
             && !IsHarnessPolicyRejection(s)
@@ -438,11 +485,7 @@ public static class AgenticDuplicateToolCallGuard
             ? string.Empty
             : " " + TruncateForFallback(lastRealFailure.Output.Trim(), 1000);
 
-        return TenantLocale.Select(
-                   runtimeConfig.DefaultLanguage,
-                   "I could not obtain the requested data after repeated attempts. Last error:",
-                   "Não foi possível obter os dados pedidos após tentativas repetidas. Último erro:")
-               + detail;
+        return "I could not obtain the requested data after repeated attempts. Last error:" + detail;
     }
 
     private static string TruncateForFallback(string text, int maxChars) =>
@@ -452,30 +495,16 @@ public static class AgenticDuplicateToolCallGuard
     [
         "budget exhausted",
         "wiki budget",
-        "orçamento wiki",
-        "orçamento de chamadas",
-        "limite de orçamento",
-        "mesmo parâmetro",
-        "mesmos arguments",
-        "mesmos argumentos",
         "same parameter",
         "same arguments",
-        "não chamar a mesma",
         "do not call the same",
-        "não repitas",
         "do not repeat",
-        "rejeitada pelo sistema",
-        "rejeitado pelo sistema",
         "rejected by the system",
-        "como corrigir",
         "how to fix",
         "how to correct",
-        "consecutivamente",
         "consecutively",
-        "ferramenta foi chamada mais",
         "tool was called more",
         "identical tool call",
-        "chamada idêntica",
         "duplicate tool",
         "tool call already succeeded"
     ];
@@ -511,63 +540,41 @@ public static class AgenticDuplicateToolCallGuard
 
     public static string BuildForceAnswerNudge(AppRuntimeConfig runtimeConfig, IReadOnlyList<AgentExecutionStep> steps)
     {
-        var antiMeta = TenantLocale.Select(
-            runtimeConfig.DefaultLanguage,
+        _ = runtimeConfig;
+        const string antiMeta =
             " CRITICAL: Answer ONLY the user's original question with facts from tool results. "
             + "Do NOT explain budgets, duplicate calls, rejections, or how to call tools. "
-            + "Do NOT name tools (wiki_search, wiki_grep, …).",
-            " CRÍTICO: Responde APENAS à pergunta original do utilizador com factos dos resultados das tools. "
-            + "NÃO expliques orçamentos, chamadas duplicadas, rejeições, nem como chamar tools. "
-            + "NÃO nomes tools (wiki_search, wiki_grep, …).");
+            + "Do NOT name tools (wiki_search, wiki_grep, …). "
+            + "Write the user-facing answer in the user's language.";
 
         if (ShouldForceAnswerAfterDuplicateSuccess(steps))
         {
-            return TenantLocale.Select(
-                runtimeConfig.DefaultLanguage,
-                "STOP. That exact tool call already succeeded earlier this turn. "
-                + "Answer the user NOW from the tool result already gathered. "
-                + "Do NOT emit tool_calls or JSON tool invocations.",
-                "PARA. Essa chamada exacta de tool já teve sucesso neste turno. "
-                + "Responde AGORA ao utilizador com o resultado da tool já obtido. "
-                + "NÃO emitas tool_calls nem invocações JSON de tools.")
-                + antiMeta;
+            return "STOP. That exact tool call already succeeded earlier this turn. "
+                   + "Answer the user NOW from the tool result already gathered. "
+                   + "Do NOT emit tool_calls or JSON tool invocations."
+                   + antiMeta;
         }
 
         if (ShouldForceAnswerAfterRepeatedToolFailure(steps))
         {
-            return TenantLocale.Select(
-                runtimeConfig.DefaultLanguage,
-                "STOP. The same tool call failed repeatedly and was blocked. "
-                + "Answer the user's original question NOW from evidence already gathered, "
-                + "or explain honestly that the requested data could not be obtained. "
-                + "Do NOT emit tool_calls or JSON tool invocations.",
-                "PARA. A mesma chamada de tool falhou repetidamente e foi bloqueada. "
-                + "Responde AGORA à pergunta original com a evidência já recolhida "
-                + "ou explica honestamente que não foi possível obter os dados pedidos. "
-                + "NÃO emitas tool_calls nem invocações JSON de tools.")
-                + antiMeta;
+            return "STOP. The same tool call failed repeatedly and was blocked. "
+                   + "Answer the user's original question NOW from evidence already gathered, "
+                   + "or explain honestly that the requested data could not be obtained. "
+                   + "Do NOT emit tool_calls or JSON tool invocations."
+                   + antiMeta;
         }
 
         if (HasSuccessfulWikiEvidence(steps))
         {
-            return TenantLocale.Select(
-                runtimeConfig.DefaultLanguage,
-                "STOP. Wiki budget is exhausted and evidence was already gathered. "
-                + "Answer the user NOW in plain text. Do NOT emit tool_calls or JSON tool invocations.",
-                "PARA. O orçamento wiki esgotou-se e já há evidência recolhida. "
-                + "Responde AGORA ao utilizador em texto. NÃO emitas tool_calls nem invocações JSON de tools.")
-                + antiMeta;
+            return "STOP. Wiki budget is exhausted and evidence was already gathered. "
+                   + "Answer the user NOW in plain text. Do NOT emit tool_calls or JSON tool invocations."
+                   + antiMeta;
         }
 
-        return TenantLocale.Select(
-            runtimeConfig.DefaultLanguage,
-            "STOP. Wiki budget is exhausted and further wiki calls are blocked. "
-            + "Answer the user NOW honestly from what you have (or say you could not get live data). "
-            + "Do NOT emit tool_calls or JSON tool invocations.",
-            "PARA. O orçamento wiki esgotou-se e novas chamadas wiki estão bloqueadas. "
-            + "Responde AGORA com honestidade com o que tens (ou diz que não obtiveste dados vivos). "
-            + "NÃO emitas tool_calls nem invocações JSON de tools.")
-            + antiMeta;
+        return "STOP. Wiki budget is exhausted and further wiki calls are blocked. "
+               + "Answer the user NOW honestly from what you have (or say you could not get live data). "
+               + "Do NOT emit tool_calls or JSON tool invocations."
+               + antiMeta;
     }
 
     public static bool IsWikiBudgetRejection(AgentExecutionStep step)
@@ -578,9 +585,7 @@ public static class AgenticDuplicateToolCallGuard
             return false;
 
         var output = step.Output ?? string.Empty;
-        return output.Contains("budget exhausted", StringComparison.OrdinalIgnoreCase)
-               || output.Contains("orçamento", StringComparison.OrdinalIgnoreCase)
-               || output.Contains("esgotado", StringComparison.OrdinalIgnoreCase);
+        return output.Contains("budget exhausted", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool HasSuccessfulWikiEvidence(IReadOnlyList<AgentExecutionStep> steps) =>
@@ -590,78 +595,47 @@ public static class AgenticDuplicateToolCallGuard
         IReadOnlyList<AgentExecutionStep> steps,
         AppRuntimeConfig runtimeConfig)
     {
-        var lang = runtimeConfig.DefaultLanguage;
-
         // When wiki already succeeded, pushing MCP makes weak models loop on more tools
         // instead of answering from the evidence they already have.
         if (HasSuccessfulWikiEvidence(steps))
         {
-            return TenantLocale.Select(
-                lang,
-                "Rejected: wiki_search/wiki_grep budget exhausted this turn. "
-                + "Do NOT call any tool. Answer the user NOW from the wiki evidence already gathered. "
-                + "No tool_calls, no JSON tool invocations.",
-                "Rejeitado: orçamento wiki_search/wiki_grep esgotado neste turno. "
-                + "NÃO chames nenhuma tool. Responde AGORA ao utilizador com a evidência wiki já recolhida. "
-                + "Sem tool_calls, sem invocações JSON de tools.");
+            return "Rejected: wiki_search/wiki_grep budget exhausted this turn. "
+                   + "Do NOT call any tool. Answer the user NOW from the wiki evidence already gathered. "
+                   + "No tool_calls, no JSON tool invocations.";
         }
 
-        var hasMcp = HasConfiguredMcp(runtimeConfig);
-        if (hasMcp)
+        if (HasConfiguredMcp(runtimeConfig))
         {
-            return TenantLocale.Select(
-                lang,
-                "Rejected: wiki_search/wiki_grep budget exhausted this turn. "
-                + "Do NOT call wiki again. Call a configured MCP tool now as ONLY JSON "
-                + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
-                + "(e.g. …__ask_zuora, …__query_objects).",
-                "Rejeitado: orçamento wiki_search/wiki_grep esgotado neste turno. "
-                + "NÃO chames wiki outra vez. Chama agora uma tool MCP como APENAS JSON "
-                + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
-                + "(ex. …__ask_zuora, …__query_objects).");
+            return "Rejected: wiki_search/wiki_grep budget exhausted this turn. "
+                   + "Do NOT call wiki again. Call a configured MCP tool now as ONLY JSON "
+                   + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
+                   + "(use exact names from the tool catalog; tool_describe if unsure).";
         }
 
-        return TenantLocale.Select(
-            lang,
-            "Rejected: wiki_search/wiki_grep budget exhausted this turn. "
-            + "Answer from evidence already gathered or change approach — do not call wiki again.",
-            "Rejeitado: orçamento wiki_search/wiki_grep esgotado neste turno. "
-            + "Responde com a evidência já recolhida ou muda de abordagem — não chames wiki outra vez.");
+        return "Rejected: wiki_search/wiki_grep budget exhausted this turn. "
+               + "Answer from evidence already gathered or change approach — do not call wiki again.";
     }
 
     private static string BuildEmptyQueryFeedback(string toolName, AppRuntimeConfig runtimeConfig)
     {
-        var lang = runtimeConfig.DefaultLanguage;
         var hasMcp = HasConfiguredMcp(runtimeConfig);
         var field = string.Equals(toolName, "wiki_grep", StringComparison.Ordinal) ? "pattern" : "query";
 
         if (hasMcp)
         {
-            return TenantLocale.Select(
-                lang,
-                $"Rejected: `{toolName}` needs a non-empty \"{field}\". "
-                + $"Retry as ONLY JSON {{\"tool\":\"{toolName}\",\"arguments\":{{\"{field}\":\"concrete keywords\"}}}} "
-                + "OR call a configured MCP tool now "
-                + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
-                + "(e.g. …__ask_zuora, …__query_objects).",
-                $"Rejeitado: `{toolName}` precisa de \"{field}\" não vazio. "
-                + $"Repete como APENAS JSON {{\"tool\":\"{toolName}\",\"arguments\":{{\"{field}\":\"palavras concretas\"}}}} "
-                + "OU chama agora uma tool MCP "
-                + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
-                + "(ex. …__ask_zuora, …__query_objects).");
+            return $"Rejected: `{toolName}` needs a non-empty \"{field}\". "
+                   + $"Retry as ONLY JSON {{\"tool\":\"{toolName}\",\"arguments\":{{\"{field}\":\"concrete keywords\"}}}} "
+                   + "OR call a configured MCP tool now "
+                   + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
+                   + "(use exact names from the tool catalog).";
         }
 
-        return TenantLocale.Select(
-            lang,
-            $"Rejected: `{toolName}` needs a non-empty \"{field}\". "
-            + $"Retry as ONLY JSON {{\"tool\":\"{toolName}\",\"arguments\":{{\"{field}\":\"concrete keywords\"}}}}.",
-            $"Rejeitado: `{toolName}` precisa de \"{field}\" não vazio. "
-            + $"Repete como APENAS JSON {{\"tool\":\"{toolName}\",\"arguments\":{{\"{field}\":\"palavras concretas\"}}}}.");
+        return $"Rejected: `{toolName}` needs a non-empty \"{field}\". "
+               + $"Retry as ONLY JSON {{\"tool\":\"{toolName}\",\"arguments\":{{\"{field}\":\"concrete keywords\"}}}}.";
     }
 
     private static string BuildFeedback(string toolName, AppRuntimeConfig runtimeConfig, bool afterFailure)
     {
-        var lang = runtimeConfig.DefaultLanguage;
         var isWiki = QueryFocusedTools.Contains(NormalizeToolName(toolName));
 
         // Identical call that already succeeded: stop tooling and answer from that result.
@@ -669,71 +643,41 @@ public static class AgenticDuplicateToolCallGuard
         {
             if (isWiki)
             {
-                return TenantLocale.Select(
-                    lang,
-                    "Rejected: identical wiki_search already succeeded — do NOT repeat the same query. "
-                    + "Answer the user NOW from the wiki result already gathered. "
-                    + "No tool_calls, no JSON tool invocations.",
-                    "Rejeitado: wiki_search idêntica já teve sucesso — NÃO repitas a mesma query. "
-                    + "Responde AGORA ao utilizador com o resultado wiki já obtido. "
-                    + "Sem tool_calls, sem invocações JSON de tools.");
+                return "Rejected: identical wiki_search already succeeded — do NOT repeat the same query. "
+                       + "Answer the user NOW from the wiki result already gathered. "
+                       + "No tool_calls, no JSON tool invocations.";
             }
 
-            return TenantLocale.Select(
-                lang,
-                $"Rejected: identical `{toolName}` already succeeded — do NOT repeat the same arguments. "
-                + "Answer the user NOW from the tool result already gathered. "
-                + "No tool_calls, no JSON tool invocations.",
-                $"Rejeitado: `{toolName}` idêntica já teve sucesso — NÃO repitas os mesmos arguments. "
-                + "Responde AGORA ao utilizador com o resultado da tool já obtido. "
-                + "Sem tool_calls, sem invocações JSON de tools.");
+            return $"Rejected: identical `{toolName}` already succeeded — do NOT repeat the same arguments. "
+                   + "Answer the user NOW from the tool result already gathered. "
+                   + "No tool_calls, no JSON tool invocations.";
         }
 
         var hasMcp = HasConfiguredMcp(runtimeConfig);
-        var prior = TenantLocale.Select(lang, "already failed", "já falhou");
 
         if (hasMcp && isWiki)
         {
-            return TenantLocale.Select(
-                lang,
-                $"Rejected: identical wiki_search {prior} — do NOT repeat the same query. "
-                + "Either change the query substantially OR call a configured MCP tool now as ONLY JSON "
-                + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
-                + "(e.g. …__ask_zuora, …__query_objects; tool_describe if the schema is unclear).",
-                $"Rejeitado: wiki_search idêntica {prior} — NÃO repitas a mesma query. "
-                + "Ou muda a query de forma substancial OU chama agora uma tool MCP configurada como APENAS JSON "
-                + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
-                + "(ex. …__ask_zuora, …__query_objects; tool_describe se o schema for unclear).");
+            return "Rejected: identical wiki_search already failed — do NOT repeat the same query. "
+                   + "Either change the query substantially OR call a configured MCP tool now as ONLY JSON "
+                   + "{\"tool\":\"server__tool\",\"arguments\":{...}} "
+                   + "(use exact names from the tool catalog; tool_describe if the schema is unclear).";
         }
 
         if (hasMcp)
         {
-            return TenantLocale.Select(
-                lang,
-                $"Rejected: identical `{toolName}` {prior} — do NOT repeat the same arguments. "
-                + "Try different arguments or another MCP/catalog tool as ONLY JSON "
-                + "{\"tool\":\"name\",\"arguments\":{...}}.",
-                $"Rejeitado: `{toolName}` idêntica {prior} — NÃO repitas os mesmos arguments. "
-                + "Tenta arguments diferentes ou outra tool MCP/catálogo como APENAS JSON "
-                + "{\"tool\":\"nome\",\"arguments\":{...}}.");
+            return $"Rejected: identical `{toolName}` already failed — do NOT repeat the same arguments. "
+                   + "Try different arguments or another MCP/catalog tool as ONLY JSON "
+                   + "{\"tool\":\"name\",\"arguments\":{...}}.";
         }
 
         if (isWiki)
         {
-            return TenantLocale.Select(
-                lang,
-                $"Rejected: identical wiki_search {prior} — do NOT repeat. "
-                + "Change the query substantially or answer from the evidence you already have.",
-                $"Rejeitado: wiki_search idêntica {prior} — NÃO repitas. "
-                + "Muda a query de forma substancial ou responde com a evidência que já tens.");
+            return "Rejected: identical wiki_search already failed — do NOT repeat. "
+                   + "Change the query substantially or answer from the evidence you already have.";
         }
 
-        return TenantLocale.Select(
-            lang,
-            $"Rejected: identical `{toolName}` {prior} — do NOT repeat the same arguments. "
-            + "Change arguments or answer from existing evidence.",
-            $"Rejeitado: `{toolName}` idêntica {prior} — NÃO repitas os mesmos arguments. "
-            + "Muda os arguments ou responde com a evidência existente.");
+        return $"Rejected: identical `{toolName}` already failed — do NOT repeat the same arguments. "
+               + "Change arguments or answer from existing evidence.";
     }
 
     private static bool HasConfiguredMcp(AppRuntimeConfig runtimeConfig) =>

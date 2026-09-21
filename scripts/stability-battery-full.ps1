@@ -1,20 +1,36 @@
-# Live stability battery via curl.exe (avoids PowerShell IWR NonInteractive issues).
+# Live stability battery via curl.exe.
+# Modes:
+#   Distinct    — each query gets a fresh X-Session-Id (default)
+#   SameSession — all queries share one X-Session-Id (multi-turn)
+# Usage:
+#   .\stability-battery-full.ps1 -Mode Distinct -Rounds 2 -RequireAllStable
+#   .\stability-battery-full.ps1 -Mode SameSession -Rounds 2 -RequireAllStable
+param(
+  [ValidateSet("Distinct", "SameSession")]
+  [string]$Mode = "Distinct",
+  [int]$Rounds = 1,
+  [switch]$RequireAllStable,
+  [string]$CasesPath = "",
+  [string]$OutPrefix = "cm-stability-battery"
+)
+
 $ErrorActionPreference = "Continue"
 $base = "http://localhost:5100/v1/chat/completions"
 $apiKey = "cm_live_951dc02ed20314e85cb7df74"
 $appId = "companybrain-prod-034429"
 $userId = "e2e-stability-full"
-$timeoutSec = 300
-$casesPath = Join-Path $PSScriptRoot "stability-battery-cases.json"
-$cases = Get-Content $casesPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$timeoutSec = 420
+if (-not $CasesPath) { $CasesPath = Join-Path $PSScriptRoot "stability-battery-cases.json" }
+$cases = Get-Content $CasesPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $work = Join-Path $env:TEMP "cm-battery-work"
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 
-function Invoke-Case($item) {
-  $session = "full-" + $item.id + "-" + [guid]::NewGuid().ToString("N").Substring(0, 8)
-  $reqFile = Join-Path $work ($item.id + "-req.json")
-  $resFile = Join-Path $work ($item.id + "-res.json")
-  $metaFile = Join-Path $work ($item.id + "-meta.txt")
+function Invoke-Case($item, $session, $round) {
+  $safeId = ($item.id -replace "[^a-zA-Z0-9_-]", "_")
+  $tag = "{0}-r{1}-{2}" -f $Mode.ToLower(), $round, $safeId
+  $reqFile = Join-Path $work ($tag + "-req.json")
+  $resFile = Join-Path $work ($tag + "-res.json")
+  $metaFile = Join-Path $work ($tag + "-meta.txt")
 
   $payload = @{
     model = "bonsai-27b"
@@ -25,10 +41,13 @@ function Invoke-Case($item) {
 
   Write-Host ""
   Write-Host ("=" * 72)
-  Write-Host ("[{0}] {1}" -f $item.cat, $item.id)
+  Write-Host ("[R{0}/{1}][{2}] {3}" -f $round, $Mode, $item.cat, $item.id)
+  Write-Host ("Session: {0}" -f $session)
   Write-Host ("Q: {0}" -f $item.q)
 
   $row = [ordered]@{
+    Round = $round
+    Mode = $Mode
     Id = $item.id
     Cat = $item.cat
     Session = $session
@@ -49,19 +68,27 @@ function Invoke-Case($item) {
   }
 
   $sw = [Diagnostics.Stopwatch]::StartNew()
-  $curlArgs = @(
-    "-sS", "-X", "POST", $base,
-    "-H", "Authorization: Bearer $apiKey",
-    "-H", "X-App-Id: $appId",
-    "-H", "X-User-Id: $userId",
-    "-H", "X-Session-Id: $session",
-    "-H", "Content-Type: application/json",
-    "--data-binary", "@$reqFile",
-    "-o", $resFile,
-    "-w", "%{http_code}",
-    "--max-time", "$timeoutSec"
-  )
-  $httpCode = & curl.exe @curlArgs 2>$metaFile
+  $httpCode = $null
+  for ($attempt = 1; $attempt -le 4; $attempt++) {
+    $curlArgs = @(
+      "-sS", "-X", "POST", $base,
+      "-H", "Authorization: Bearer $apiKey",
+      "-H", "X-App-Id: $appId",
+      "-H", "X-User-Id: $userId",
+      "-H", "X-Session-Id: $session",
+      "-H", "Content-Type: application/json",
+      "--data-binary", "@$reqFile",
+      "-o", $resFile,
+      "-w", "%{http_code}",
+      "--max-time", "$timeoutSec"
+    )
+    $httpCode = & curl.exe @curlArgs 2>$metaFile
+    if (($httpCode -as [int]) -eq 429 -or ($httpCode -as [int]) -eq 503) {
+      Start-Sleep -Seconds (5 * $attempt)
+      continue
+    }
+    break
+  }
   $sw.Stop()
   $row.Ms = [int]$sw.ElapsedMilliseconds
 
@@ -127,32 +154,68 @@ function Invoke-Case($item) {
   return [pscustomobject]$row
 }
 
-$results = @()
-foreach ($c in $cases) {
-  $results += Invoke-Case $c
+$allResults = @()
+$failedRounds = @()
+
+for ($r = 1; $r -le $Rounds; $r++) {
+  Write-Host ""
+  Write-Host ("#" * 72)
+  Write-Host ("ROUND {0}/{1} MODE={2} cases={3}" -f $r, $Rounds, $Mode, $cases.Count)
+  Write-Host ("#" * 72)
+
+  $sharedSession = "same-" + [guid]::NewGuid().ToString("N").Substring(0, 12)
+  $roundResults = @()
+
+  foreach ($c in $cases) {
+    $session = if ($Mode -eq "SameSession") {
+      $sharedSession
+    } else {
+      "full-" + $c.id + "-" + [guid]::NewGuid().ToString("N").Substring(0, 8)
+    }
+    $roundResults += Invoke-Case $c $session $r
+    Start-Sleep -Seconds 3
+  }
+
+  $allResults += $roundResults
+
+  $okN = @($roundResults | Where-Object Ok).Count
+  $stableN = @($roundResults | Where-Object Stable).Count
+  $total = $roundResults.Count
+  Write-Host ""
+  Write-Host ("ROUND {0} SUMMARY ({1}): ok={2}/{3} stable={4}/{3}" -f $r, $Mode, $okN, $total, $stableN)
+  $roundResults | Group-Object Cat | ForEach-Object {
+    $s = @($_.Group | Where-Object Stable).Count
+    $o = @($_.Group | Where-Object Ok).Count
+    Write-Host ("  {0,-12} ok={1}/{2} stable={3}/{2}" -f $_.Name, $o, $_.Count, $s)
+  }
+
+  if ($RequireAllStable -and ($stableN -ne $total -or $okN -ne $total)) {
+    $failedRounds += $r
+  }
 }
 
 Write-Host ""
 Write-Host ("#" * 72)
-Write-Host "SUMMARY BY CATEGORY"
-$results | Group-Object Cat | ForEach-Object {
-  $stable = @($_.Group | Where-Object Stable).Count
-  $ok = @($_.Group | Where-Object Ok).Count
-  $avg = ($_.Group | Measure-Object Ms -Average).Average
-  Write-Host ("  {0,-12} ok={1}/{2} stable={3}/{2} avgMs={4:N0}" -f $_.Name, $ok, $_.Count, $stable, $avg)
-}
+Write-Host "GRAND SUMMARY"
+$allResults | Format-Table Round, Mode, Id, Cat, Ok, Stable, Status, Ms, Steps, BudgetRej, Tools -AutoSize
 
-Write-Host ""
-$results | Format-Table Id, Cat, Ok, Stable, Status, Ms, Steps, BudgetRej, Awaiting, Tools -AutoSize
+$stableAll = @($allResults | Where-Object Stable).Count
+$okAll = @($allResults | Where-Object Ok).Count
+Write-Host ("TOTAL: ok={0}/{1} stable={2}/{1} mode={3} rounds={4}" -f $okAll, $allResults.Count, $stableAll, $Mode, $Rounds)
 
-$stableN = @($results | Where-Object Stable).Count
-$okN = @($results | Where-Object Ok).Count
-$loopSuspect = @($results | Where-Object { $_.BudgetRej -gt 3 -or $_.Steps -ge 20 -or $_.Awaiting }).Count
-Write-Host ("TOTAL: ok={0}/{1} stable={2}/{1} loopSuspect={3}" -f $okN, $results.Count, $stableN, $loopSuspect)
-
-$out = Join-Path $env:TEMP "cm-stability-full-battery.json"
-$results | ConvertTo-Json -Depth 5 | Set-Content -Path $out -Encoding utf8
+$out = Join-Path $env:TEMP ("{0}-{1}.json" -f $OutPrefix, $Mode.ToLower())
+$allResults | ConvertTo-Json -Depth 5 | Set-Content -Path $out -Encoding utf8
 Write-Host "Wrote $out"
 
-if ($loopSuspect -gt 2 -or $okN -lt [Math]::Ceiling($results.Count * 0.6)) { exit 2 }
+if ($RequireAllStable) {
+  if ($failedRounds.Count -gt 0 -or $stableAll -ne $allResults.Count) {
+    Write-Host ("REQUIRE 100% STABLE FAILED - bad rounds: {0}" -f ($failedRounds -join ","))
+    exit 1
+  }
+  Write-Host "REQUIRE 100% STABLE: PASS"
+  exit 0
+}
+
+$loopSuspect = @($allResults | Where-Object { $_.BudgetRej -gt 3 -or $_.Steps -ge 20 -or $_.Awaiting }).Count
+if ($loopSuspect -gt 2 -or $okAll -lt [Math]::Ceiling($allResults.Count * 0.6)) { exit 2 }
 exit 0

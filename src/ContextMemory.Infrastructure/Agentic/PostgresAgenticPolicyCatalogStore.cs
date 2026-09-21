@@ -66,13 +66,22 @@ public sealed class PostgresAgenticPolicyCatalogStore : IAgenticPolicyCatalogSto
                 addedGuardrails++;
             }
 
-            if (addedSkills > 0 || addedGuardrails > 0)
+            // Domain-specific guardrail must live in app catalog only — prune leftover system seed.
+            var staleLiveData = await db.AgenticGuardrailCatalog
+                .Where(g => g.IsSystem && g.Id == "live-data-evidence-required")
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (staleLiveData.Count > 0)
+                db.AgenticGuardrailCatalog.RemoveRange(staleLiveData);
+
+            if (addedSkills > 0 || addedGuardrails > 0 || staleLiveData.Count > 0)
             {
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 _logger.LogInformation(
-                    "Seeded agentic catalog deltas: {SkillCount} skills, {GuardrailCount} guardrails",
+                    "Seeded agentic catalog deltas: {SkillCount} skills, {GuardrailCount} guardrails, pruned {PrunedCount}",
                     addedSkills,
-                    addedGuardrails);
+                    addedGuardrails,
+                    staleLiveData.Count);
             }
 
             _seeded = true;

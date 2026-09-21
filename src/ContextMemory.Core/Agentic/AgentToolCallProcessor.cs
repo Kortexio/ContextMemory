@@ -142,7 +142,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
                 Messages = messages.ToList()
             };
 
-            await AgenticConfirmationCheckpoint
+            await AgenticConfirmation
                 .WritePendingAsync(_sessionStore, appId, userId, sessionId, pending, cancellationToken)
                 .ConfigureAwait(false);
             await _pendingStore
@@ -154,7 +154,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
                 Phase = AgenticProgressPhase.AwaitingConfirmation,
                 Iteration = iteration,
                 ToolName = toolCall.Function.Name,
-                Detail = AgenticConfirmationParser.BuildConfirmationPrompt(pending)
+                Detail = AgenticConfirmation.BuildPrompt(pending)
             });
 
             return new AgentToolCallOutcome
@@ -179,7 +179,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
                     Messages = messages.ToList()
                 };
 
-                await AgenticConfirmationCheckpoint
+                await AgenticConfirmation
                     .WritePendingAsync(_sessionStore, appId, userId, sessionId, pending, cancellationToken)
                     .ConfigureAwait(false);
                 await _pendingStore
@@ -191,7 +191,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
                     Phase = AgenticProgressPhase.AwaitingConfirmation,
                     Iteration = iteration,
                     ToolName = toolCall.Function.Name,
-                    Detail = AgenticConfirmationParser.BuildConfirmationPrompt(pending)
+                    Detail = AgenticConfirmation.BuildPrompt(pending)
                 });
 
                 return new AgentToolCallOutcome
@@ -218,7 +218,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
                     Messages = messages.ToList()
                 };
 
-                await AgenticConfirmationCheckpoint
+                await AgenticConfirmation
                     .WritePendingAsync(_sessionStore, appId, userId, sessionId, pending, cancellationToken)
                     .ConfigureAwait(false);
                 await _pendingStore
@@ -230,7 +230,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
                     Phase = AgenticProgressPhase.AwaitingConfirmation,
                     Iteration = iteration,
                     ToolName = toolCall.Function.Name,
-                    Detail = AgenticConfirmationParser.BuildConfirmationPrompt(pending)
+                    Detail = AgenticConfirmation.BuildPrompt(pending)
                 });
 
                 return new AgentToolCallOutcome
@@ -285,7 +285,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
                 Messages = messages.ToList()
             };
 
-            await AgenticConfirmationCheckpoint
+            await AgenticConfirmation
                 .WritePendingAsync(_sessionStore, appId, userId, sessionId, pending, cancellationToken)
                 .ConfigureAwait(false);
             await _pendingStore
@@ -297,7 +297,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
                 Phase = AgenticProgressPhase.AwaitingConfirmation,
                 Iteration = iteration,
                 ToolName = toolCall.Function.Name,
-                Detail = AgenticConfirmationParser.BuildConfirmationPrompt(pending)
+                Detail = AgenticConfirmation.BuildPrompt(pending)
             });
 
             return new AgentToolCallOutcome
@@ -489,7 +489,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
 
     private static AgentResult BuildAwaitingConfirmationResult(AgenticPendingState pending) =>
         AgentResult.AwaitingHumanConfirmation(
-            AgenticConfirmationParser.BuildConfirmationPrompt(pending),
+            AgenticConfirmation.BuildPrompt(pending),
             pending.PendingId,
             pending.Steps,
             pending.Iteration,

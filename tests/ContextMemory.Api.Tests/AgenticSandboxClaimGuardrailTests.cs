@@ -29,15 +29,19 @@ public sealed class AgenticSandboxClaimGuardrailTests
         }
     };
 
+    private static string SandboxConfigJson() =>
+        AgenticCatalogSeed.Guardrails.First(g => g.Id == "sandbox-claim-reject").ConfigJson;
+
     [Fact]
     public void Rejects_AcaIsolationClaim_WhenSelfHosted()
     {
         var answer =
-            "O ambiente python_execute no Azure Container Apps é isolado (sandbox) — ele não tem acesso à rede externa.";
+            "The python_execute environment in a managed cloud container session is an isolated sandbox — it has no access to the network.";
 
         var hit = AgenticSandboxClaimGuardrail.TryGetRejectionFeedback(
             answer,
             [],
+            SandboxConfigJson(),
             SelfHostedConfig(),
             out var feedback);
 
@@ -50,11 +54,12 @@ public sealed class AgenticSandboxClaimGuardrailTests
     public void Rejects_HypotheticalFailureWithoutToolSteps()
     {
         var answer =
-            "O que aconteceria se eu tentasse executá-lo agora: o python_execute falharia por DNS/timeout.";
+            "What would happen if I tried to run it now: python_execute would fail with DNS/timeout.";
 
         var hit = AgenticSandboxClaimGuardrail.TryGetRejectionFeedback(
             answer,
             [],
+            SandboxConfigJson(),
             SelfHostedConfig(),
             out _);
 
@@ -65,12 +70,12 @@ public sealed class AgenticSandboxClaimGuardrailTests
     public void Allows_Answer_WhenNoFalseClaim()
     {
         var hit = AgenticSandboxClaimGuardrail.TryGetRejectionFeedback(
-            "Aqui está o resultado da consulta Zuora: 3 contas encontradas.",
+            "Here is the billing query result: 3 accounts found.",
             [
                 new AgentExecutionStep
                 {
                     Iteration = 1,
-                    ToolName = "zuora__ask_zuora",
+                    ToolName = "billing__query_objects",
                     Success = true,
                     ExitCode = 0,
                     Output = "ok",
@@ -78,6 +83,7 @@ public sealed class AgenticSandboxClaimGuardrailTests
                     Duration = TimeSpan.FromMilliseconds(10)
                 }
             ],
+            SandboxConfigJson(),
             SelfHostedConfig(),
             out _);
 
@@ -87,7 +93,7 @@ public sealed class AgenticSandboxClaimGuardrailTests
     [Fact]
     public void Allows_Describing_Real_Network_Failure_From_Tool()
     {
-        var answer = "O python_execute falhou: Temporary failure in name resolution ao aceder à rede externa.";
+        var answer = "python_execute failed: Temporary failure in name resolution when reaching the external network.";
         var hit = AgenticSandboxClaimGuardrail.TryGetRejectionFeedback(
             answer,
             [
@@ -102,6 +108,7 @@ public sealed class AgenticSandboxClaimGuardrailTests
                     Duration = TimeSpan.FromMilliseconds(10)
                 }
             ],
+            SandboxConfigJson(),
             SelfHostedConfig(),
             out _);
 
@@ -112,6 +119,7 @@ public sealed class AgenticSandboxClaimGuardrailTests
     public async Task DeterministicValidator_RejectsFabricatedAcaClaim()
     {
         var validator = new DeterministicAgentValidator();
+        var sandboxGuardrail = AgenticCatalogSeed.Guardrails.First(g => g.Id == "sandbox-claim-reject");
         var config = SelfHostedConfig() with
         {
             ResolvedPolicy = new ResolvedAgenticPolicy
@@ -120,27 +128,18 @@ public sealed class AgenticSandboxClaimGuardrailTests
                 {
                     AgenticGuardrailKinds.SandboxClaim
                 },
-                ActiveGuardrails =
-                [
-                    new AgenticGuardrailDefinition
-                    {
-                        Id = "sandbox-claim-reject",
-                        Name = "Reject fabricated sandbox limits",
-                        Kind = AgenticGuardrailKinds.SandboxClaim,
-                        ConfigJson = "{}"
-                    }
-                ]
+                ActiveGuardrails = [sandboxGuardrail]
             }
         };
         var result = await validator.ValidateAsync(new AgentValidationRequest
         {
             FinalAnswer =
-                "O python_execute no Azure Container Apps não tem acesso à rede externa, por isso não posso chamar a API.",
+                "python_execute in a managed cloud container session has no access to the network, so I cannot call the API.",
             Steps = [],
             RuntimeConfig = config
         });
 
         Assert.False(result.IsValid);
-        Assert.Contains("NÃO", result.FeedbackForModel, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("invented false sandbox", result.FeedbackForModel, StringComparison.OrdinalIgnoreCase);
     }
 }

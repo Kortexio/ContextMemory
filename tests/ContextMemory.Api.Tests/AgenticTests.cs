@@ -591,15 +591,15 @@ public sealed class McpJsonRpcClientTests
     }
 
     [Fact]
-    public void McpStdioPathNormalizer_RewritesWindowsZuoraPaths()
+    public void McpStdioPathNormalizer_RewritesWindowsNodeModulesPaths()
     {
         var (command, args, _) = ContextMemory.Infrastructure.Agentic.Mcp.McpStdioPathNormalizer.NormalizeForLinuxContainer(
             @"C:\Program Files\nodejs\node.exe",
-            [@"C:\Users\vitor\.cursor\zuora-mcp-runtime\node_modules\zuora-mcp\dist\index.cjs"],
+            [@"C:\Users\vitor\.cursor\billing-mcp-runtime\node_modules\billing-mcp\dist\index.cjs"],
             null);
 
         Assert.Equal("node", command);
-        Assert.Equal("/opt/mcps/zuora-mcp/dist/index.cjs", args[0]);
+        Assert.Equal("/opt/mcps/billing-mcp/dist/index.cjs", args[0]);
     }
 
     [Fact]

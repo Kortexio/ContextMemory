@@ -68,6 +68,9 @@ public sealed class FileAgenticPolicyCatalogStore : IAgenticPolicyCatalogStore
             else
             {
                 var guardrails = await ReadGuardrailsAsync(cancellationToken).ConfigureAwait(false);
+                var removed = guardrails.RemoveAll(g =>
+                    g.IsSystem
+                    && string.Equals(g.Id, "live-data-evidence-required", StringComparison.OrdinalIgnoreCase));
                 var ids = new HashSet<string>(guardrails.Select(g => g.Id), StringComparer.OrdinalIgnoreCase);
                 var added = 0;
                 foreach (var g in AgenticCatalogSeed.Guardrails)
@@ -78,10 +81,13 @@ public sealed class FileAgenticPolicyCatalogStore : IAgenticPolicyCatalogStore
                     added++;
                 }
 
-                if (added > 0)
+                if (added > 0 || removed > 0)
                 {
                     await WriteGuardrailsAsync(guardrails, cancellationToken).ConfigureAwait(false);
-                    _logger.LogInformation("Seeded {Count} new file agentic guardrails", added);
+                    _logger.LogInformation(
+                        "Seeded {Added} new / pruned {Removed} file agentic guardrails",
+                        added,
+                        removed);
                 }
             }
         }

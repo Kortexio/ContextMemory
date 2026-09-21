@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -43,11 +42,7 @@ public static partial class AgenticPriceQuoteGuardrail
                     continue;
                 }
 
-                feedback = AgenticGuardrailConfigReader.GetFeedback(configJson, runtimeConfig.DefaultLanguage)
-                    ?? TenantLocale.Select(
-                        runtimeConfig.DefaultLanguage,
-                        "Rejected: price quote without tool evidence.",
-                        "Rejeitado: preço sem evidência de tools.");
+                feedback = AgenticGuardrailConfigReader.ResolveFeedback(configJson, runtimeConfig.DefaultLanguage);
                 return true;
             }
         }

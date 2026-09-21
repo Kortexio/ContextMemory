@@ -212,11 +212,35 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
 
             OllamaResponse response;
             var skipProsePromotion = false;
+            using var llmCts = CreateLoopBudgetCts(loopSw, loopTimeout, cancellationToken);
             try
             {
-                response = await ChatWithTransientRetryAsync(adapter, llmRequest, request.AppId, cancellationToken)
+                response = await ChatWithTransientRetryAsync(adapter, llmRequest, request.AppId, llmCts.Token)
                     .ConfigureAwait(false);
                 llmCalls++;
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    "Agentic LLM call hit loop budget for {AppId} after {ElapsedMs}ms (loopTimeout={TimeoutMs}ms)",
+                    request.AppId,
+                    loopSw.ElapsedMilliseconds,
+                    loopTimeout.TotalMilliseconds);
+
+                loopState = ApplyTransition(loopState, AgentLoopEvent.Fail, trace);
+                trace.Complete(AgentRunState.Failed);
+                var timeoutResult = AttachDiscovery(
+                    BuildTimeoutResult(lastAnswer, steps, iteration, request.RuntimeConfig.DefaultLanguage),
+                    messages, steps, staticPromptChars, compactionCount, llmCalls,
+                    promotedProseToolCalls, resolvedProfile, capabilities.HarnessMode.ToString(), schemaRepairLevel)
+                    .WithTrace(trace);
+                Report(request.Report, new AgenticProgressEvent
+                {
+                    Phase = AgenticProgressPhase.TimedOut,
+                    Iteration = iteration,
+                    Detail = AgenticMessages.TimeoutAfterIterations(iteration, request.RuntimeConfig.DefaultLanguage)
+                });
+                return timeoutResult;
             }
             catch (HttpRequestException ex) when (IsNativeToolCallParseError(ex) && toolsForRequest is { Count: > 0 })
             {
@@ -233,7 +257,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     McpServers = null,
                     ToolChoice = null
                 };
-                response = await ChatWithTransientRetryAsync(adapter, fallbackRequest, request.AppId, cancellationToken)
+                response = await ChatWithTransientRetryAsync(adapter, fallbackRequest, request.AppId, llmCts.Token)
                     .ConfigureAwait(false);
                 llmCalls++;
                 useClientSideTools = true;
@@ -888,7 +912,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             Messages = messages.ToList()
         };
 
-        await AgenticConfirmationCheckpoint
+        await AgenticConfirmation
             .WritePendingAsync(_sessionStore, appId, userId, sessionId, pending, cancellationToken)
             .ConfigureAwait(false);
         await _pendingStore
@@ -899,11 +923,11 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
         {
             Phase = AgenticProgressPhase.AwaitingConfirmation,
             Iteration = maxIterations,
-            Detail = AgenticConfirmationParser.BuildConfirmationPrompt(pending)
+            Detail = AgenticConfirmation.BuildPrompt(pending)
         });
 
         return AgentResult.AwaitingHumanConfirmation(
-            AgenticConfirmationParser.BuildConfirmationPrompt(pending),
+            AgenticConfirmation.BuildPrompt(pending),
             pending.PendingId,
             pending.Steps,
             pending.Iteration,
@@ -965,6 +989,28 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             : _options.DefaultAgenticLoopTimeoutSeconds;
 
         return TimeSpan.FromSeconds(Math.Max(1, seconds));
+    }
+
+    /// <summary>
+    /// Caps a single LLM HTTP call to the remaining agentic loop budget so a remote
+    /// model hang (HttpClient timeout up to minutes) cannot leave the client with 0 bytes.
+    /// </summary>
+    private static CancellationTokenSource CreateLoopBudgetCts(
+        Stopwatch loopSw,
+        TimeSpan loopTimeout,
+        CancellationToken outer)
+    {
+        var remaining = loopTimeout - loopSw.Elapsed;
+        if (remaining < TimeSpan.FromSeconds(1))
+            remaining = TimeSpan.FromSeconds(1);
+
+        var cushionSeconds = Math.Clamp(remaining.TotalSeconds * 0.05, 1, 5);
+        var cushion = TimeSpan.FromSeconds(cushionSeconds);
+        var budget = remaining > cushion ? remaining - cushion : remaining;
+
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(outer);
+        cts.CancelAfter(budget);
+        return cts;
     }
 
     private static AgentResult BuildTimeoutResult(

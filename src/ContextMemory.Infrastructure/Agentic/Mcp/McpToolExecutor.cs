@@ -115,7 +115,10 @@ public sealed class McpToolExecutor : IToolExecutor
 
         try
         {
-            var argumentsJson = McpQueryObjectsArgumentNormalizer.Normalize(mcpToolName, toolCall.Function.Arguments);
+            var argumentsJson = McpArgumentShaping.NormalizeArguments(
+                mcpToolName,
+                toolCall.Function.Arguments,
+                runtimeConfig.Agentic.Tools);
             var output = await _client
                 .CallToolAsync(appId, server, mcpToolName, argumentsJson, cancellationToken)
                 .ConfigureAwait(false);

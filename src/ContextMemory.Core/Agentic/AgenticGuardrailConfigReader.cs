@@ -1,5 +1,7 @@
 using System.Text.Json;
 
+using ContextMemory.Core.Models;
+
 namespace ContextMemory.Core.Agentic;
 
 public static class AgenticGuardrailConfigReader
@@ -13,23 +15,14 @@ public static class AgenticGuardrailConfigReader
         {
             using var doc = JsonDocument.Parse(configJson);
             var root = doc.RootElement;
-            var preferPt = language is not null
-                           && language.StartsWith("pt", StringComparison.OrdinalIgnoreCase);
 
-            if (preferPt
-                && root.TryGetProperty("feedbackPt", out var pt)
-                && pt.ValueKind == JsonValueKind.String
-                && !string.IsNullOrWhiteSpace(pt.GetString()))
-            {
-                return pt.GetString();
-            }
-
-            if (root.TryGetProperty("feedbackEn", out var en)
-                && en.ValueKind == JsonValueKind.String
-                && !string.IsNullOrWhiteSpace(en.GetString()))
-            {
-                return en.GetString();
-            }
+            // Harness feedback is English-only; the model translates user-facing answers.
+            // Prefer "feedback", then legacy "feedbackEn". Ignore language / feedbackPt.
+            _ = language;
+            if (TryReadString(root, "feedback", out var feedback))
+                return feedback;
+            if (TryReadString(root, "feedbackEn", out var feedbackEn))
+                return feedbackEn;
         }
         catch
         {
@@ -37,6 +30,20 @@ public static class AgenticGuardrailConfigReader
         }
 
         return null;
+    }
+
+    private static bool TryReadString(JsonElement root, string propertyName, out string? value)
+    {
+        value = null;
+        if (!root.TryGetProperty(propertyName, out var el)
+            || el.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(el.GetString()))
+        {
+            return false;
+        }
+
+        value = el.GetString();
+        return true;
     }
 
     public static IReadOnlyList<string> GetBlockedPatterns(string configJson) =>
@@ -167,5 +174,67 @@ public static class AgenticGuardrailConfigReader
         }
 
         return null;
+    }
+
+    public static string ResolveFeedback(
+        string configJson,
+        string? language,
+        string? matchedPattern = null)
+    {
+        var fromAdmin = GetFeedback(configJson, language);
+        if (!string.IsNullOrWhiteSpace(fromAdmin))
+            return fromAdmin;
+
+        if (!string.IsNullOrWhiteSpace(matchedPattern))
+            return $"Rejected: blocked pattern '{matchedPattern}'.";
+
+        return "Rejected by guardrail policy.";
+    }
+
+    public static string ForKind(ResolvedAgenticPolicy policy, string kind) =>
+        policy.FindByKind(kind)?.ConfigJson ?? "{}";
+
+    public static bool TryGetKind(
+        ResolvedAgenticPolicy policy,
+        string kind,
+        out string configJson)
+    {
+        if (!policy.HasKind(kind))
+        {
+            configJson = "{}";
+            return false;
+        }
+
+        configJson = ForKind(policy, kind);
+        return true;
+    }
+
+    public static bool TryMatchPatterns(
+        string text,
+        string configJson,
+        string? language,
+        out string feedback,
+        string patternsKey = "patterns")
+    {
+        feedback = string.Empty;
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        var patterns = GetStringList(configJson, patternsKey);
+        if (patterns.Count == 0)
+            return false;
+
+        foreach (var pattern in patterns)
+        {
+            if (string.IsNullOrWhiteSpace(pattern))
+                continue;
+            if (!text.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            feedback = ResolveFeedback(configJson, language, pattern);
+            return true;
+        }
+
+        return false;
     }
 }

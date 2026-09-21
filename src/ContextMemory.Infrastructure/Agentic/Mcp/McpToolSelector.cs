@@ -18,7 +18,9 @@ public sealed class McpToolSelector : IMcpToolSelector
 
         var recent = recentToolNames?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
         // Expand non-English user phrasing with English domain synonyms for lexical scoring only.
-        var query = McpToolQueryEnglishExpander.Expand(userQuery);
+        var query = McpArgumentShaping.ExpandQuery(
+            userQuery,
+            runtimeConfig.Agentic.Tools.QueryLexicon);
         var tokens = query.Split([' ', '\t', '\n', '\r', ':', '/', '-', '_'], StringSplitOptions.RemoveEmptyEntries)
             .Select(t => t.Trim().ToLowerInvariant())
             .Where(t => t.Length >= 2)

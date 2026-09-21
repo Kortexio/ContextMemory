@@ -2,6 +2,7 @@ namespace ContextMemory.Infrastructure.Agentic.Mcp;
 
 /// <summary>
 /// Rewrites common Cursor/Windows MCP command specs into Linux container paths for the mcp-runtime sidecar.
+/// Maps any <c>.../node_modules/{package}/...</c> path to <c>/opt/mcps/{package}/...</c>.
 /// </summary>
 public static class McpStdioPathNormalizer
 {
@@ -58,30 +59,45 @@ public static class McpStdioPathNormalizer
     private static string RemapKnownPackagePath(string path)
     {
         var normalized = NormalizePathSeparators(path);
+        if (normalized.StartsWith("/opt/mcps/", StringComparison.OrdinalIgnoreCase))
+            return normalized;
 
-        // Cursor local zuora-mcp runtime → packaged path inside sidecar volume.
-        var marker = "/zuora-mcp-runtime/node_modules/zuora-mcp/";
-        var idx = normalized.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (idx >= 0)
+        // .../node_modules/{package}/rest → /opt/mcps/{package}/rest
+        const string nodeModules = "/node_modules/";
+        var nmIdx = normalized.IndexOf(nodeModules, StringComparison.OrdinalIgnoreCase);
+        if (nmIdx >= 0)
         {
-            var relative = normalized[(idx + marker.Length)..];
-            return "/opt/mcps/zuora-mcp/" + relative.TrimStart('/');
+            var after = normalized[(nmIdx + nodeModules.Length)..];
+            var slash = after.IndexOf('/');
+            if (slash > 0)
+            {
+                var package = after[..slash];
+                var relative = after[(slash + 1)..].TrimStart('/');
+                return string.IsNullOrEmpty(relative)
+                    ? $"/opt/mcps/{package}"
+                    : $"/opt/mcps/{package}/{relative}";
+            }
+
+            if (after.Length > 0)
+                return $"/opt/mcps/{after}";
         }
 
-        marker = "/node_modules/zuora-mcp/";
-        idx = normalized.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (idx >= 0)
+        // Already under a package folder with dist/ but not remapped (e.g. /foo/bar-mcp/dist/x)
+        var distMarker = "/dist/";
+        var distIdx = normalized.IndexOf(distMarker, StringComparison.OrdinalIgnoreCase);
+        if (distIdx > 0)
         {
-            var relative = normalized[(idx + marker.Length)..];
-            return "/opt/mcps/zuora-mcp/" + relative.TrimStart('/');
-        }
-
-        if (normalized.Contains("/zuora-mcp/dist/", StringComparison.OrdinalIgnoreCase)
-            && !normalized.StartsWith("/opt/mcps/", StringComparison.OrdinalIgnoreCase))
-        {
-            var distIdx = normalized.IndexOf("/zuora-mcp/", StringComparison.OrdinalIgnoreCase);
-            if (distIdx >= 0)
-                return "/opt/mcps" + normalized[distIdx..];
+            var beforeDist = normalized[..distIdx];
+            var lastSlash = beforeDist.LastIndexOf('/');
+            if (lastSlash >= 0 && lastSlash < beforeDist.Length - 1)
+            {
+                var package = beforeDist[(lastSlash + 1)..];
+                if (package.Contains("mcp", StringComparison.OrdinalIgnoreCase))
+                {
+                    var relative = normalized[(distIdx + 1)..].TrimStart('/'); // dist/...
+                    return $"/opt/mcps/{package}/{relative}";
+                }
+            }
         }
 
         return normalized;

@@ -62,79 +62,11 @@ public sealed class HybridAgentValidator : IAgentValidator
                 ValidationMessages.EmptyFinalAnswer(request.RuntimeConfig));
         }
 
-        if (AgenticThinkingLeakGuardrail.TryGetRejectionFeedback(
-                request.FinalAnswer, request.RuntimeConfig, out var thinkingFeedback))
-        {
-            return ValidationResult.Reject(thinkingFeedback);
-        }
+        var core = AgenticPolicyGuardrailPipeline.TryRejectCore(request);
+        if (core is not null)
+            return core;
 
-        var policy = request.RuntimeConfig.ResolvedPolicy;
-
-        if (policy.HasKind(AgenticGuardrailKinds.SandboxClaim)
-            && AgenticSandboxClaimGuardrail.TryGetRejectionFeedback(
-                request.FinalAnswer,
-                request.Steps,
-                request.RuntimeConfig,
-                out var sandboxFeedback))
-        {
-            var configured = AgenticGuardrailConfigReader.GetFeedback(
-                policy.FindByKind(AgenticGuardrailKinds.SandboxClaim)?.ConfigJson ?? "{}",
-                request.RuntimeConfig.DefaultLanguage);
-            return ValidationResult.Reject(
-                ValidationMessages.FabricatedSandboxLimitation(
-                    configured ?? sandboxFeedback,
-                    request.RuntimeConfig));
-        }
-
-        if (policy.HasKind(AgenticGuardrailKinds.UrlFetch)
-            && AgenticUrlFetchGuardrail.TryGetRejectionFeedback(
-                request.UserObjective,
-                request.FinalAnswer,
-                request.Steps,
-                request.RuntimeConfig,
-                out var urlFeedback))
-        {
-            var configured = AgenticGuardrailConfigReader.GetFeedback(
-                policy.FindByKind(AgenticGuardrailKinds.UrlFetch)?.ConfigJson ?? "{}",
-                request.RuntimeConfig.DefaultLanguage);
-            return ValidationResult.Reject(
-                ValidationMessages.UrlDescribedWithoutFetch(
-                    configured ?? urlFeedback,
-                    request.RuntimeConfig));
-        }
-
-        if (policy.HasKind(AgenticGuardrailKinds.LiveDataEvidence)
-            && AgenticLiveDataEvidenceGuardrail.TryGetRejectionFeedback(
-                request.UserObjective,
-                request.FinalAnswer,
-                request.Steps,
-                request.RuntimeConfig,
-                out var liveFeedback))
-        {
-            var configured = AgenticGuardrailConfigReader.GetFeedback(
-                policy.FindByKind(AgenticGuardrailKinds.LiveDataEvidence)?.ConfigJson ?? "{}",
-                request.RuntimeConfig.DefaultLanguage);
-            return ValidationResult.Reject(
-                ValidationMessages.LiveDataWithoutEvidence(
-                    configured ?? liveFeedback,
-                    request.RuntimeConfig));
-        }
-
-        if (policy.HasKind(AgenticGuardrailKinds.ToolSurfaceHidden)
-            && AgenticToolIntentNarrationGuardrail.TryGetRejectionFeedback(
-                request.FinalAnswer,
-                request.Steps,
-                request.RuntimeConfig,
-                out var toolIntentFeedback))
-        {
-            // Prefer code feedback (includes actionable tool_search JSON for lazy MCP / client-side).
-            return ValidationResult.Reject(
-                ValidationMessages.ToolIntentNarration(
-                    toolIntentFeedback,
-                    request.RuntimeConfig));
-        }
-
-        var extended = await AgenticExtendedGuardrailRunner.TryGetRejectionAsync(
+        var extended = await AgenticPolicyGuardrailPipeline.TryGetExtendedRejectionAsync(
                 request, _urlChecker, cancellationToken)
             .ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(extended))

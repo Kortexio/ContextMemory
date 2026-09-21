@@ -1,9 +1,12 @@
 using System.Text.RegularExpressions;
-using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
 
+/// <summary>
+/// Rejects answers that look like emails, cards, IBAN, SSN, or NIF.
+/// Feedback text comes from Admin <c>ConfigJson.feedback</c>.
+/// </summary>
 public static partial class AgenticPiiGuardrail
 {
     public static bool TryGetRejectionFeedback(
@@ -22,11 +25,7 @@ public static partial class AgenticPiiGuardrail
             || HasLikelyCardNumber(finalAnswer)
             || NifRegex().IsMatch(finalAnswer))
         {
-            feedback = AgenticGuardrailConfigReader.GetFeedback(configJson, runtimeConfig.DefaultLanguage)
-                ?? TenantLocale.Select(
-                    runtimeConfig.DefaultLanguage,
-                    "Rejected: possible PII in the answer. Redact sensitive identifiers.",
-                    "Rejeitado: possível PII na resposta. Redige identificadores sensíveis.");
+            feedback = AgenticGuardrailConfigReader.ResolveFeedback(configJson, runtimeConfig.DefaultLanguage);
             return true;
         }
 

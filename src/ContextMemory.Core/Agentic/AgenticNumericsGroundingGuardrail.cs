@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -41,14 +40,7 @@ public static partial class AgenticNumericsGroundingGuardrail
         if (ungrounded.Count < minToReject)
             return false;
 
-        var sample = string.Join(", ", ungrounded.Take(3).Select(v => $"'{v}'"));
-        feedback = AgenticGuardrailConfigReader.GetFeedback(configJson, runtimeConfig.DefaultLanguage)
-            ?? TenantLocale.Select(
-                runtimeConfig.DefaultLanguage,
-                $"Rejected: numeric values without tool evidence ({sample}). "
-                + "Emit tool_calls (wiki_search / MCP / web_search) or remove unsupported numbers.",
-                $"Rejeitado: valores numéricos sem evidência de tools ({sample}). "
-                + "Emite tool_calls (wiki_search / MCP / web_search) ou remove números sem suporte.");
+        feedback = AgenticGuardrailConfigReader.ResolveFeedback(configJson, runtimeConfig.DefaultLanguage);
         return true;
     }
 

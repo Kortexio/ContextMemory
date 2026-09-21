@@ -12,7 +12,7 @@ public sealed class AgenticDuplicateToolCallGuardTests
         var config = Config();
         var steps = new List<AgentExecutionStep>
         {
-            Successful("wiki_search", """{"query":"regras criação subscrição paccar"}""")
+            Successful("wiki_search", """{"query":"regras cria\u00E7\u00E3o subscri\u00E7\u00E3o paccar"}""")
         };
 
         var again = AgenticDuplicateToolCallGuard.TryReject(
@@ -23,7 +23,7 @@ public sealed class AgenticDuplicateToolCallGuardTests
             out var feedback);
 
         Assert.True(again);
-        Assert.Contains("NÃO repitas", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("do NOT repeat", feedback, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("MCP", feedback, StringComparison.Ordinal);
     }
 
@@ -33,7 +33,7 @@ public sealed class AgenticDuplicateToolCallGuardTests
         var config = Config();
         var steps = new List<AgentExecutionStep>
         {
-            Successful("wiki_search", """{"query":"regras criação subscrição paccar"}""")
+            Successful("wiki_search", """{"query":"regras cria\u00E7\u00E3o subscri\u00E7\u00E3o paccar"}""")
         };
 
         var ok = AgenticDuplicateToolCallGuard.TryReject(
@@ -59,9 +59,9 @@ public sealed class AgenticDuplicateToolCallGuardTests
             out var feedback);
 
         Assert.True(rejected);
-        Assert.Contains("não vazio", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("non-empty", feedback, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("query", feedback, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ask_zuora", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("server__tool", feedback, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -109,8 +109,8 @@ public sealed class AgenticDuplicateToolCallGuardTests
             out var feedback);
 
         Assert.True(rejected);
-        Assert.Contains("já falhou", feedback, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ask_zuora", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("already failed", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("server__tool", feedback, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -134,9 +134,9 @@ public sealed class AgenticDuplicateToolCallGuardTests
             out var feedback);
 
         Assert.True(rejected);
-        Assert.Contains("esgotado", feedback, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Responde AGORA", feedback, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("ask_zuora", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("exhausted", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Answer the user NOW", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("server__tool", feedback, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -175,7 +175,7 @@ public sealed class AgenticDuplicateToolCallGuardTests
             steps,
             config,
             out var feedback));
-        Assert.Contains("já teve sucesso", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("already succeeded", feedback, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -199,8 +199,8 @@ public sealed class AgenticDuplicateToolCallGuardTests
             out var feedback);
 
         Assert.True(rejected);
-        Assert.Contains("esgotado", feedback, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ask_zuora", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("exhausted", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("server__tool", feedback, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -260,36 +260,77 @@ public sealed class AgenticDuplicateToolCallGuardTests
     }
 
     [Fact]
-    public void ShouldForceAnswerAfterWikiBudget_True_EvenWithoutEvidence()
+    public void ShouldForceAnswerAfterWikiBudget_False_WithoutEvidence_UntilThirdRejection()
     {
         var steps = new List<AgentExecutionStep>
         {
-            new()
-            {
-                Iteration = 1,
-                ToolName = "wiki_search",
-                Arguments = "{}",
-                Output = "Rejected: wiki_search/wiki_grep budget exhausted this turn.",
-                ExitCode = 1,
-                Success = false,
-                Duration = TimeSpan.Zero
-            },
-            new()
-            {
-                Iteration = 2,
-                ToolName = "wiki_search",
-                Arguments = "{}",
-                Output = "Rejected: wiki_search/wiki_grep budget exhausted this turn.",
-                ExitCode = 1,
-                Success = false,
-                Duration = TimeSpan.Zero
-            }
+            BudgetRejection(1),
+            BudgetRejection(2)
+        };
+
+        Assert.False(AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterWikiBudget(steps));
+    }
+
+    [Fact]
+    public void ShouldForceAnswerAfterWikiBudget_True_WithoutEvidence_AfterThirdRejection()
+    {
+        var steps = new List<AgentExecutionStep>
+        {
+            BudgetRejection(1),
+            BudgetRejection(2),
+            BudgetRejection(3)
         };
 
         Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterWikiBudget(steps));
         var nudge = AgenticDuplicateToolCallGuard.BuildForceAnswerNudge(Config(), steps);
-        Assert.Contains("honestidade", nudge, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("honestly", nudge, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void WikiBudget_DoesNotCount_EmptyQueryOrBudgetRejectionSteps()
+    {
+        var config = Config();
+        var steps = new List<AgentExecutionStep>
+        {
+            Successful("wiki_search", """{"query":"a"}"""),
+            Successful("wiki_search", """{"query":"b"}"""),
+            Successful("wiki_search", """{"query":"c"}"""),
+            Successful("wiki_search", """{"query":"d"}"""),
+            new()
+            {
+                Iteration = 5,
+                ToolName = "wiki_search",
+                Arguments = "{}",
+                Output = "Rejected: wiki_search needs a non-empty query.",
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero,
+                Summary = AgenticDuplicateToolCallGuard.DuplicateRejectedSummary
+            },
+            BudgetRejection(6)
+        };
+
+        // 4 real attempts + empty + budget rejection � still under MaxWikiAttemptsPerTurn (5)
+        Assert.False(AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_search", """{"query":"e"}""", steps, config, out _));
+
+        steps.Add(Successful("wiki_search", """{"query":"e"}"""));
+        Assert.True(AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_search", """{"query":"f"}""", steps, config, out var feedback));
+        Assert.Contains("exhausted", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static AgentExecutionStep BudgetRejection(int iteration) => new()
+    {
+        Iteration = iteration,
+        ToolName = "wiki_search",
+        Arguments = "{}",
+        Output = "Rejected: wiki_search/wiki_grep budget exhausted this turn.",
+        ExitCode = 1,
+        Success = false,
+        Duration = TimeSpan.Zero,
+        Summary = AgenticDuplicateToolCallGuard.DuplicateRejectedSummary
+    };
 
     [Fact]
     public void Allows_RetryFailedNonWikiTool()
@@ -365,7 +406,7 @@ public sealed class AgenticDuplicateToolCallGuardTests
             out var feedback);
 
         Assert.True(rejected);
-        Assert.Contains("já falhou", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("already failed", feedback, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -400,8 +441,7 @@ public sealed class AgenticDuplicateToolCallGuardTests
 
         Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterRepeatedToolFailure(steps));
         Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswer(steps));
-        Assert.Contains(
-            "falhou repetidamente",
+        Assert.Contains("failed repeatedly",
             AgenticDuplicateToolCallGuard.BuildForceAnswerNudge(Config(), steps),
             StringComparison.OrdinalIgnoreCase);
     }
@@ -424,8 +464,8 @@ public sealed class AgenticDuplicateToolCallGuardTests
 
         Assert.True(rejected);
         Assert.True(AgenticDuplicateToolCallGuard.FeedbackIndicatesDuplicateAfterSuccess(feedback));
-        Assert.Contains("Responde AGORA", feedback, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("ask_zuora", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Answer the user NOW", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("server__tool", feedback, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -441,7 +481,7 @@ public sealed class AgenticDuplicateToolCallGuardTests
                 ToolName = "zuora-dev__query_objects",
                 Arguments = args,
                 Output =
-                    "Rejected: identical `zuora-dev__query_objects` already succeeded — do NOT repeat the same arguments. "
+                    "Rejected: identical `zuora-dev__query_objects` already succeeded ??? do NOT repeat the same arguments. "
                     + "Answer the user NOW from the tool result already gathered.",
                 ExitCode = 1,
                 Success = false,
@@ -453,7 +493,7 @@ public sealed class AgenticDuplicateToolCallGuardTests
         Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswerAfterDuplicateSuccess(steps));
         Assert.True(AgenticDuplicateToolCallGuard.ShouldForceAnswer(steps));
         var nudge = AgenticDuplicateToolCallGuard.BuildForceAnswerNudge(Config(withMcp: true), steps);
-        Assert.Contains("já teve sucesso", nudge, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("already succeeded", nudge, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -475,8 +515,8 @@ public sealed class AgenticDuplicateToolCallGuardTests
 
         Assert.True(rejected);
         Assert.True(AgenticDuplicateToolCallGuard.FeedbackIndicatesDuplicateAfterSuccess(feedback));
-        Assert.Contains("já teve sucesso", feedback, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("Responde AGORA", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("already succeeded", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Answer the user NOW", feedback, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -487,7 +527,7 @@ public sealed class AgenticDuplicateToolCallGuardTests
             Iteration = 2,
             ToolName = "wiki_search",
             Arguments = """{"query":"x"}""",
-            Output = "Rejected: identical…",
+            Output = "Rejected: identical??�",
             ExitCode = 1,
             Success = false,
             Summary = AgenticDuplicateToolCallGuard.DuplicateAfterSuccessSummary
@@ -553,8 +593,8 @@ public sealed class AgenticDuplicateToolCallGuardTests
         };
 
         const string meta =
-            "A ferramenta wiki_search foi chamada mais de uma vez. "
-            + "Isso é um limite de orçamento de chamadas. Como corrigir: não chamar a mesma.";
+            "The wiki_search tool was called more than once. "
+            + "This is a wiki budget call limit. How to fix: do not call the same.";
 
         Assert.True(AgenticDuplicateToolCallGuard.IsGuardrailMechanicsEcho(meta));
         Assert.False(AgenticDuplicateToolCallGuard.IsUsableForceAnswer(meta));
@@ -598,8 +638,8 @@ public sealed class AgenticDuplicateToolCallGuardTests
 
         Assert.NotNull(fallback);
         Assert.Contains("PACCAR", fallback, StringComparison.Ordinal);
-        Assert.Contains("Segue o que foi encontrado", fallback, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Como corrigir", fallback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Here is what was found", fallback, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("How to fix", fallback, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -623,7 +663,7 @@ public sealed class AgenticDuplicateToolCallGuardTests
 
         var fallback = AgenticDuplicateToolCallGuard.BuildFailureFallbackAnswer(Config(), steps);
 
-        Assert.Contains("Não foi possível", fallback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("I could not obtain", fallback, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Invalid filter syntax", fallback, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("identical", fallback, StringComparison.OrdinalIgnoreCase);
     }
@@ -704,3 +744,4 @@ public sealed class AgenticDuplicateToolCallGuardTests
             }
         };
 }
+

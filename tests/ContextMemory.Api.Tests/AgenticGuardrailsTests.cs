@@ -21,24 +21,24 @@ public sealed class AgenticDestructiveActionDetectorTests
     }
 }
 
-public sealed class AgenticConfirmationParserTests
+public sealed class AgenticConfirmationTests
 {
     [Fact]
     public void IsConfirmation_AcceptsExplicitToken()
     {
-        Assert.True(AgenticConfirmationParser.IsConfirmation("[CONFIRM:abc123]", "abc123"));
+        Assert.True(AgenticConfirmation.IsConfirmation("[CONFIRM:abc123]", "abc123"));
     }
 
     [Fact]
     public void IsConfirmation_AcceptsNaturalLanguage()
     {
-        Assert.True(AgenticConfirmationParser.IsConfirmation("Confirmo a execução", "abc123"));
+        Assert.True(AgenticConfirmation.IsConfirmation("I confirm, proceed", "abc123"));
     }
 
     [Fact]
     public void IsDismissal_DetectsCancel()
     {
-        Assert.True(AgenticConfirmationParser.IsDismissal("Cancelo a operação"));
+        Assert.True(AgenticConfirmation.IsDismissal("cancel this operation"));
     }
 }
 

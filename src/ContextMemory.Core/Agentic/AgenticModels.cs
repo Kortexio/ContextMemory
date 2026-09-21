@@ -75,6 +75,20 @@ public record AgenticToolsConfig
     [JsonPropertyName("maxMcpToolsPerTurn")]
     public int MaxMcpToolsPerTurn { get; init; } = 12;
 
+    /// <summary>
+    /// Locale → English token map for MCP tool lexical selection (Admin-owned).
+    /// Example: <c>"subscrição": "subscription create"</c>. Empty ⇒ no expansion.
+    /// </summary>
+    [JsonPropertyName("queryLexicon")]
+    public Dictionary<string, string> QueryLexicon { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Per-tool-suffix argument rewrites (Admin-owned). Key e.g. <c>query_objects</c>.
+    /// </summary>
+    [JsonPropertyName("argumentNormalizers")]
+    public Dictionary<string, McpArgumentNormalizerConfig> ArgumentNormalizers { get; init; }
+        = new(StringComparer.OrdinalIgnoreCase);
+
     [JsonPropertyName("http")]
     public AgenticHttpToolsConfig Http { get; init; } = new();
 
@@ -89,6 +103,24 @@ public record AgenticToolsConfig
 
     [JsonPropertyName("canvas")]
     public AgenticCanvasToolsConfig Canvas { get; init; } = new();
+}
+
+/// <summary>Admin config for rewriting hallucinated MCP tool argument shapes.</summary>
+public record McpArgumentNormalizerConfig
+{
+    /// <summary>Alias → canonical property (e.g. <c>object_type</c> → <c>objectType</c>).</summary>
+    [JsonPropertyName("aliases")]
+    public Dictionary<string, string> Aliases { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Leftover alias keys to drop after rename when the canonical key already exists.</summary>
+    [JsonPropertyName("dropKeys")]
+    public List<string> DropKeys { get; init; } = [];
+
+    [JsonPropertyName("lowercaseObjectType")]
+    public bool LowercaseObjectType { get; init; } = true;
+
+    [JsonPropertyName("maxPageSize")]
+    public int MaxPageSize { get; init; } = 99;
 }
 
 /// <summary>Built-in HTTP tools: fetch_url, http_request, web_search.</summary>
@@ -190,6 +222,10 @@ public record ExecutionToolConfig
 
     [JsonPropertyName("containerImage")]
     public string? ContainerImage { get; init; }
+
+    /// <summary>Optional Admin override for the tool schema description shown to the model.</summary>
+    [JsonPropertyName("description")]
+    public string? Description { get; init; }
 }
 
 public record IntegrationToolConfig

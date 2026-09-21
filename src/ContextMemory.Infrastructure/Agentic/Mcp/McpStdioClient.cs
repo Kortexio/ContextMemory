@@ -202,11 +202,11 @@ public sealed class McpStdioClient : IAsyncDisposable
             || body.Contains("timeout", StringComparison.OrdinalIgnoreCase))
         {
             hint =
-                " Zuora MCP timed out (~60s on their gateway). Narrow the query, reduce result size, or call with help:true first.";
+                " MCP timed out on the remote gateway. Narrow the query, reduce result size, or call with help:true first.";
         }
         else if (body.Contains("sending the request", StringComparison.OrdinalIgnoreCase))
         {
-            hint = " Transient network error to Zuora MCP — retry once.";
+            hint = " Transient network error to MCP — retry once.";
         }
 
         return $"MCP runtime tools/call failed: {statusCode} {body}.{hint}";
@@ -392,7 +392,7 @@ public sealed class McpStdioClient : IAsyncDisposable
         if (!string.IsNullOrWhiteSpace(secret.ApiKey))
             env.TryAdd("MCP_API_KEY", secret.ApiKey);
 
-        // zuora-mcp remote bridge default is 120s; keep it aligned with integration timeout.
+        // Align remote MCP bridge timeout with the integration TimeoutSeconds setting.
         if (server.TimeoutSeconds > 0)
             env.TryAdd("REMOTE_MCP_TIMEOUT_MS", (server.TimeoutSeconds * 1000).ToString());
 

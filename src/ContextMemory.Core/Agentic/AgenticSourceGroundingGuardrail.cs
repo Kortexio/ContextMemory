@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -28,11 +27,7 @@ public static partial class AgenticSourceGroundingGuardrail
             if (idsNoEvidence.Count == 0)
                 return false;
 
-            feedback = AgenticGuardrailConfigReader.GetFeedback(configJson, runtimeConfig.DefaultLanguage)
-                ?? TenantLocale.Select(
-                    runtimeConfig.DefaultLanguage,
-                    "Rejected: answer cites IDs without any successful tool evidence.",
-                    "Rejeitado: a resposta cita IDs sem evidência de tools bem-sucedidas.");
+            feedback = AgenticGuardrailConfigReader.ResolveFeedback(configJson, runtimeConfig.DefaultLanguage);
             return true;
         }
 
@@ -40,11 +35,7 @@ public static partial class AgenticSourceGroundingGuardrail
         {
             if (!evidence.Contains(id, StringComparison.OrdinalIgnoreCase))
             {
-                feedback = AgenticGuardrailConfigReader.GetFeedback(configJson, runtimeConfig.DefaultLanguage)
-                    ?? TenantLocale.Select(
-                        runtimeConfig.DefaultLanguage,
-                        $"Rejected: '{id}' is not present in tool evidence.",
-                        $"Rejeitado: '{id}' não aparece na evidência das tools.");
+                feedback = AgenticGuardrailConfigReader.ResolveFeedback(configJson, runtimeConfig.DefaultLanguage);
                 return true;
             }
         }

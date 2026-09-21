@@ -30,7 +30,7 @@ public sealed class AgentConfirmationFlow : IAgentConfirmationFlow
         if (existingPending is null)
             return AgentConfirmationFlowResult.Continue();
 
-        if (AgenticConfirmationParser.IsDismissal(lastUserMessage))
+        if (AgenticConfirmation.IsDismissal(lastUserMessage))
         {
             await _pendingStore.ClearAsync(appId, userId, sessionId, cancellationToken).ConfigureAwait(false);
             return AgentConfirmationFlowResult.Resolved(
@@ -40,10 +40,10 @@ public sealed class AgentConfirmationFlow : IAgentConfirmationFlow
                     existingPending.Iteration));
         }
 
-        if (!AgenticConfirmationParser.IsConfirmation(lastUserMessage, existingPending.PendingId))
+        if (!AgenticConfirmation.IsConfirmation(lastUserMessage, existingPending.PendingId))
             return AgentConfirmationFlowResult.Resolved(BuildAwaitingConfirmationResult(existingPending, report));
 
-        await AgenticConfirmationCheckpoint
+        await AgenticConfirmation
             .WriteConfirmedAsync(_sessionStore, appId, userId, sessionId, existingPending, cancellationToken)
             .ConfigureAwait(false);
         await _pendingStore.ClearAsync(appId, userId, sessionId, cancellationToken).ConfigureAwait(false);
@@ -87,11 +87,11 @@ public sealed class AgentConfirmationFlow : IAgentConfirmationFlow
             Phase = AgenticProgressPhase.AwaitingConfirmation,
             Iteration = pending.Iteration,
             ToolName = pending.ToolName,
-            Detail = AgenticConfirmationParser.BuildConfirmationPrompt(pending)
+            Detail = AgenticConfirmation.BuildPrompt(pending)
         });
 
         return AgentResult.AwaitingHumanConfirmation(
-            AgenticConfirmationParser.BuildConfirmationPrompt(pending),
+            AgenticConfirmation.BuildPrompt(pending),
             pending.PendingId,
             pending.Steps,
             pending.Iteration,

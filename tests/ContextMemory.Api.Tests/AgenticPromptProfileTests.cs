@@ -379,7 +379,7 @@ public sealed class AgenticSystemPromptBuilderTests
         };
 
         var prompt = AgenticSystemPromptBuilder.Build(config, "shell_execute");
-        Assert.Contains("## Evidence rules (mandatory)", prompt, StringComparison.Ordinal);
+        Assert.Contains("## Evidence skills (inlined)", prompt, StringComparison.Ordinal);
         Assert.Contains("Emit tool_calls with valid JSON", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("## Default skills", prompt, StringComparison.Ordinal);
     }

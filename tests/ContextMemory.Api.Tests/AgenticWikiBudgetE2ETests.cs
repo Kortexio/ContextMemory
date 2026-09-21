@@ -83,8 +83,8 @@ public sealed class AgenticWikiBudgetE2ETests : IClassFixture<AgenticStubWebAppl
             $"esperava resposta final; bodyPrefix={body[..Math.Min(400, body.Length)]}");
 
         // Stub returns budget meta-speak; harness must replace with wiki evidence, not echo it.
-        Assert.DoesNotContain("Como corrigir", answer, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("orçamento de chamadas", answer, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("How to fix", answer, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("wiki budget call limit", answer, StringComparison.OrdinalIgnoreCase);
         Assert.True(
             answer.Contains("PACCAR", StringComparison.OrdinalIgnoreCase)
             || answer.Contains("ITD", StringComparison.OrdinalIgnoreCase)

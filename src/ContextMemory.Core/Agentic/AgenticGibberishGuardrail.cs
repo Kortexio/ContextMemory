@@ -1,4 +1,3 @@
-using ContextMemory.Core.Localization;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -47,11 +46,7 @@ public static class AgenticGibberishGuardrail
         if (!looksGibberish)
             return false;
 
-        feedback = AgenticGuardrailConfigReader.GetFeedback(configJson, runtimeConfig.DefaultLanguage)
-            ?? TenantLocale.Select(
-                runtimeConfig.DefaultLanguage,
-                "Rejected: answer looks like gibberish.",
-                "Rejeitado: a resposta parece sem sentido.");
+        feedback = AgenticGuardrailConfigReader.ResolveFeedback(configJson, runtimeConfig.DefaultLanguage);
         return true;
     }
 }
