@@ -8,7 +8,7 @@
       "category": "safety",
       "activation": "skill",
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 10,
       "linkedGuardrailIds": [
         "url-fetch-required"
@@ -66,7 +66,7 @@
       "category": "safety",
       "activation": "skill",
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 50,
       "linkedGuardrailIds": [],
       "createdAt": "1970-01-01T00:00:00+00:00",
@@ -78,9 +78,9 @@
       "description": "Prefer ingested knowledge via wiki_search.",
       "promptMarkdown": "## Wiki-first for internal docs\r\n- Use `wiki_search` for Jira/Confluence/SQL/docs already ingested into the app before guessing.\r\n- Prefer wiki evidence over memory when they conflict.\r\n- At most 5 distinct wiki_search/wiki_grep calls per question. Never repeat the same query or pattern.\r\n- If results do not answer the question, stop searching the wiki and use MCP or other tools (or say evidence is missing).\r\n- Reply in the user's language.",
       "category": "tools",
-      "activation": "always_on",
+      "activation": "skill",
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 60,
       "linkedGuardrailIds": [],
       "createdAt": "1970-01-01T00:00:00+00:00",
@@ -94,7 +94,7 @@
       "category": "behavior",
       "activation": "skill",
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 70,
       "linkedGuardrailIds": [],
       "createdAt": "1970-01-01T00:00:00+00:00",
@@ -122,7 +122,7 @@
       "category": "behavior",
       "activation": "skill",
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 90,
       "linkedGuardrailIds": [],
       "createdAt": "1970-01-01T00:00:00+00:00",
@@ -136,7 +136,7 @@
       "category": "behavior",
       "activation": "skill",
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 100,
       "linkedGuardrailIds": [],
       "createdAt": "1970-01-01T00:00:00+00:00",
@@ -150,7 +150,7 @@
       "category": "safety",
       "activation": "skill",
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 200,
       "linkedGuardrailIds": [],
       "createdAt": "1970-01-01T00:00:00+00:00",
@@ -180,7 +180,7 @@
       "category": "behavior",
       "activation": "skill",
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 210,
       "linkedGuardrailIds": [],
       "createdAt": "1970-01-01T00:00:00+00:00",
@@ -192,9 +192,9 @@
       "description": "Always-on rule: never invent unsupported facts.",
       "promptMarkdown": "## Always-on: evidence first\r\n- Prefer tools, wiki_search/wiki_grep, and session artifacts over speculation.\r\n- Tag uncertain claims clearly.",
       "category": "rules",
-      "activation": "always_on",
+      "activation": "skill",
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 5,
       "linkedGuardrailIds": [],
       "createdAt": "1970-01-01T00:00:00+00:00",
@@ -208,7 +208,7 @@
       "category": "rules",
       "activation": "requestable",
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 230,
       "linkedGuardrailIds": [],
       "createdAt": "1970-01-01T00:00:00+00:00",
@@ -265,7 +265,7 @@
         ]
       },
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 10,
       "createdAt": "1970-01-01T00:00:00+00:00",
       "updatedAt": "1970-01-01T00:00:00+00:00"
@@ -432,7 +432,7 @@
         "kind": "tool-failure-disclosure"
       },
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 30,
       "createdAt": "1970-01-01T00:00:00+00:00",
       "updatedAt": "1970-01-01T00:00:00+00:00"
@@ -591,7 +591,7 @@
         "patterns": []
       },
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 140,
       "createdAt": "1970-01-01T00:00:00+00:00",
       "updatedAt": "1970-01-01T00:00:00+00:00"
@@ -606,7 +606,7 @@
         "feedback": "Rejected: price quote without tool evidence. Fetch live data or remove invented prices."
       },
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 150,
       "createdAt": "1970-01-01T00:00:00+00:00",
       "updatedAt": "1970-01-01T00:00:00+00:00"
@@ -621,7 +621,7 @@
         "feedback": "Rejected: answer cites IDs/numbers not present in tool evidence. Ground claims in tool output."
       },
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 160,
       "createdAt": "1970-01-01T00:00:00+00:00",
       "updatedAt": "1970-01-01T00:00:00+00:00"
@@ -636,7 +636,7 @@
         "feedback": "Rejected: answer looks like gibberish. Provide a clear natural-language response."
       },
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 170,
       "createdAt": "1970-01-01T00:00:00+00:00",
       "updatedAt": "1970-01-01T00:00:00+00:00"
@@ -651,7 +651,7 @@
         "feedback": "Rejected: SQL in the answer looks unsafe or malformed. Fix or omit the query."
       },
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 180,
       "createdAt": "1970-01-01T00:00:00+00:00",
       "updatedAt": "1970-01-01T00:00:00+00:00"
@@ -741,7 +741,7 @@
         "feedback": "Rejected: duplicate sentences detected. Deduplicate and rewrite."
       },
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 240,
       "createdAt": "1970-01-01T00:00:00+00:00",
       "updatedAt": "1970-01-01T00:00:00+00:00"
@@ -788,7 +788,7 @@
         "feedback": "Rejected: the answer does not address all required items from the user prompt."
       },
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 270,
       "createdAt": "1970-01-01T00:00:00+00:00",
       "updatedAt": "1970-01-01T00:00:00+00:00"
@@ -819,7 +819,7 @@
         "feedback": "Rejected: fact-check failed — unsupported claims or ungrounded IDs."
       },
       "isSystem": true,
-      "isDefaultEnabled": true,
+      "isDefaultEnabled": false,
       "sortOrder": 290,
       "createdAt": "1970-01-01T00:00:00+00:00",
       "updatedAt": "1970-01-01T00:00:00+00:00"

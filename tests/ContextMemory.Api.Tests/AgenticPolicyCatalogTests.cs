@@ -14,47 +14,68 @@ public sealed class AgenticPolicyPackResolverTests
     {
         Assert.Equal(15, AgenticCatalogSeed.Skills.Count);
         Assert.Equal(29, AgenticCatalogSeed.Guardrails.Count);
-        Assert.All(
-            AgenticCatalogSeed.Skills.Where(s => s.Id is not "small-model-abstention"),
-            s => Assert.True(s.IsDefaultEnabled, s.Id));
+
+        var defaultOnSkills = AgenticCatalogSeed.Skills.Where(s => s.IsDefaultEnabled).Select(s => s.Id).ToHashSet();
+        Assert.Equal(
+            new HashSet<string>
+            {
+                "tool-calling-discipline",
+                "prefer-mcp-over-adhoc",
+                "sandbox-facts-selfhosted",
+                "privacy-and-secrets"
+            },
+            defaultOnSkills);
+
         Assert.Contains(AgenticCatalogSeed.Skills, s =>
             s.Id == "small-model-abstention"
             && !s.IsDefaultEnabled
             && s.LinkedGuardrailIds.Contains("numeric-grounding"));
+        Assert.Contains(AgenticCatalogSeed.Skills, s =>
+            s.Id == "wiki-first-for-docs"
+            && !s.IsDefaultEnabled
+            && s.Activation == AgenticSkillActivation.Skill);
+        Assert.Contains(AgenticCatalogSeed.Skills, s =>
+            s.Id == "rule-always-evidence"
+            && !s.IsDefaultEnabled
+            && s.Activation == AgenticSkillActivation.Skill);
         Assert.DoesNotContain(AgenticCatalogSeed.Skills, s => s.Id == "ops-triage-evidence-first");
         Assert.DoesNotContain(AgenticCatalogSeed.Skills, s => s.Id == "zuora-graphql-discover-first");
+
+        var defaultOnGuards = AgenticCatalogSeed.Guardrails.Where(g => g.IsDefaultEnabled).Select(g => g.Id).ToHashSet();
+        Assert.Equal(
+            new HashSet<string>
+            {
+                "tool-surface-hidden",
+                "thinking-leak",
+                "prompt-injection",
+                "sensitive-pii",
+                "inappropriate-content",
+                "offensive-language",
+                "block-credential-leak",
+                "pre-tool-deny-rm-rf",
+                "post-tool-redact-secrets",
+                "sandbox-claim-reject"
+            },
+            defaultOnGuards);
+
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
-            g.Id == "json-format-validator" && !g.IsDefaultEnabled);
+            g.Id == "url-fetch-required" && !g.IsDefaultEnabled);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
-            g.Id == "openapi-response-validator" && !g.IsDefaultEnabled);
+            g.Id == "fact-check" && !g.IsDefaultEnabled);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
-            g.Id == "url-availability" && !g.IsDefaultEnabled);
-        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
-            g.Id == "translation-accuracy" && !g.IsDefaultEnabled);
-        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
-            g.Id == "relevance" && !g.IsDefaultEnabled);
-        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
-            g.Id == "response-quality" && !g.IsDefaultEnabled);
+            g.Id == "source-context-verifier" && !g.IsDefaultEnabled);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
             g.Id == "numeric-grounding"
             && g.Kind == AgenticGuardrailKinds.NumericGrounding
             && !g.IsDefaultEnabled);
         Assert.DoesNotContain(AgenticCatalogSeed.Guardrails, g =>
             g.Id == "live-data-evidence-required");
-        Assert.Contains(AgenticCatalogSeed.Skills, s =>
-            s.Id == "rule-always-evidence" && s.Activation == AgenticSkillActivation.AlwaysOn);
-        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
-            g.Id == "url-fetch-required" && g.Kind == AgenticGuardrailKinds.UrlFetch);
-        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
-            g.Id == "source-context-verifier" && g.Kind == AgenticGuardrailKinds.SourceContext);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
             g.Id == "thinking-leak" && g.Kind == AgenticGuardrailKinds.ThinkingLeak);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
             g.Id == "tool-surface-hidden" && g.Kind == AgenticGuardrailKinds.ToolSurfaceHidden);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
             g.Id == "prompt-injection" && g.Kind == AgenticGuardrailKinds.PromptInjection);
-        Assert.Contains(AgenticCatalogSeed.Guardrails, g =>
-            g.Id == "fact-check" && g.Kind == AgenticGuardrailKinds.FactCheck);
         Assert.Contains(AgenticCatalogSeed.Guardrails, g => g.Kind == AgenticGuardrailKinds.PostToolUse);
     }
 
@@ -86,17 +107,21 @@ public sealed class AgenticPolicyPackResolverTests
             }
         });
 
-        Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "anti-hallucination-web");
+        Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "tool-calling-discipline");
         Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "sandbox-facts-selfhosted");
-        Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "strict-no-speculation");
         Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "prefer-mcp-over-adhoc");
+        Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "privacy-and-secrets");
+        Assert.DoesNotContain(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "strict-no-speculation");
+        Assert.DoesNotContain(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "wiki-first-for-docs");
+        Assert.DoesNotContain(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "anti-hallucination-web");
         Assert.DoesNotContain(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "zuora-graphql-discover-first");
         Assert.DoesNotContain(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "ops-triage-evidence-first");
-        Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.UrlFetch));
+        Assert.False(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.UrlFetch));
+        Assert.False(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.FactCheck));
         Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.SandboxClaim));
         Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.ToolSurfaceHidden));
         Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.PromptInjection));
-        Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.FactCheck));
+        Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.ThinkingLeak));
     }
 
     [Fact]
@@ -148,9 +173,11 @@ public sealed class AgenticPolicyPackResolverTests
             }
         });
 
-        Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "anti-hallucination-web");
+        Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "tool-calling-discipline");
         Assert.Contains(resolved.ResolvedPolicy.ActiveSkills, s => s.Id == "tenant-only-skill");
-        Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.UrlFetch));
+        Assert.False(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.UrlFetch));
+        Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.ToolSurfaceHidden));
+        Assert.True(resolved.ResolvedPolicy.HasKind(AgenticGuardrailKinds.PromptInjection));
     }
 
     [Fact]
