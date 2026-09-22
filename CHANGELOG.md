@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.0-beta](https://github.com/Kortexio/ContextMemory/compare/v0.1.0-beta...v0.2.0-beta) (2026-09-22)
+
+
+### Features
+
+* **agentic:** raise wiki call budget to 5 distinct queries ([f433fb8](https://github.com/Kortexio/ContextMemory/commit/f433fb810cb376c1aa53ee8d88839df4d37c1edb))
+
+
+### Bug Fixes
+
+* **agentic:** distinguish wiki budget controls from failures ([0b0a015](https://github.com/Kortexio/ContextMemory/commit/0b0a0157d1ee8f555d2e517aef9893b633391c08))
+* **agentic:** reject repeated response sections ([c5d50f6](https://github.com/Kortexio/ContextMemory/commit/c5d50f6786fba343793fd1cffc8ddfe0bb7086c2))
+* **mcp:** NDJSON framing for azure-monitor-mcp ([0e6163a](https://github.com/Kortexio/ContextMemory/commit/0e6163ae8880e3ef27b7d8f26a73374c959fed55))
+* **mcp:** speak NDJSON in azure-monitor-mcp for mcp-runtime ([4d0cc3f](https://github.com/Kortexio/ContextMemory/commit/4d0cc3f1fee9541a87b72f812bd54f7e124e6c76))
+* **migrations:** cast ConfigJson updates to jsonb. ([48f0678](https://github.com/Kortexio/ContextMemory/commit/48f0678c1f10b97b6acb004c0e36d76e24480411))
+* prevent ArgumentOutOfRange on agentic string truncation ([62ee36a](https://github.com/Kortexio/ContextMemory/commit/62ee36aae77eb83a3c557ce63dc066b225cd3fa6))
+* prevent ArgumentOutOfRange on agentic string truncation. ([90c80bc](https://github.com/Kortexio/ContextMemory/commit/90c80bcf1f5ea202c2b4e22b5b9430c7a96708a9))
+
 ## [0.1.0-beta](https://github.com/Kortexio/ContextMemory/compare/v0.0.1-beta...v0.1.0-beta) (2026-08-15)
 
 
