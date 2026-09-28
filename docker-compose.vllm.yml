@@ -1,0 +1,56 @@
+# Override: run vLLM next to the gateway — requires an NVIDIA GPU + nvidia-container-toolkit.
+# Usage:  docker compose -f docker-compose.yml -f docker-compose.vllm.yml up --build
+#
+# Weights are downloaded from Hugging Face on first start and cached in the vllm_cache volume.
+# Gated models need HF_TOKEN. Tool calling needs --enable-auto-tool-choice + a parser that
+# matches the model family (hermes for Qwen2.5/Qwen3, llama3_json for Llama 3.x, mistral for Mistral).
+
+services:
+  vllm:
+    image: ${VLLM_IMAGE:-vllm/vllm-openai:latest}
+    container_name: contextmemory-vllm
+    restart: unless-stopped
+    ipc: host
+    command:
+      - --model
+      - ${VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      - --served-model-name
+      - ${DEFAULT_LLM_MODEL:-local-model}
+      - --max-model-len
+      - "${VLLM_MAX_MODEL_LEN:-16384}"
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - ${VLLM_TOOL_CALL_PARSER:-hermes}
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - vllm_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - cm-net
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 60
+      start_period: 120s
+
+  api:
+    environment:
+      ContextMemory__LlmEndpoint: http://vllm:8000
+      ContextMemory__DefaultLlmModel: ${DEFAULT_LLM_MODEL:-local-model}
+      ContextMemory__Apps__demo-dev__LlmBackend: vllm
+      ContextMemory__Apps__demo-dev__LlmEndpoint: http://vllm:8000
+      ContextMemory__Apps__demo-dev__LlmModel: ${DEFAULT_LLM_MODEL:-local-model}
+    depends_on:
+      vllm:
+        condition: service_healthy
+
+volumes:
+  vllm_cache:

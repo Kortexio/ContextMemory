@@ -1,6 +1,7 @@
 # One-command local stack: API (:5100) + Admin (:5200) + MCP runtime + code sandbox
 # Usage:  docker compose up --build
-# Requires Ollama on the host (default http://host.docker.internal:11434)
+# LLM engine: add -f docker-compose.llamacpp.yml (CPU) or -f docker-compose.vllm.yml (GPU),
+# or point LLM_ENDPOINT at any OpenAI-compatible /v1 server. Falls back to Ollama on the host.
 #
 # mcp-runtime  = hosts MCP stdio servers (e.g. zuora-mcp)
 # sandbox-runtime = runs shell/python/node via POST /execute (self-hosted-sandbox)
