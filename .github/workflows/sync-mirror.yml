@@ -1,5 +1,8 @@
 name: Sync mirror
 
+# One-way backup: Kortexio/ContextMemory (source of truth) -> vitorcastro78/ContextMemory.
+# PEER_SYNC_TOKEN must be a PAT with Contents: write on the backup repository.
+
 on:
   push:
   workflow_dispatch:
@@ -9,26 +12,12 @@ permissions:
 
 jobs:
   sync:
+    if: github.repository == 'Kortexio/ContextMemory'
     runs-on: ubuntu-latest
+    env:
+      PEER_REPO: vitorcastro78/ContextMemory
     steps:
-      - name: Resolve peer repository
-        id: peer
-        run: |
-          case "${{ github.repository }}" in
-            Kortexio/ContextMemory)
-              echo "peer=vitorcastro78/ContextMemory" >> "$GITHUB_OUTPUT"
-              ;;
-            vitorcastro78/ContextMemory)
-              echo "peer=Kortexio/ContextMemory" >> "$GITHUB_OUTPUT"
-              ;;
-            *)
-              echo "Unknown repository ${{ github.repository }}; skipping."
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-              ;;
-          esac
-
       - name: Checkout
-        if: steps.peer.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -36,11 +25,9 @@ jobs:
           # any PAT embedded in a remote URL and causes 403 as the source org/bot.
           persist-credentials: false
 
-      - name: Mirror to peer
-        if: steps.peer.outputs.skip != 'true'
+      - name: Mirror to backup
         env:
           PEER_TOKEN: ${{ secrets.PEER_SYNC_TOKEN }}
-          PEER_REPO: ${{ steps.peer.outputs.peer }}
         run: |
           set -euo pipefail
           if [ -z "${PEER_TOKEN:-}" ]; then
@@ -48,17 +35,19 @@ jobs:
             exit 0
           fi
 
-          # Show which account the secret authenticates as (no token leakage).
-          TOKEN_USER="$(curl -sS -H "Authorization: Bearer ${PEER_TOKEN}" \
+          STATUS="$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${PEER_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
-            https://api.github.com/user | jq -r '.login // empty')"
-          echo "PEER_SYNC_TOKEN identity: ${TOKEN_USER:-unknown-or-not-a-user-token}"
+            "https://api.github.com/repos/${PEER_REPO}")"
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::PEER_SYNC_TOKEN cannot access ${PEER_REPO} (HTTP ${STATUS}). Rotate the secret: fine-grained PAT, Contents: write on ${PEER_REPO}."
+            exit 1
+          fi
 
           # Strip any leftover Authorization headers from checkout / runner config.
           git config --local --unset-all "http.https://github.com/.extraheader" || true
           git config --local --unset-all http.extraheader || true
 
-          # Prefer Authorization header with PEER_TOKEN over URL-embedded creds.
           BASIC="$(printf 'x-access-token:%s' "${PEER_TOKEN}" | base64 -w 0)"
           git config --local "http.https://github.com/.extraheader" "AUTHORIZATION: basic ${BASIC}"
 

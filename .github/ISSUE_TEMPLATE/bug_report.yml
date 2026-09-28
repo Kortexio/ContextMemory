@@ -1,0 +1,59 @@
+name: Bug report
+description: Something in the gateway, Admin, or MCP server does not work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead. Do not paste API keys or private conversation content.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. docker compose -f docker-compose.yml -f docker-compose.llamacpp.yml up --build
+        2. ./scripts/aha-chat.sh
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: LLM engine
+      options:
+        - llama.cpp
+        - vLLM
+        - Ollama
+        - LM Studio
+        - OpenAI / Azure-compatible
+        - Other OpenAI-compatible
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: e.g. Qwen2.5-7B-Instruct Q4_K_M
+  - type: dropdown
+    id: deploy
+    attributes:
+      label: Deployment
+      options:
+        - Docker Compose (this repo)
+        - GHCR image
+        - dotnet run
+        - Kortexio Cloud
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: v0.2.0-beta or commit SHA
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Gateway logs around the failure (redact keys and message content).
+      render: text
