@@ -1,7 +1,7 @@
 name: content-cadence
 
-# Suggests a short social hook (manual approve via issue).
-# Does not auto-publish to social — safer for brand voice.
+# Suggests a short social hook in the run summary (Actions tab).
+# Does not auto-publish to social and does not open issues — the public tracker is for users.
 
 on:
   schedule:
@@ -9,16 +9,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  issues: write
   contents: read
 
 jobs:
   suggest:
+    if: github.repository == 'Kortexio/ContextMemory'
     runs-on: ubuntu-latest
     steps:
-      - name: Open hook suggestion issue
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Write hook suggestion to the run summary
         run: |
           HOOKS=(
             "Your coding agent forgets staging DB names. Fix that in five minutes."
@@ -31,16 +29,8 @@ jobs:
             "Admin Playground: watch tool steps and HITL without a client."
           )
           HOOK="${HOOKS[$RANDOM % ${#HOOKS[@]}]}"
-          BODY=$(printf '%s\n\n%s\n\n%s\n' \
+          printf '%s\n\n%s\n\n%s\n' \
             "## Suggested post" \
             "$HOOK" \
-            "Copy to LinkedIn/dev.to after editing. Do **not** call this RAG. CTA: https://github.com/Kortexio/ContextMemory")
-          gh issue create \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Content cadence: social hook suggestion" \
-            --label "content-hook" \
-            --body "$BODY" || \
-          gh issue create \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Content cadence: social hook suggestion" \
-            --body "$BODY"
+            "Copy to LinkedIn/dev.to after editing. Do **not** call this RAG. CTA: https://github.com/Kortexio/ContextMemory" \
+            >> "$GITHUB_STEP_SUMMARY"

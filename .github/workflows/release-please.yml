@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   release-please:
+    if: github.repository == 'Kortexio/ContextMemory'
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -21,3 +22,5 @@ jobs:
         id: release
         with:
           release-type: simple
+          # GITHUB_TOKEN cannot open PRs unless the org allows it (Settings > Actions > General).
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}

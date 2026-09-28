@@ -1,0 +1,47 @@
+name: Engine / model compatibility report
+description: Tell us how a specific engine + model behaves behind ContextMemory (works, partially works, or fails).
+labels: [engine-compat]
+body:
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Engine
+      options:
+        - llama.cpp
+        - vLLM
+        - Ollama
+        - LM Studio
+        - SGLang
+        - TGI
+        - Other OpenAI-compatible
+    validations:
+      required: true
+  - type: input
+    id: engine_flags
+    attributes:
+      label: Engine version and flags
+      placeholder: "llama-server b6xxx --jinja --ctx-size 8192"
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model and quantization
+      placeholder: Qwen2.5-7B-Instruct Q4_K_M
+    validations:
+      required: true
+  - type: checkboxes
+    id: results
+    attributes:
+      label: What works
+      options:
+        - label: scripts/aha-chat.sh passes (session memory)
+        - label: Streaming responses
+        - label: Agentic mode with wiki_search
+        - label: Agentic mode with MCP tools
+        - label: Sandbox tools (shell / python / node)
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Failures, loops, malformed tool calls, context overflows — anything we should add to the engine docs.
