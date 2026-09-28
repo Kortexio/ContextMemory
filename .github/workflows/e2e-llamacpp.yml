@@ -1,0 +1,105 @@
+name: e2e-llamacpp
+
+# End-to-end memory check against a real llama.cpp server (CPU, small GGUF):
+# gateway image built from this commit + llama-server + scripts/aha-chat.sh.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "src/ContextMemory.Api/**"
+      - "src/ContextMemory.Adapters/**"
+      - "src/ContextMemory.Core/**"
+      - "src/ContextMemory.Infrastructure/**"
+      - "Dockerfile"
+      - "scripts/aha-chat.sh"
+      - ".github/workflows/e2e-llamacpp.yml"
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+    inputs:
+      hf_model:
+        description: "GGUF to test (<hf-repo>:<quant>)"
+        required: false
+        default: "bartowski/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-llamacpp-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HF_MODEL: ${{ inputs.hf_model || 'bartowski/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M' }}
+  MODELS_DIR: ${{ github.workspace }}/.llama-models
+
+jobs:
+  aha:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache GGUF
+        uses: actions/cache@v4
+        with:
+          path: .llama-models
+          key: llama-gguf-${{ env.HF_MODEL }}
+
+      - name: Start llama-server
+        run: |
+          mkdir -p "$MODELS_DIR" && chmod 777 "$MODELS_DIR"
+          docker network create cm-e2e
+          docker run -d --name llama-server --network cm-e2e -p 8081:8080 \
+            -v "$MODELS_DIR:/models" -e LLAMA_CACHE=/models \
+            ghcr.io/ggml-org/llama.cpp:server \
+            --host 0.0.0.0 --port 8080 --jinja --ctx-size 8192 -hf "$HF_MODEL"
+
+      - name: Build gateway image
+        run: docker build -t contextmemory-e2e -f Dockerfile .
+
+      - name: Wait for llama-server
+        run: |
+          for i in $(seq 1 120); do
+            if curl -fsS http://localhost:8081/health >/dev/null 2>&1; then echo "llama-server ready"; exit 0; fi
+            sleep 5
+          done
+          docker logs llama-server | tail -n 50
+          exit 1
+
+      - name: Start gateway
+        run: |
+          docker run -d --name cm-api --network cm-e2e -p 5100:8080 \
+            -e ContextMemory__PersistenceProvider=File \
+            -e ContextMemory__DataPath=/app/data \
+            -e ContextMemory__MasterKey=cm_master_e2e \
+            -e ContextMemory__LlmEndpoint=http://llama-server:8080 \
+            -e ContextMemory__DefaultLlmModel=local-model \
+            -e ContextMemory__Apps__demo-dev__ApiKey=cm_live_e2e \
+            -e ContextMemory__Apps__demo-dev__LlmBackend=openai-compatible \
+            -e ContextMemory__Apps__demo-dev__LlmEndpoint=http://llama-server:8080 \
+            -e ContextMemory__Apps__demo-dev__LlmModel=local-model \
+            contextmemory-e2e
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:5100/health >/dev/null 2>&1; then echo "gateway ready"; exit 0; fi
+            sleep 3
+          done
+          docker logs cm-api | tail -n 80
+          exit 1
+
+      - name: Run chat aha
+        env:
+          CONTEXTMEMORY_BASE_URL: http://localhost:5100
+          CONTEXTMEMORY_API_KEY: cm_live_e2e
+          CONTEXTMEMORY_APP_ID: demo-dev
+          CONTEXTMEMORY_MODEL: local-model
+          CONTEXTMEMORY_TIMEOUT: "600"
+        run: bash scripts/aha-chat.sh
+
+      - name: Container logs
+        if: failure()
+        run: |
+          echo "::group::cm-api"; docker logs cm-api 2>&1 | tail -n 200; echo "::endgroup::"
+          echo "::group::llama-server"; docker logs llama-server 2>&1 | tail -n 100; echo "::endgroup::"
