@@ -1,0 +1,32 @@
+name: pr-title
+
+# release-please only counts Conventional Commits (feat:, fix:, docs:, chore:, ...).
+# PRs are squash-merged with the PR title, so the title is what lands on main.
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  conventional:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
