@@ -1,0 +1,50 @@
+# Override: run llama.cpp (llama-server) next to the gateway — CPU, no host LLM required.
+# Usage:  docker compose -f docker-compose.yml -f docker-compose.llamacpp.yml up --build
+#
+# The model is pulled from Hugging Face on first start and cached in the llama_models volume.
+# Pick another GGUF with LLAMACPP_HF_MODEL=<repo>:<quant> (see docs/self-host.md#engines).
+# GPU build: set LLAMACPP_IMAGE=ghcr.io/ggml-org/llama.cpp:server-cuda and add a device reservation.
+
+services:
+  llama-server:
+    image: ${LLAMACPP_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}
+    container_name: contextmemory-llama-server
+    restart: unless-stopped
+    # --jinja is required for OpenAI-style tool calling (agentic mode).
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --jinja
+      - --ctx-size
+      - "${LLAMACPP_CTX_SIZE:-8192}"
+      - -hf
+      - ${LLAMACPP_HF_MODEL:-bartowski/Qwen2.5-3B-Instruct-GGUF:Q4_K_M}
+    environment:
+      LLAMA_CACHE: /models
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - llama_models:/models
+    networks:
+      - cm-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 60s
+
+  api:
+    environment:
+      ContextMemory__LlmEndpoint: http://llama-server:8080
+      ContextMemory__DefaultLlmModel: ${DEFAULT_LLM_MODEL:-local-model}
+      ContextMemory__Apps__demo-dev__LlmBackend: openai-compatible
+      ContextMemory__Apps__demo-dev__LlmEndpoint: http://llama-server:8080
+      ContextMemory__Apps__demo-dev__LlmModel: ${DEFAULT_LLM_MODEL:-local-model}
+    depends_on:
+      llama-server:
+        condition: service_healthy
+
+volumes:
+  llama_models:

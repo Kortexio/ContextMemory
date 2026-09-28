@@ -4,7 +4,27 @@
 
 Run the open-source gateway yourself — the path for **on-prem or fully local** deployments. Unlike Cloud (where the dashboard wires up your LLM for you), here **you point the gateway at your own LLM backend** — endpoint and model — in config. Same OpenAI-compatible chat body and `choices[]` response as Cloud; you supply the `X-App-Id` and use a `cm_live_` key.
 
-### Fastest: one-liner from GHCR (API)
+### Fastest: gateway + bundled engine (Compose)
+
+```bash
+git clone https://github.com/Kortexio/ContextMemory.git && cd ContextMemory
+
+# CPU, no GPU needed — llama.cpp pulls a small GGUF on first start
+docker compose -f docker-compose.yml -f docker-compose.llamacpp.yml up --build
+
+# or NVIDIA GPU — vLLM
+docker compose -f docker-compose.yml -f docker-compose.vllm.yml up --build
+```
+
+Then prove memory works (the second request carries only the new question):
+
+```bash
+./scripts/aha-chat.sh        # Windows: .\scripts\aha-chat.ps1
+```
+
+Engine flags, model choice, and gotchas: [Engines](#engines).
+
+### One-liner from GHCR (API only)
 
 Public images (published on every push to `main`):
 
@@ -67,7 +87,7 @@ Or the helper scripts:
 
 ### Build from source: Docker Compose
 
-Builds and starts the **API** (`:5100`), **Admin** (`:5200`), **mcp-runtime** (stdio MCP host), and **sandbox-runtime** (shell/python/node) locally. Requires [Docker](https://docs.docker.com/get-docker/) and an LLM reachable from the containers (Compose DX default = Ollama on the host; point `LLM_ENDPOINT` / `OPENAI_ENDPOINT` at any `/v1` engine instead).
+Builds and starts the **API** (`:5100`), **Admin** (`:5200`), **mcp-runtime** (stdio MCP host), and **sandbox-runtime** (shell/python/node) locally. Requires [Docker](https://docs.docker.com/get-docker/) and an LLM: add a bundled engine override (see [Fastest](#fastest-gateway--bundled-engine-compose)), point `LLM_ENDPOINT` at any `/v1` engine, or fall back to Ollama on the host.
 
 ```bash
 git clone https://github.com/Kortexio/ContextMemory.git
@@ -96,13 +116,12 @@ Ops triage (Azure Monitor / GitHub): see [inbound-mcp-guide.md](inbound-mcp-guid
 
 For a Postgres-backed network overlay (shared Docker network, extra tenants), see `docker-compose.network.yml`.
 
-**LLM on the host**
+**LLM engine**
 
 ```bash
-# Example: Ollama DX default
-ollama pull qwen3.5:9b
-# Compose: OLLAMA_ENDPOINT=http://host.docker.internal:11434
-# Or any /v1 engine: LLM_ENDPOINT=http://host.docker.internal:8000 + Admin backend openai-compatible
+# Bundled: add -f docker-compose.llamacpp.yml (CPU) or -f docker-compose.vllm.yml (GPU)
+# Engine on the host: LLM_ENDPOINT=http://host.docker.internal:8080 + Admin backend openai-compatible
+# Ollama on the host (fallback when LLM_ENDPOINT is empty): ollama pull qwen3.5:9b
 ```
 
 **Useful Compose env vars** (see [`.env.example`](../.env.example)):
@@ -130,6 +149,45 @@ curl -X POST http://localhost:5100/v1/chat/completions \
   -H "Authorization: Bearer cm_live_dev_key_change_me" \
   -d '{"model":"qwen3.5:9b","messages":[{"role":"user","content":"Hello"}]}'
 ```
+
+## Engines
+
+The gateway speaks OpenAI-compatible `/v1/chat/completions` to the engine. Any server that implements it works; these are the ones we test and document. Set the app backend to `openai-compatible` (or `vllm`) and the endpoint to the engine base URL — `/v1` is appended automatically.
+
+| Engine | Compose override | Required flags | Notes |
+|---|---|---|---|
+| **llama.cpp** (`llama-server`) | `docker-compose.llamacpp.yml` | `--jinja` | Without `--jinja`, tool calls come back as plain text and agentic mode degrades. Set `--ctx-size` ≥ 8192 for agentic use. Model name in the request is ignored. |
+| **vLLM** | `docker-compose.vllm.yml` | `--enable-auto-tool-choice --tool-call-parser <family>` | Parser must match the model: `hermes` (Qwen2.5 / Qwen3), `llama3_json` (Llama 3.x), `mistral` (Mistral). `--served-model-name` must equal the app `llmModel`. |
+| **Ollama** | _(host, default fallback)_ | — | Ollama `/v1` ignores `num_ctx`; when you set `llmOptions.numCtx` the gateway switches to native `/api/chat`. |
+| LM Studio, SGLang, TGI, LiteLLM, OpenAI, Azure-compatible | — | tool calling enabled on the server | Point `LLM_ENDPOINT` (host default) or the app `llmEndpoint` at the server. |
+
+**Choosing a model**
+
+| Use | Minimum that works | Recommended |
+|---|---|---|
+| Session memory only (agentic off — the default) | 1.5B instruct (CI runs `Qwen2.5-1.5B-Instruct Q4_K_M`) | 3B–8B instruct |
+| Agentic mode (wiki_search, MCP, sandbox) | 7B–9B instruct with native tool calling | 14B+ or a hosted model |
+
+Small models need the hardening preset in [small-model-guide.md](small-model-guide.md). Found an engine/model combination that works (or does not)? Open an **Engine / model compatibility report** issue.
+
+**Changing the llama.cpp model**
+
+```bash
+LLAMACPP_HF_MODEL=bartowski/Qwen2.5-7B-Instruct-GGUF:Q4_K_M \
+  docker compose -f docker-compose.yml -f docker-compose.llamacpp.yml up
+```
+
+**Engine already running elsewhere** (host, another box, a GPU server):
+
+```bash
+LLM_ENDPOINT=http://gpu-box.lan:8000 docker compose up --build
+```
+
+Then in **Admin → Config → LLM** set backend `openai-compatible` and the model name the engine expects.
+
+The end-to-end check in CI ([`e2e-llamacpp`](../.github/workflows/e2e-llamacpp.yml)) builds the gateway, starts `llama-server`, and runs `scripts/aha-chat.sh` on every push to `main` and nightly.
+
+## Run from source (dotnet run)
 
 ### Prerequisites (dotnet run)
 
