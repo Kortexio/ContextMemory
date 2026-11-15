@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0-beta](https://github.com/Kortexio/ContextMemory/compare/v0.2.0-beta...v0.3.0-beta) (2026-11-15)
+
+
+### Features
+
+* pluggable tool descriptors by capability, not wire-name lists ([1502a49](https://github.com/Kortexio/ContextMemory/commit/1502a4993b7b5064e0161715e042dd2d8e94450e))
+
 ## [0.2.0-beta](https://github.com/Kortexio/ContextMemory/compare/v0.1.0-beta...v0.2.0-beta) (2026-09-28)
 
 
