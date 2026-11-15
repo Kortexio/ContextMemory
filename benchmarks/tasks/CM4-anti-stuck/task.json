@@ -1,0 +1,43 @@
+{
+  "id": "CM4-anti-stuck",
+  "title": "Anti-stuck — pivot after noisy first wiki hit",
+  "prompt": "Find the staging database host in the wiki. The first wiki lookup in this environment is intentionally noisy/empty — you MUST change the query (or switch wiki_search ↔ wiki_grep) and try again. Never repeat the exact same tool call. When you have the hostname, answer with that hostname only.",
+  "expectBaselineFail": true,
+  "adversarialWire": "client-side-no-recovery",
+  "stickyWiki": true,
+  "fixtures": [
+    "fixtures/wiki/staging-host.md"
+  ],
+  "hiddenChecks": {
+    "facts": {
+      "mustContain": ["postgres-staging-01"]
+    },
+    "tools": {
+      "requiredAny": ["wiki_search", "wiki_grep"],
+      "maxIdenticalCalls": 2,
+      "stuckIfIdenticalAbove": 2,
+      "forbiddenFinishWithoutTools": true,
+      "requirePivot": true
+    }
+  },
+  "baselineProbe": {
+    "answer": "postgres-staging-01",
+    "steps": [
+      { "tool": "wiki_search", "args": "{\"query\":\"staging\"}", "success": true },
+      { "tool": "wiki_search", "args": "{\"query\":\"staging\"}", "success": true },
+      { "tool": "wiki_search", "args": "{\"query\":\"staging\"}", "success": true }
+    ],
+    "mustFail": true,
+    "reason": "identical wiki_search ×3 must mark stuck"
+  },
+  "scoring": {
+    "weights": {
+      "evidence": 30,
+      "tool": 20,
+      "protocol": 35,
+      "honesty": 15
+    },
+    "notes": "BenchStickyWikiGate: first distinct wiki query returns noise; a different query unlocks real docs. Off often invents or repeats; On should pivot (duplicate guard + loop detector)."
+  },
+  "failureClasses": ["A-harness", "B-protocol"]
+}

@@ -1,0 +1,526 @@
+using System.Text.Json.Serialization;
+using ContextMemory.Core.Models;
+
+namespace ContextMemory.Core.Agentic;
+
+public record AgenticConfig
+{
+    public static AgenticConfig Disabled { get; } = new();
+
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; init; }
+
+    [JsonPropertyName("tools")]
+    public AgenticToolsConfig Tools { get; init; } = new();
+
+    [JsonPropertyName("guardrails")]
+    public AgenticGuardrailsConfig Guardrails { get; init; } = new();
+
+    [JsonPropertyName("promptProfile")]
+    public string PromptProfile { get; init; } = "auto";
+
+    /// <summary>
+    /// Harness intensity: <c>auto</c> | <c>off</c> | <c>weak</c> | <c>strong</c>.
+    /// Off = no family recovery / arg repair / finish gate / Continue (A/B baseline).
+    /// Weak = aggressive repair + inline evidence; Strong = native tools + lazy skills.
+    /// </summary>
+    [JsonPropertyName("harnessMode")]
+    public string HarnessMode { get; init; } = "auto";
+
+    [JsonPropertyName("policyPacks")]
+    public PolicyPacksConfig PolicyPacks { get; init; } = new();
+
+    public bool HasExecutionTools => Tools.Execution.Count > 0;
+
+    public bool HasIntegrationTools => Tools.Integrations.Count > 0;
+
+    public bool HasHttpTools => Tools.Http.Enabled;
+
+    public bool HasVisionTools => Tools.Vision.Enabled;
+
+    public bool HasBrowserTools => Tools.Browser.Enabled;
+
+    public bool HasDocumentTools => Tools.Documents.Enabled;
+
+    public bool HasCanvasTools => Tools.Canvas.Enabled;
+
+    public bool HasAnyTools =>
+        HasExecutionTools
+        || HasIntegrationTools
+        || HasHttpTools
+        || HasVisionTools
+        || HasBrowserTools
+        || HasDocumentTools
+        || HasCanvasTools;
+
+    /// <summary>
+    /// Effective max iterations when no runtime config is available for profile resolution.
+    /// Prefer <see cref="Prompts.LlmCapabilitiesResolver.ResolveMaxIterations"/> in the agent loop.
+    /// </summary>
+    public int MaxIterations =>
+        Guardrails.MaxIterations > 0 ? Guardrails.MaxIterations : 15;
+}
+
+public record AgenticToolsConfig
+{
+    [JsonPropertyName("execution")]
+    public List<ExecutionToolConfig> Execution { get; init; } = [];
+
+    [JsonPropertyName("integrations")]
+    public List<IntegrationToolConfig> Integrations { get; init; } = [];
+
+    /// <summary>
+    /// Top-K MCP tools offered to the model each turn. Effective value is clamped to
+    /// <c>LlmCapabilitiesResolver.AbsoluteMaxMcpToolsPerTurn</c> (12) at resolve time.
+    /// </summary>
+    [JsonPropertyName("maxMcpToolsPerTurn")]
+    public int MaxMcpToolsPerTurn { get; init; } = 12;
+
+    /// <summary>
+    /// Locale → English token map for MCP tool lexical selection (Admin-owned).
+    /// Example: <c>"subscrição": "subscription create"</c>. Empty ⇒ no expansion.
+    /// </summary>
+    [JsonPropertyName("queryLexicon")]
+    public Dictionary<string, string> QueryLexicon { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Per-tool-suffix argument rewrites (Admin-owned). Key e.g. <c>query_objects</c>.
+    /// </summary>
+    [JsonPropertyName("argumentNormalizers")]
+    public Dictionary<string, McpArgumentNormalizerConfig> ArgumentNormalizers { get; init; }
+        = new(StringComparer.OrdinalIgnoreCase);
+
+    [JsonPropertyName("http")]
+    public AgenticHttpToolsConfig Http { get; init; } = new();
+
+    [JsonPropertyName("vision")]
+    public AgenticVisionToolsConfig Vision { get; init; } = new();
+
+    [JsonPropertyName("browser")]
+    public AgenticBrowserToolsConfig Browser { get; init; } = new();
+
+    [JsonPropertyName("documents")]
+    public AgenticDocumentsToolsConfig Documents { get; init; } = new();
+
+    [JsonPropertyName("canvas")]
+    public AgenticCanvasToolsConfig Canvas { get; init; } = new();
+}
+
+/// <summary>Admin config for rewriting hallucinated MCP tool argument shapes.</summary>
+public record McpArgumentNormalizerConfig
+{
+    /// <summary>Alias → canonical property (e.g. <c>object_type</c> → <c>objectType</c>).</summary>
+    [JsonPropertyName("aliases")]
+    public Dictionary<string, string> Aliases { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Leftover alias keys to drop after rename when the canonical key already exists.</summary>
+    [JsonPropertyName("dropKeys")]
+    public List<string> DropKeys { get; init; } = [];
+
+    [JsonPropertyName("lowercaseObjectType")]
+    public bool LowercaseObjectType { get; init; } = true;
+
+    [JsonPropertyName("maxPageSize")]
+    public int MaxPageSize { get; init; } = 99;
+}
+
+/// <summary>Built-in HTTP tools: fetch_url, http_request, web_search.</summary>
+public record AgenticHttpToolsConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; init; }
+
+    /// <summary>Fail-closed: when enabled with an empty list, all hosts are blocked.</summary>
+    [JsonPropertyName("allowedHosts")]
+    public List<string> AllowedHosts { get; init; } = [];
+
+    [JsonPropertyName("timeoutSeconds")]
+    public int TimeoutSeconds { get; init; } = 30;
+
+    [JsonPropertyName("maxResponseChars")]
+    public int MaxResponseChars { get; init; } = 50_000;
+
+    [JsonPropertyName("allowHttpRequest")]
+    public bool AllowHttpRequest { get; init; } = true;
+
+    [JsonPropertyName("allowWebSearchTool")]
+    public bool AllowWebSearchTool { get; init; } = true;
+}
+
+/// <summary>Vision tools are listed only when the model SupportsVision as well.</summary>
+public record AgenticVisionToolsConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; init; }
+
+    /// <summary>Force-enable vision tools even if model-name heuristics say no.</summary>
+    [JsonPropertyName("forceEnable")]
+    public bool ForceEnable { get; init; }
+
+    [JsonPropertyName("allowedHosts")]
+    public List<string> AllowedHosts { get; init; } = [];
+}
+
+public record AgenticBrowserToolsConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; init; }
+
+    [JsonPropertyName("allowedHosts")]
+    public List<string> AllowedHosts { get; init; } = [];
+
+    [JsonPropertyName("headless")]
+    public bool Headless { get; init; } = true;
+
+    [JsonPropertyName("timeoutSeconds")]
+    public int TimeoutSeconds { get; init; } = 60;
+
+    /// <summary>Sandbox/self-hosted endpoint that exposes Playwright browser APIs. Empty = first self-hosted-sandbox.</summary>
+    [JsonPropertyName("sandboxEndpoint")]
+    public string? SandboxEndpoint { get; init; }
+}
+
+public record AgenticDocumentsToolsConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; init; }
+
+    [JsonPropertyName("maxBytes")]
+    public int MaxBytes { get; init; } = 10_000_000;
+
+    [JsonPropertyName("persistToWiki")]
+    public bool PersistToWiki { get; init; }
+
+    [JsonPropertyName("maxExtractChars")]
+    public int MaxExtractChars { get; init; } = 100_000;
+}
+
+public record AgenticCanvasToolsConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; init; } = true;
+}
+
+public record ExecutionToolConfig
+{
+    [JsonPropertyName("type")]
+    public string Type { get; init; } = "aca-session";
+
+    [JsonPropertyName("runtime")]
+    public string Runtime { get; init; } = "shell";
+
+    [JsonPropertyName("poolEndpoint")]
+    public string? PoolEndpoint { get; init; }
+
+    [JsonPropertyName("sandboxEndpoint")]
+    public string? SandboxEndpoint { get; init; }
+
+    [JsonPropertyName("allowEgress")]
+    public bool AllowEgress { get; init; }
+
+    [JsonPropertyName("id")]
+    public string? Id { get; init; }
+
+    [JsonPropertyName("containerImage")]
+    public string? ContainerImage { get; init; }
+
+    /// <summary>Optional Admin override for the tool schema description shown to the model.</summary>
+    [JsonPropertyName("description")]
+    public string? Description { get; init; }
+}
+
+public record IntegrationToolConfig
+{
+    [JsonPropertyName("type")]
+    public string Type { get; init; } = "mcp";
+
+    [JsonPropertyName("name")]
+    public string Name { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Transport: <c>http</c> (JSON-RPC over URL) or <c>stdio</c> (spawned process).
+    /// When empty, inferred from <see cref="Command"/> / <see cref="Url"/>.
+    /// </summary>
+    [JsonPropertyName("transport")]
+    public string Transport { get; init; } = string.Empty;
+
+    [JsonPropertyName("url")]
+    public string Url { get; init; } = string.Empty;
+
+    [JsonPropertyName("command")]
+    public string? Command { get; init; }
+
+    [JsonPropertyName("args")]
+    public List<string> Args { get; init; } = [];
+
+    [JsonPropertyName("env")]
+    public Dictionary<string, string>? Env { get; init; }
+
+    [JsonPropertyName("cwd")]
+    public string? WorkingDirectory { get; init; }
+
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; init; } = true;
+
+    [JsonPropertyName("description")]
+    public string? Description { get; init; }
+
+    [JsonPropertyName("serverGroup")]
+    public string? ServerGroup { get; init; }
+
+    [JsonPropertyName("tags")]
+    public List<string> Tags { get; init; } = [];
+
+    [JsonPropertyName("authMode")]
+    public string AuthMode { get; init; } = string.Empty;
+
+    [JsonPropertyName("authToken")]
+    public string? AuthToken { get; init; }
+
+    [JsonPropertyName("credentialRef")]
+    public string? CredentialRef { get; init; }
+
+    [JsonPropertyName("headers")]
+    public Dictionary<string, string>? Headers { get; init; }
+
+    [JsonPropertyName("allowEgress")]
+    public bool AllowEgress { get; init; }
+
+    [JsonPropertyName("toolAllowlist")]
+    public List<string> ToolAllowlist { get; init; } = [];
+
+    [JsonPropertyName("toolDenylist")]
+    public List<string> ToolDenylist { get; init; } = [];
+
+    [JsonPropertyName("capabilities")]
+    public List<string> Capabilities { get; init; } = [];
+
+    [JsonPropertyName("requiresConfirmation")]
+    public List<string> RequiresConfirmation { get; init; } = [];
+
+    [JsonPropertyName("timeoutSeconds")]
+    public int TimeoutSeconds { get; init; }
+
+    [JsonPropertyName("oauth")]
+    public McpOAuthConfig? OAuth { get; init; }
+
+    public bool IsStdioTransport =>
+        string.Equals(Transport, "stdio", StringComparison.OrdinalIgnoreCase)
+        || (string.IsNullOrWhiteSpace(Transport)
+            && !string.IsNullOrWhiteSpace(Command)
+            && string.IsNullOrWhiteSpace(Url));
+
+    public bool IsHttpTransport => !IsStdioTransport;
+
+    public bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(Name)
+        && (IsStdioTransport
+            ? !string.IsNullOrWhiteSpace(Command)
+            : !string.IsNullOrWhiteSpace(Url));
+}
+
+public record McpOAuthConfig
+{
+    [JsonPropertyName("tokenUrl")]
+    public string TokenUrl { get; init; } = string.Empty;
+
+    [JsonPropertyName("clientId")]
+    public string ClientId { get; init; } = string.Empty;
+
+    [JsonPropertyName("clientSecret")]
+    public string ClientSecret { get; init; } = string.Empty;
+
+    [JsonPropertyName("scope")]
+    public string? Scope { get; init; }
+
+    [JsonPropertyName("audience")]
+    public string? Audience { get; init; }
+}
+
+public record AgenticGuardrailsConfig
+{
+    /// <summary>
+    /// Max agentic iterations. <c>0</c> means use the prompt-profile default
+    /// (see <see cref="Prompts.LlmCapabilitiesResolver.ResolveMaxIterations"/>).
+    /// </summary>
+    [JsonPropertyName("maxIterations")]
+    public int MaxIterations { get; init; } = 0;
+
+    [JsonPropertyName("requireConfirmationFor")]
+    public List<string> RequireConfirmationFor { get; init; } = [];
+
+    [JsonPropertyName("networkEgress")]
+    public string NetworkEgress { get; init; } = "restricted";
+
+    [JsonPropertyName("loopTimeoutSeconds")]
+    public int LoopTimeoutSeconds { get; init; }
+
+    [JsonPropertyName("validationMode")]
+    public string ValidationMode { get; init; } = "hybrid";
+
+    [JsonPropertyName("minAnswerLength")]
+    public int MinAnswerLength { get; init; }
+
+    [JsonPropertyName("blockedAnswerPatterns")]
+    public List<string> BlockedAnswerPatterns { get; init; } = [];
+
+    [JsonPropertyName("allowedEgressHosts")]
+    public List<string> AllowedEgressHosts { get; init; } = [];
+
+    [JsonPropertyName("requireZeroExitCode")]
+    public bool RequireZeroExitCode { get; init; } = true;
+
+    [JsonPropertyName("expectedAnswerPatterns")]
+    public List<string> ExpectedAnswerPatterns { get; init; } = [];
+
+    [JsonPropertyName("humanReviewOnMaxIterations")]
+    public bool HumanReviewOnMaxIterations { get; init; } = true;
+
+    /// <summary>Max nesting depth for <c>delegate_task</c> subagents (CM-6a default: 2).</summary>
+    [JsonPropertyName("maxSubagentDepth")]
+    public int MaxSubagentDepth { get; init; } = 2;
+
+    /// <summary>Max concurrent subagents for parallel <c>delegate_task</c> (CM-6a default: 3).</summary>
+    [JsonPropertyName("maxParallelSubagents")]
+    public int MaxParallelSubagents { get; init; } = 3;
+}
+
+public sealed class AgentResult
+{
+    public required string FinalAnswer { get; init; }
+    public IReadOnlyList<AgentExecutionStep> Steps { get; init; } = [];
+    public int Iterations { get; init; }
+    public bool MaxIterationsReached { get; init; }
+    public bool TimedOut { get; init; }
+    public bool Success { get; init; }
+    public bool AwaitingConfirmation { get; init; }
+    public string? PendingConfirmationId { get; init; }
+    public string? PendingKind { get; init; }
+    public DiscoveryTelemetry? Discovery { get; init; }
+    public AgentTrace? Trace { get; init; }
+    public AgentRunState RunState { get; init; } = AgentRunState.Completed;
+
+    public AgentResult WithDiscovery(DiscoveryTelemetry? discovery) =>
+        new()
+        {
+            FinalAnswer = FinalAnswer,
+            Steps = Steps,
+            Iterations = Iterations,
+            MaxIterationsReached = MaxIterationsReached,
+            TimedOut = TimedOut,
+            Success = Success,
+            AwaitingConfirmation = AwaitingConfirmation,
+            PendingConfirmationId = PendingConfirmationId,
+            PendingKind = PendingKind,
+            Discovery = discovery,
+            Trace = Trace,
+            RunState = RunState
+        };
+
+    public AgentResult WithTrace(AgentTrace? trace) =>
+        new()
+        {
+            FinalAnswer = FinalAnswer,
+            Steps = Steps,
+            Iterations = Iterations,
+            MaxIterationsReached = MaxIterationsReached,
+            TimedOut = TimedOut,
+            Success = Success,
+            AwaitingConfirmation = AwaitingConfirmation,
+            PendingConfirmationId = PendingConfirmationId,
+            PendingKind = PendingKind,
+            Discovery = Discovery,
+            Trace = trace,
+            RunState = RunState
+        };
+
+    public static AgentResult Succeeded(string answer, IReadOnlyList<AgentExecutionStep> steps, int iterations) =>
+        new()
+        {
+            FinalAnswer = answer,
+            Steps = steps,
+            Iterations = iterations,
+            Success = true
+        };
+
+    public static AgentResult LimitReached(string bestAnswer, IReadOnlyList<AgentExecutionStep> steps, int iterations) =>
+        new()
+        {
+            FinalAnswer = bestAnswer,
+            Steps = steps,
+            Iterations = iterations,
+            MaxIterationsReached = true,
+            Success = false
+        };
+
+    public static AgentResult TimedOutPartial(string bestAnswer, IReadOnlyList<AgentExecutionStep> steps, int iterations) =>
+        new()
+        {
+            FinalAnswer = bestAnswer,
+            Steps = steps,
+            Iterations = iterations,
+            TimedOut = true,
+            Success = false
+        };
+
+    public static AgentResult Failed(string answer, IReadOnlyList<AgentExecutionStep> steps, int iterations) =>
+        new()
+        {
+            FinalAnswer = answer,
+            Steps = steps,
+            Iterations = iterations,
+            Success = false
+        };
+
+    public static AgentResult AwaitingHumanConfirmation(
+        string message,
+        string pendingId,
+        IReadOnlyList<AgentExecutionStep> steps,
+        int iterations,
+        string? pendingKind = null) =>
+        new()
+        {
+            FinalAnswer = message,
+            Steps = steps,
+            Iterations = iterations,
+            AwaitingConfirmation = true,
+            PendingConfirmationId = pendingId,
+            PendingKind = pendingKind ?? AgenticPendingKinds.Destructive,
+            Success = false
+        };
+}
+
+public sealed class AgentExecutionStep
+{
+    public required int Iteration { get; init; }
+    public required string ToolName { get; init; }
+    public required string Arguments { get; init; }
+    public required string Output { get; init; }
+    public int? ExitCode { get; init; }
+    public bool Success { get; init; }
+    public TimeSpan Duration { get; init; }
+    public string? Summary { get; init; }
+    public Dictionary<string, string>? Entities { get; init; }
+    public bool OutputTruncated { get; init; }
+}
+
+public sealed class ValidationResult
+{
+    public bool IsValid { get; init; }
+    public string? FeedbackForModel { get; init; }
+
+    public static ValidationResult Ok() => new() { IsValid = true };
+
+    public static ValidationResult Reject(string feedback) =>
+        new() { IsValid = false, FeedbackForModel = feedback };
+}
+
+public sealed class ToolExecutionResult
+{
+    public required string Output { get; init; }
+    public int ExitCode { get; init; }
+    public bool Success => ExitCode == 0;
+    public string? Summary { get; init; }
+    public Dictionary<string, string>? Entities { get; init; }
+    public bool OutputTruncated { get; init; }
+}

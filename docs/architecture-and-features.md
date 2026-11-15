@@ -218,6 +218,8 @@ Clients keep sending a normal chat body; they do not implement retrieval or orch
 
 ### Agentic Gateway
 
+The server-side **agentic harness** (CodeForge-style contract: full top-K schemas, universal family recovery, arg repair, evidence finish gate, loop detector / Continue budget) is what makes weaker models finish tool turns reliably on **any** OpenAI-compatible engine; skills, guardrails, and HITL remain the product policy layer. Positioning and adversarial A/B: [README — Agentic harness](../README.md#agentic-harness) · [`benchmarks/`](../benchmarks/).
+
 - **Same endpoint** — preferred `POST /v1/chat/completions` (legacy `POST /api/chat`). Loop runs when `AgenticEnabled` is true: `agentic.enabled && tools` — see [Retrieval + agentic loop](#retrieval--agentic-loop).
 - **Orchestrator** — loop with iteration cap, configurable timeout, mid-turn compaction, and validation before returning the final answer. Built-in `wiki_search` / `wiki_grep` + discovery tools when the loop is active.
 - **Skills & guardrail packs (two levels)** — platform catalog (File or Postgres), seeded on startup, plus optional per-app inventory.
@@ -298,7 +300,7 @@ Discovery telemetry also reports `harness_mode`, `resolved_prompt_profile`, `pro
 
 ### Supported LLM backends
 
-ContextMemory is **engine-agnostic**: it never embeds weights. Point each tenant (or the host defaults) at any OpenAI-compatible `/v1` server — Ollama, vLLM, LM Studio, [ExLlamaSharp](https://github.com/Kortexio/ExLlamaSharp), OpenAI, Azure OpenAI-compatible gateways, LiteLLM, custom.
+ContextMemory is **engine-agnostic**: it never embeds weights. Point each tenant (or the host defaults) at **any** OpenAI-compatible `/v1` server — local or cloud.
 
 | Backend value | Wire protocol | Host default URL |
 |---|---|---|

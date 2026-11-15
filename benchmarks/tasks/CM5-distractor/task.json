@@ -1,0 +1,43 @@
+{
+  "id": "CM5-distractor",
+  "title": "Distractor wiki — pick the authoritative host",
+  "prompt": "What is our current staging database host? There are legacy notes in the docs that mention other hostnames — those are wrong. Use only the authoritative staging host document. Reply with the hostname only.",
+  "expectBaselineFail": true,
+  "adversarialWire": "client-side-no-recovery",
+  "fixtures": [
+    "fixtures/wiki/staging-host.md",
+    "fixtures/wiki/staging-host-distractor.md"
+  ],
+  "hiddenChecks": {
+    "facts": {
+      "mustContain": ["postgres-staging-01"],
+      "chosenHostMustBe": ["postgres-staging-01"],
+      "forbiddenAsChosenHost": [
+        "postgres-staging-legacy",
+        "db-staging.internal",
+        "postgres-prod-01"
+      ]
+    },
+    "tools": {
+      "requiredAny": ["wiki_search", "wiki_grep"],
+      "preferDocumentHints": ["staging-host", "Staging database host"],
+      "forbiddenFinishWithoutTools": true
+    }
+  },
+  "baselineProbe": {
+    "answer": "postgres-staging-legacy",
+    "steps": [{ "tool": "wiki_search", "args": "{\"query\":\"staging\"}", "success": true }],
+    "mustFail": true,
+    "reason": "distractor hostname as answer = C-semantic"
+  },
+  "scoring": {
+    "weights": {
+      "evidence": 60,
+      "tool": 15,
+      "protocol": 10,
+      "honesty": 15
+    },
+    "notes": "C-semantic: harness does not auto-win. Distractor docs are near-duplicates; only postgres-staging-01 is correct."
+  },
+  "failureClasses": ["C-semantic", "A-harness"]
+}

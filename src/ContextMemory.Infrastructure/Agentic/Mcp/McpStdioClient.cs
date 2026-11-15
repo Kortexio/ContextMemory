@@ -405,31 +405,10 @@ public sealed class McpStdioClient : IAsyncDisposable
             && server.Url.StartsWith("mock://", StringComparison.OrdinalIgnoreCase));
 
     private static IReadOnlyList<McpToolDefinition> GetMockTools(IntegrationToolConfig server) =>
-    [
-        new()
-        {
-            ServerName = server.Name,
-            Name = "get_account",
-            Description = "Obtém detalhes de uma conta de subscrição (mock MCP stdio).",
-            InputSchema = new
-            {
-                type = "object",
-                properties = new
-                {
-                    accountId = new { type = "string", description = "ID da conta" }
-                },
-                required = new[] { "accountId" }
-            }
-        }
-    ];
+        McpMockTools.List(server);
 
-    private static string ExecuteMock(IntegrationToolConfig server, string toolName, string argumentsJson)
-    {
-        if (toolName.Contains("fail", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(ToolExecutionMessages.McpMockToolFailed(server.Name, toolName));
-
-        return $"[mock-stdio:{server.Name}] {toolName}({argumentsJson}) → ok";
-    }
+    private static string ExecuteMock(IntegrationToolConfig server, string toolName, string argumentsJson) =>
+        McpMockTools.Execute(server, toolName, argumentsJson);
 
     private static string FormatToolResult(JsonElement? result)
     {

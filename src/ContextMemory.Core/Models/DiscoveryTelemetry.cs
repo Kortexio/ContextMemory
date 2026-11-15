@@ -35,6 +35,21 @@ public sealed record DiscoveryTelemetry
     [JsonPropertyName("schema_repair_level")]
     public string? SchemaRepairLevel { get; init; }
 
+    [JsonPropertyName("family_lifts")]
+    public int FamilyLifts { get; init; }
+
+    [JsonPropertyName("arg_repairs")]
+    public int ArgRepairs { get; init; }
+
+    [JsonPropertyName("finish_gate_rejects")]
+    public int FinishGateRejects { get; init; }
+
+    [JsonPropertyName("refunds_used")]
+    public int RefundsUsed { get; init; }
+
+    [JsonPropertyName("continue_extensions")]
+    public int ContinueExtensions { get; init; }
+
     public static DiscoveryTelemetry FromCounts(
         int staticPromptChars,
         int discoveryFetchedChars,
@@ -44,7 +59,12 @@ public sealed record DiscoveryTelemetry
         int promotedProseToolCalls = 0,
         string? resolvedPromptProfile = null,
         string? harnessMode = null,
-        string? schemaRepairLevel = null)
+        string? schemaRepairLevel = null,
+        int familyLifts = 0,
+        int argRepairs = 0,
+        int finishGateRejects = 0,
+        int refundsUsed = 0,
+        int continueExtensions = 0)
     {
         var denom = staticPromptChars + discoveryFetchedChars;
         return new DiscoveryTelemetry
@@ -58,7 +78,12 @@ public sealed record DiscoveryTelemetry
             PromotedProseToolCalls = promotedProseToolCalls,
             ResolvedPromptProfile = resolvedPromptProfile,
             HarnessMode = harnessMode,
-            SchemaRepairLevel = schemaRepairLevel
+            SchemaRepairLevel = schemaRepairLevel,
+            FamilyLifts = familyLifts,
+            ArgRepairs = argRepairs,
+            FinishGateRejects = finishGateRejects,
+            RefundsUsed = refundsUsed,
+            ContinueExtensions = continueExtensions
         };
     }
 }

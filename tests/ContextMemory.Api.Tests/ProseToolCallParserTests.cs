@@ -199,15 +199,17 @@ public sealed class ProseToolCallParserTests
     }
 
     [Fact]
-    public void FilterAgainstCatalog_AllowsUnpinnedMcpQualifiedNames()
+    public void FilterAgainstCatalog_RemapsServerPlaceholder_AndDropsUnknownMcp()
     {
         var catalog = new List<OllamaTool>
         {
-            new("function", new OllamaFunction("tool_search", null, null))
+            new("function", new OllamaFunction("tool_search", null, null)),
+            new("function", new OllamaFunction("bench-crm__query_objects", null, null))
         };
 
         var raw = new List<OllamaToolCall>
         {
+            new(new OllamaFunctionCall("server__query_objects", """{"objectType":"Account","where":{"id":"ACC-1001"}}""")),
             new(new OllamaFunctionCall("zuora__invented_tool", """{"x":1}""")),
             new(new OllamaFunctionCall("tool_search", """{"query":"account"}"""))
         };
@@ -222,8 +224,9 @@ public sealed class ProseToolCallParserTests
 
         Assert.NotNull(filtered);
         Assert.Equal(2, filtered!.Count);
-        Assert.Equal(0, droppedUnknown);
-        Assert.Equal("zuora__invented_tool", filtered[0].Function.Name);
+        Assert.Equal(1, droppedUnknown);
+        Assert.Equal("bench-crm__query_objects", filtered[0].Function.Name);
+        Assert.Equal("tool_search", filtered[1].Function.Name);
     }
 
     [Fact]

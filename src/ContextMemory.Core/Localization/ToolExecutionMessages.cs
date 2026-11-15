@@ -8,7 +8,9 @@ namespace ContextMemory.Core.Localization;
 public static class ToolExecutionMessages
 {
     public static string ToolNotRegistered(string toolName, AppRuntimeConfig config) =>
-        $"Tool '{toolName}' is not registered for this tenant.";
+        $"Tool '{toolName}' is not registered for this tenant. "
+        + "Use an exact name from the tool catalog (never invent a `server__` prefix). "
+        + "Call tool_search or tool_describe if unsure.";
 
     public static string ToolNotRegisteredSelfHosted(string toolName, AppRuntimeConfig config) =>
         $"Tool '{toolName}' is not registered for this tenant (self-hosted-sandbox).";
