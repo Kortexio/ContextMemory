@@ -14,11 +14,9 @@ Use it when:
 
 ## What is this package?
 
-A **thin header helper** for Python — **not** a full SDK.
+A **header helper** for Python. ContextMemory’s contract is OpenAI-compatible `/v1` — use the official OpenAI client (or `httpx`/`requests`). This package only builds the gateway headers (`Authorization`, and usually `X-App-Id` / `X-User-Id` / `X-Session-Id`) and kwargs for the official OpenAI client so you do not hand-roll them.
 
-ContextMemory needs a few HTTP headers on every call (`Authorization`, and usually `X-App-Id` / `X-User-Id` / `X-Session-Id`). This package builds those headers (and kwargs for the official OpenAI client) so you do not hand-roll them.
-
-> Beta (`0.0.1b*`). APIs may still change.  
+> Package version `0.0.1b*` — helper surface may still tighten; the gateway `/v1` is the product API.  
 > **PyPI name:** `kortexio-contextmemory` · **Import name:** `contextmemory`
 
 ## Install

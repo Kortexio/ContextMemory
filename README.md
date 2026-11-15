@@ -28,8 +28,10 @@
 A model only writes the next tokens. An **agent** is the loop around it: tools, memory, repair, evidence, finish.  
 ContextMemory is that loop on the server — so a **weaker model** can still complete agent work on the **same prompts**.
 
-Point any OpenAI-compatible client here. You keep your app. No LangGraph/CrewAI/Letta rewrite.  
+Point any OpenAI-compatible client here (official OpenAI SDKs, LangChain, curl, Cursor). You keep your app. No LangGraph/CrewAI/Letta rewrite.  
 One `/v1/chat/completions` URL — markdown memory you can open, plus a harness that recovers tool calls, refuses fake “done”, and terminates.
+
+Optional npm/PyPI packages only build the gateway headers (`Authorization`, `X-App-Id`, …). They are **header helpers**, not a ContextMemory client SDK — the contract is `/v1`.
 
 ---
 
@@ -115,6 +117,8 @@ docker run --rm -p 5100:8080 \
 ```
 
 Zero ops: **[Kortexio Cloud](https://kortexio.io)** (`cmk_live_…`). Self-host keeps full control (`cm_live_…` + `X-App-Id`).
+
+Optional header helpers (same idea in JS and Python): [`@kortexio/contextmemory`](https://www.npmjs.com/package/@kortexio/contextmemory) · [`kortexio-contextmemory`](https://pypi.org/project/kortexio-contextmemory/)
 
 ---
 

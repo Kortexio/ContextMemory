@@ -14,11 +14,9 @@ Use it when:
 
 ## What is this package?
 
-A **thin header helper** for TypeScript/JavaScript — **not** a full SDK.
+A **header helper** for TypeScript/JavaScript. ContextMemory’s contract is OpenAI-compatible `/v1` — use the official OpenAI client (or `fetch`). This package only builds the gateway headers (`Authorization`, and usually `X-App-Id` / `X-User-Id` / `X-Session-Id`) and OpenAI client options so you do not hand-roll them.
 
-ContextMemory needs a few HTTP headers on every call (`Authorization`, and usually `X-App-Id` / `X-User-Id` / `X-Session-Id`). This package builds those headers (and OpenAI client options) so you do not hand-roll them.
-
-> Beta (`0.0.1-beta.x`). APIs may still change.
+> Package version `0.0.1-beta.x` — helper surface may still tighten; the gateway `/v1` is the product API.
 
 ## Install
 
