@@ -1,11 +1,12 @@
 using System.Text;
+using ContextMemory.Core.Agentic.Harness;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic.Prompts;
 
 /// <summary>
-/// Builds a thin harness scaffold. Policy prose lives in Admin skills (always-on / skill_read) —
-/// this class must not re-state MCP/evidence/sandbox rules that already exist in the catalog.
+/// Builds a thin harness scaffold + CodeForge-style tool contract.
+/// Policy prose lives in Admin skills (always-on / skill_read).
 /// </summary>
 public static class AgenticSystemPromptBuilder
 {
@@ -27,10 +28,20 @@ public static class AgenticSystemPromptBuilder
         sb.AppendLine($"Harness profile: {profile} ({capabilities.HarnessMode}).");
         sb.AppendLine($"Available tools: {toolNamesSummary}.");
         sb.AppendLine(
-            "Discover schemas with tool_describe; long outputs via artifact_tail/artifact_read. "
+            "Listed tools already include schemas — call them directly. "
+            + "Use tool_describe only for tools outside the offered set. "
+            + "Long outputs via artifact_tail/artifact_read. "
             + "Skills/rules via skill_search|skill_read / rule_search|rule_read. "
             + "Never narrate harness or tool names to the user. "
             + "Answer in the user's language.");
+
+        var activeNames = ParseToolNames(toolNamesSummary);
+        var contract = ToolSystemContractBuilder.Build(activeNames);
+        if (!string.IsNullOrWhiteSpace(contract))
+        {
+            sb.AppendLine();
+            sb.AppendLine(contract);
+        }
 
         if (capabilities.InlineEvidenceRules)
             AppendSkillBodies(sb, SelectEvidenceSkills(runtimeConfig), "Evidence skills (inlined)", 800);
@@ -55,6 +66,49 @@ public static class AgenticSystemPromptBuilder
         }
 
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>Best-effort extraction of tool ids from the catalog summary line.</summary>
+    internal static IEnumerable<string> ParseToolNames(string toolNamesSummary)
+    {
+        foreach (var part in toolNamesSummary.Split([',', ';', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var token = part;
+            var tick = token.IndexOf('`');
+            if (tick >= 0)
+            {
+                var end = token.IndexOf('`', tick + 1);
+                if (end > tick)
+                    token = token[(tick + 1)..end];
+            }
+
+            var colon = token.IndexOf(':');
+            if (colon > 0 && !token.Contains("__", StringComparison.Ordinal))
+            {
+                // "zuora: query_objects, graphql" style — yield server-qualified guesses later via summary only
+                foreach (var leaf in token[(colon + 1)..].Split(['/', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (leaf.Length > 1)
+                        yield return leaf.TrimEnd('.');
+                }
+            }
+
+            if (token.Contains("__", StringComparison.Ordinal) || !token.Contains(' '))
+            {
+                var name = token.Split(' ', 2)[0].Trim().TrimEnd('.');
+                if (name.Length > 1)
+                    yield return name;
+            }
+        }
+
+        // Always include common builtins so the contract sections light up.
+        foreach (var builtin in new[]
+                 {
+                     "wiki_search", "wiki_grep", "tool_describe", "tool_search",
+                     "skill_search", "skill_read", "shell_execute", "python_execute",
+                     "node_execute", "artifact_read", "artifact_tail"
+                 })
+            yield return builtin;
     }
 
     private static void AppendDefaultSkillIds(

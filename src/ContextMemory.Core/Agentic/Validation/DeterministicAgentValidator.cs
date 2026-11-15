@@ -1,0 +1,210 @@
+using ContextMemory.Core.Agentic.Harness;
+using ContextMemory.Core.Contracts;
+using ContextMemory.Core.Localization;
+using ContextMemory.Core.Models;
+
+namespace ContextMemory.Core.Agentic;
+
+public sealed class DeterministicAgentValidator
+{
+    private readonly IAgenticUrlAvailabilityChecker? _urlChecker;
+
+    public DeterministicAgentValidator()
+        : this(null)
+    {
+    }
+
+    public DeterministicAgentValidator(IAgenticUrlAvailabilityChecker? urlChecker)
+    {
+        _urlChecker = urlChecker;
+    }
+
+    public async Task<ValidationResult> ValidateAsync(
+        AgentValidationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var finalAnswer = request.FinalAnswer;
+        var steps = request.Steps;
+        var guardrails = request.RuntimeConfig.Agentic.Guardrails;
+        var policy = request.RuntimeConfig.ResolvedPolicy;
+        var harness = ModelHarnessProfile.From(request.RuntimeConfig);
+
+        if (string.IsNullOrWhiteSpace(finalAnswer))
+        {
+            if (policy.HasKind(AgenticGuardrailKinds.LiveDataEvidence)
+                && AgenticLiveDataEvidenceGuardrail.IsLiveDataQuestion(
+                    request.UserObjective,
+                    AgenticGuardrailConfigReader.ForKind(policy, AgenticGuardrailKinds.LiveDataEvidence),
+                    request.RuntimeConfig))
+            {
+                return ValidationResult.Reject(
+                    ValidationMessages.LiveDataWithoutEvidence(
+                        AgenticGuardrailConfigReader.ResolveFeedback(
+                            AgenticGuardrailConfigReader.ForKind(policy, AgenticGuardrailKinds.LiveDataEvidence),
+                            request.RuntimeConfig.DefaultLanguage),
+                        request.RuntimeConfig));
+            }
+
+            return ValidationResult.Reject(
+                ValidationMessages.EmptyFinalAnswer(request.RuntimeConfig));
+        }
+
+        // Finish gate (discovery-only / live-data facade) before text-policy guardrails.
+        var finish = EvidenceFinishGate.Evaluate(
+            request.UserObjective,
+            finalAnswer,
+            steps,
+            request.RuntimeConfig,
+            harness,
+            finishNudgesAlready: 0);
+        if (finish.Refuse && !string.IsNullOrWhiteSpace(finish.FeedbackForModel))
+            return ValidationResult.Reject(finish.FeedbackForModel);
+
+        var core = AgenticPolicyGuardrailPipeline.TryRejectCore(request);
+        if (core is not null)
+            return core;
+
+        var extended = await AgenticPolicyGuardrailPipeline.TryGetExtendedRejectionAsync(
+                request, _urlChecker, cancellationToken)
+            .ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(extended))
+            return ValidationResult.Reject(extended);
+
+        if (guardrails.MinAnswerLength > 0 && finalAnswer.Trim().Length < guardrails.MinAnswerLength)
+        {
+            return ValidationResult.Reject(
+                ValidationMessages.TooShort(guardrails.MinAnswerLength, request.RuntimeConfig));
+        }
+
+        var blockedPatterns = new List<string>(guardrails.BlockedAnswerPatterns);
+        if (policy.HasKind(AgenticGuardrailKinds.BlockedPatterns))
+        {
+            var pack = policy.FindByKind(AgenticGuardrailKinds.BlockedPatterns);
+            if (pack is not null)
+                blockedPatterns.AddRange(AgenticGuardrailConfigReader.GetBlockedPatterns(pack.ConfigJson));
+        }
+
+        foreach (var pattern in blockedPatterns.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(pattern))
+                continue;
+
+            if (finalAnswer.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+            {
+                return ValidationResult.Reject(
+                    ValidationMessages.BlockedContent(pattern, request.RuntimeConfig));
+            }
+        }
+
+        // Discovery harness tools (tool_describe, skill_*, etc.) must not poison the turn:
+        // a failed describe + successful MCP call would otherwise loop forever on RequireZeroExitCode.
+        // Likewise, a failure that was later retried successfully (same tool, later step) must not
+        // keep rejecting the final answer forever: once the model recovers, the earlier failure is
+        // resolved and should no longer block validation.
+        // Harness policy rejections (duplicate/budget/empty-query) are not real tool failures —
+        // counting them forces the model to explain budget mechanics to the end user.
+        var failedSteps = steps
+            .Where(s => !s.Success)
+            .Where(s => !SessionDiscoveryTools.IsDiscoveryTool(s.ToolName))
+            .Where(s => !AgenticDuplicateToolCallGuard.IsHarnessPolicyRejection(s))
+            .Where(s => !HasLaterSuccessfulRetry(steps, s))
+            .ToList();
+        if (guardrails.RequireZeroExitCode && failedSteps.Count > 0)
+        {
+            var toolList = string.Join(", ", failedSteps.Select(s => s.ToolName).Distinct());
+            return ValidationResult.Reject(
+                ValidationMessages.ToolsFailedExitCode(toolList, request.RuntimeConfig));
+        }
+
+        if (policy.HasKind(AgenticGuardrailKinds.ToolFailureDisclosure)
+            && failedSteps.Count > 0
+            && !finalAnswer.Contains("erro", StringComparison.OrdinalIgnoreCase)
+            && !finalAnswer.Contains("falhou", StringComparison.OrdinalIgnoreCase)
+            && !finalAnswer.Contains("failed", StringComparison.OrdinalIgnoreCase)
+            && !finalAnswer.Contains("error", StringComparison.OrdinalIgnoreCase))
+        {
+            var toolList = string.Join(", ", failedSteps.Select(s => s.ToolName).Distinct());
+            return ValidationResult.Reject(
+                ValidationMessages.ToolsFailedNotMentioned(toolList, request.RuntimeConfig));
+        }
+
+        foreach (var pattern in guardrails.ExpectedAnswerPatterns)
+        {
+            if (string.IsNullOrWhiteSpace(pattern))
+                continue;
+
+            try
+            {
+                if (!System.Text.RegularExpressions.Regex.IsMatch(
+                        finalAnswer,
+                        pattern,
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                        | System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+                {
+                    return ValidationResult.Reject(
+                        ValidationMessages.PatternMismatch(pattern, request.RuntimeConfig));
+                }
+            }
+            catch
+            {
+                // ignore invalid regex configured by tenant
+            }
+        }
+
+        foreach (var keyword in guardrails.RequireConfirmationFor)
+        {
+            if (string.IsNullOrWhiteSpace(keyword))
+                continue;
+
+            var destructiveStep = steps.FirstOrDefault(s =>
+                s.Arguments.Contains(keyword, StringComparison.OrdinalIgnoreCase)
+                || s.ToolName.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+
+            if (destructiveStep is not null
+                && !destructiveStep.Success
+                && !finalAnswer.Contains("confirma", StringComparison.OrdinalIgnoreCase)
+                && !finalAnswer.Contains("confirm", StringComparison.OrdinalIgnoreCase)
+                && !finalAnswer.Contains("approval", StringComparison.OrdinalIgnoreCase)
+                && !finalAnswer.Contains("aprovação", StringComparison.OrdinalIgnoreCase))
+            {
+                return ValidationResult.Reject(
+                    ValidationMessages.ConfirmationRequired(keyword, request.RuntimeConfig));
+            }
+        }
+
+        return ValidationResult.Ok();
+    }
+
+    /// <summary>
+    /// True when the same tool was called again after the given failed step and that later call
+    /// succeeded, meaning the failure was retried and resolved within the same agent turn.
+    /// </summary>
+    private static bool HasLaterSuccessfulRetry(
+        IReadOnlyList<AgentExecutionStep> steps,
+        AgentExecutionStep failedStep)
+    {
+        var failedIndex = -1;
+        for (var i = 0; i < steps.Count; i++)
+        {
+            if (ReferenceEquals(steps[i], failedStep))
+            {
+                failedIndex = i;
+                break;
+            }
+        }
+
+        if (failedIndex < 0)
+            return false;
+
+        for (var i = failedIndex + 1; i < steps.Count; i++)
+        {
+            if (steps[i].Success
+                && string.Equals(steps[i].ToolName, failedStep.ToolName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}

@@ -20,11 +20,11 @@
   <a href="https://github.com/users/Kortexio/packages/container/package/contextmemory"><img src="https://img.shields.io/badge/ghcr.io-contextmemory-blue?logo=docker" alt="Docker GHCR"></a>
   <a href="https://github.com/Kortexio/ContextMemory/actions/workflows/docker-publish.yml"><img src="https://img.shields.io/github/actions/workflow/status/Kortexio/ContextMemory/docker-publish.yml?branch=main&label=docker" alt="Docker CI"></a>
   <a href="https://github.com/Kortexio/ContextMemory/actions/workflows/dotnet-tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/Kortexio/ContextMemory/dotnet-tests.yml?branch=main&label=tests" alt="Tests"></a>
-  <a href="https://github.com/Kortexio/ContextMemory/actions/workflows/e2e-llamacpp.yml"><img src="https://img.shields.io/github/actions/workflow/status/Kortexio/ContextMemory/e2e-llamacpp.yml?branch=main&label=e2e%3A%20llama.cpp" alt="e2e: llama.cpp"></a>
+  <a href="https://github.com/Kortexio/ContextMemory/actions/workflows/e2e-llamacpp.yml"><img src="https://img.shields.io/github/actions/workflow/status/Kortexio/ContextMemory/e2e-llamacpp.yml?branch=main&label=e2e%3A%20local%20engine" alt="e2e: local engine"></a>
 </p>
 
 <p align="center">
-  <strong>Self-hosted memory gateway for your llama.cpp / vLLM server.</strong>
+  <strong>Self-hosted memory gateway for any OpenAI-compatible LLM.</strong>
 </p>
 
 <p align="center">
@@ -38,7 +38,7 @@
 
 ```bash
 git clone https://github.com/Kortexio/ContextMemory.git && cd ContextMemory
-docker compose -f docker-compose.yml -f docker-compose.llamacpp.yml up --build -d   # CPU; GPU: docker-compose.vllm.yml
+docker compose -f docker-compose.yml -f docker-compose.llamacpp.yml up --build -d   # sample local engine; or point LLM_ENDPOINT at yours
 ./scripts/aha-chat.sh                                                             # Windows: .\scripts\aha-chat.ps1
 ```
 
@@ -50,7 +50,7 @@ docker compose -f docker-compose.yml -f docker-compose.llamacpp.yml up --build -
 AHA OK — the client sent no history; the gateway remembered 'postgres-staging-01'.
 ```
 
-The same check runs in CI against a real `llama-server` on every push ([`e2e-llamacpp`](.github/workflows/e2e-llamacpp.yml)). First start downloads a ~2 GB GGUF; pick another model with `LLAMACPP_HF_MODEL` ([Engines](docs/self-host.md#engines)). Admin UI: `http://localhost:5200`.
+The same check runs in CI against a real local engine on every push ([`e2e-llamacpp`](.github/workflows/e2e-llamacpp.yml)). First start may download a model; configure yours via env / [Engines](docs/self-host.md#engines). Admin UI: `http://localhost:5200`.
 
 ---
 
@@ -81,11 +81,52 @@ Your client (OpenAI SDK / Cursor MCP / curl)
  or Azure ACA sessions
 ```
 
-**Honest boundaries:** this is a **gateway + server-side harness**, not a client agent framework (LangGraph/CrewAI) and not an agent OS (Letta). You keep your OpenAI client; the loop runs on the server.
+**Honest boundaries:** this is a **gateway + server-side harness**, not a client agent framework (LangGraph/CrewAI) and not an agent OS (Letta). You keep your OpenAI client; the loop runs on the server. Memory, wiki, skills, and HITL stay first-class — the harness makes the loop finish; it does not replace product policy.
 
-**LLM engines:** ContextMemory does **not** ship or lock to one inference stack. Per tenant you pick any OpenAI-compatible `/v1` host — Ollama, vLLM, LM Studio, [ExLlamaSharp](https://github.com/Kortexio/ExLlamaSharp), OpenAI, Azure-compatible, LiteLLM, custom. Compose ships llama.cpp and vLLM overrides; swap engines per app in **Admin → Config → LLM**.
+**LLM engines:** ContextMemory does **not** ship or lock to one inference stack. Per tenant you point at **any** OpenAI-compatible `/v1` host (local or cloud). Swap engines per app in **Admin → Config → LLM**.
 
 How we compare (Mem0 / Zep / Letta / **why we are not RAG**): [`docs/compare.md`](docs/compare.md).
+
+---
+
+## Agentic harness
+
+The product is the **contract** (tools, evidence, finish rules, multi-tenant policy) — not a particular frontier model. ContextMemory runs a server-side tool loop that is built to **terminate**, repair weak markup, and refuse false-done answers without live evidence.
+
+| Without harness (typical pain) | With harness |
+|---|---|
+| Empty / `{}` tool args against real MCP schemas | Arg + schema repair before execute |
+| Model-family markup never becomes `tool_calls` | Universal family recovery (see below) |
+| Discovery-only finish (`tool_describe` / skill search) claimed as done | Evidence finish gate + live-data guardrails |
+| Identical tool loops until timeout | Loop detector, refunds, Continue extensions, absolute ceiling |
+| Stub / open schemas force `tool_describe` toll | Full schemas on execution + MCP top-K |
+
+**Universal family recovery:** Qwen, DeepSeek-R1, DSML, Gemma4, Harmony, Mistral, Llama, Kimi, GLM, Granite, MiniMax (+ text), OLMo, Phi-4. Profile/model only set try-order; the registry carries **all** of them.
+
+Same loop for **any** OpenAI-compatible engine — local or frontier.
+
+> **Weak models.** ContextMemory is one of the best options to **amplify weaker models**: family recovery, repair, finish/budget, and full schemas close the gap toward stronger-model agent behavior on the same prompts. The model is not the product — the contract is. See [`docs/small-model-guide.md`](docs/small-model-guide.md) and adversarial A/B under [`benchmarks/`](benchmarks/).
+
+### Measured (adversarial A/B)
+
+| | |
+|---|---|
+| **Endpoint** | `https://llm.example.test` |
+| **Model** | Qwen3.6-35B |
+| **Suite** | CM1–CM5 (wiki live-data, MCP args, finish evidence, anti-stuck, distractor) |
+
+| Harness | Mean score | Stuck | badArgs | falseDone |
+|---|---:|---:|---:|---:|
+| Off | — | — | — | — |
+| On | — | — | — | — |
+
+Numbers publish **only after an honest Δ** (baseline must hurt when `expectBaselineFail`). Until then: *pending first adversarial A/B — see [`benchmarks/`](benchmarks/)*. Soft suite → fix tasks, not marketing.
+
+```bash
+node benchmarks/bench.mjs selftest
+node benchmarks/bench.mjs ab      # /v1 under test; CM_BENCH_API_KEY only if that API requires it
+node benchmarks/bench.mjs report
+```
 
 ---
 
@@ -96,10 +137,12 @@ How we compare (Mem0 / Zep / Letta / **why we are not RAG**): [`docs/compare.md`
 | Memory that survives turns without rewriting your client | Session markdown wiki + history inject; send only the new message |
 | Memory you can open, edit, audit | Files on disk / Postgres — not opaque embeddings |
 | Shared company/docs knowledge in chat | **Global Wiki** digests + on-demand `wiki_search` / `wiki_grep` (**not** classic RAG / embeddings) |
-| Tools without a second orchestrator | Same `/v1`: sandbox + MCP + wiki tools |
+| Amplify weak models | Family recovery + arg/schema repair + finish/budget → nearer strong-model agent quality on any `/v1` engine |
+| Agentic loop that finishes | Refunds, Continue extensions, absolute ceiling; evidence finish gate; no discovery-only false-done |
+| Tools without a second orchestrator | Same `/v1`: sandbox + MCP + wiki tools (full schemas on top-K) |
 | Safer agents | Skills & guardrail packs, validators, HITL `[CONFIRM:id]` |
 | Cursor / Claude permanent memory fast | MCP wedge: `memory_save` / `memory_search` / `memory_get` |
-| Any LLM per tenant | BYO `/v1` — Ollama, vLLM, LM Studio, ExLlamaSharp, OpenAI, Azure-compatible, custom |
+| Any LLM per tenant | BYO OpenAI-compatible `/v1` — local or cloud |
 | Operate without a test client | **Admin** + **Playground** |
 | Full control / zero ops | Docker self-host · [Kortexio Cloud](https://kortexio.io) (`cmk_live_…`) |
 
@@ -107,12 +150,12 @@ How we compare (Mem0 / Zep / Letta / **why we are not RAG**): [`docs/compare.md`
 
 ## Capabilities (summary)
 
-Full detail: [`docs/architecture-and-features.md`](docs/architecture-and-features.md) · Admin: [`docs/admin-ui.md`](docs/admin-ui.md) · HITL: [`docs/hitl.md`](docs/hitl.md).
+Full detail: [`docs/architecture-and-features.md`](docs/architecture-and-features.md) · Admin: [`docs/admin-ui.md`](docs/admin-ui.md) · HITL: [`docs/hitl.md`](docs/hitl.md) · Bench: [`benchmarks/`](benchmarks/).
 
 | Area | Highlights |
 |---|---|
 | **Memory** | Session wiki + rolling summary; history budgets; Global Wiki digests/FTS/revisions (`asOf`); **no vector RAG** |
-| **Agentic** | Server-side tool loop; sandbox; MCP catalog; artifacts; subagents; validators; HITL; egress policy |
+| **Agentic** | Server-side harness (family recovery, repair, finish gate, loop budget) + sandbox/MCP/wiki; Weak/Strong modes; multi-tenant skills, validators, HITL, egress |
 | **Skills** | Platform + per-app skills/guardrails (`skill` / `always_on` / `requestable`) |
 | **MCP** | Outbound wedge (Cursor → CM) · inbound catalog (CM → your MCP servers) |
 | **Ops** | Admin UI · File or Postgres · Prometheus `/metrics` · Compose (API + Admin + mcp-runtime + sandbox) |
@@ -131,9 +174,9 @@ Full detail: [`docs/architecture-and-features.md`](docs/architecture-and-feature
 
 ## More ways to run
 
-The gateway talks OpenAI-compatible `/v1` to the engine (and Ollama native `/api/chat` when you need `num_ctx`). Change the engine anytime in **Admin → Config → LLM** or `PATCH /admin/apps/{id}/config`.
+The gateway talks OpenAI-compatible `/v1` to whatever engine you configure. Change it anytime in **Admin → Config → LLM** or `PATCH /admin/apps/{id}/config`.
 
-### Engine already running (llama-server, vLLM, LM Studio, …) — API image only
+### Engine already running — API image only
 
 ```bash
 docker run --rm -p 5100:8080 \
@@ -147,7 +190,7 @@ docker run --rm -p 5100:8080 \
   ghcr.io/kortexio/contextmemory:latest
 ```
 
-Host-level default for all apps: `ContextMemory__LlmEndpoint`. Ollama on the host works too (`ContextMemory__LlmEndpoint=http://host.docker.internal:11434`). Engine flags that matter (llama.cpp `--jinja`, vLLM tool parser): [Engines](docs/self-host.md#engines). Full stack (API + Admin + MCP + sandbox): [`docs/self-host.md`](docs/self-host.md).
+Host-level default for all apps: `ContextMemory__LlmEndpoint`. Engine-specific flags and Compose overrides: [Engines](docs/self-host.md#engines). Full stack (API + Admin + MCP + sandbox): [`docs/self-host.md`](docs/self-host.md).
 
 ### Cursor / Claude memory (MCP)
 
@@ -197,7 +240,8 @@ Thin header helpers (**not** full SDKs): [`@kortexio/contextmemory`](https://www
 | Doc | Topic |
 |---|---|
 | [docs/compare.md](docs/compare.md) | Why it exists · vs Mem0 / Zep / Letta · **why we are not RAG** |
-| [docs/architecture-and-features.md](docs/architecture-and-features.md) | Wiki, temporal facts, agentic, skills, **LLM backends** |
+| [docs/architecture-and-features.md](docs/architecture-and-features.md) | Wiki, temporal facts, agentic harness, skills, **LLM backends** |
+| [benchmarks/](benchmarks/) | Adversarial A/B (harness off→on); honesty over vanity scores |
 | [docs/admin-ui.md](docs/admin-ui.md) | Admin UI map |
 | [docs/hitl.md](docs/hitl.md) | Human-in-the-loop |
 | [docs/api.md](docs/api.md) | HTTP API |

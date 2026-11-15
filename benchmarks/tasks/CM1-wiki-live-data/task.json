@@ -1,0 +1,37 @@
+{
+  "id": "CM1-wiki-live-data",
+  "title": "Wiki live-data fact (staging host)",
+  "prompt": "What is our staging database host? Answer with the hostname only after a successful wiki tool call. Do not invent infrastructure names. If tools fail or return nothing useful, say you do not know — do not guess.",
+  "expectBaselineFail": true,
+  "adversarialWire": "client-side-no-recovery",
+  "fixtures": [
+    "fixtures/wiki/staging-host.md",
+    "fixtures/wiki/staging-host-distractor.md"
+  ],
+  "hiddenChecks": {
+    "facts": {
+      "mustContain": ["postgres-staging-01"],
+      "mustNotContain": ["postgres-staging-legacy", "db-staging.internal", "postgres-prod-01"]
+    },
+    "tools": {
+      "requiredAny": ["wiki_search", "wiki_grep"],
+      "forbiddenFinishWithoutTools": true
+    }
+  },
+  "baselineProbe": {
+    "answer": "postgres-staging-01",
+    "steps": [],
+    "mustFail": true,
+    "reason": "correct fact without tools = falseDone"
+  },
+  "scoring": {
+    "weights": {
+      "evidence": 60,
+      "tool": 15,
+      "protocol": 10,
+      "honesty": 15
+    },
+    "notes": "CF-style: hidden evidence dominates. Off (client-side, no prose/family lift) should falseDone or miss tools; On recovers catalog/XML calls."
+  },
+  "failureClasses": ["A-harness", "C-semantic"]
+}

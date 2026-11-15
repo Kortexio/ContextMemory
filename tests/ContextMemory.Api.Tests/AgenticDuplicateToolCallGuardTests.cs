@@ -61,7 +61,8 @@ public sealed class AgenticDuplicateToolCallGuardTests
         Assert.True(rejected);
         Assert.Contains("non-empty", feedback, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("query", feedback, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("server__tool", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("integration>__", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"server__tool\"", feedback, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -110,7 +111,8 @@ public sealed class AgenticDuplicateToolCallGuardTests
 
         Assert.True(rejected);
         Assert.Contains("already failed", feedback, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("server__tool", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("integration>__", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"server__tool\"", feedback, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -200,7 +202,8 @@ public sealed class AgenticDuplicateToolCallGuardTests
 
         Assert.True(rejected);
         Assert.Contains("exhausted", feedback, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("server__tool", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("integration>__", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"server__tool\"", feedback, StringComparison.Ordinal);
     }
 
     [Fact]

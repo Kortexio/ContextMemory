@@ -23,6 +23,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ContextMemory.Infrastructur
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ContextMemory.Admin.Web", "src\ContextMemory.Admin.Web\ContextMemory.Admin.Web.csproj", "{F620AD50-7F1E-4409-9946-1926405C5375}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "benchmarks", "benchmarks", "{66320409-64EC-F7C5-3DEF-65E7510DAAD1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ContextMemory.Bench", "benchmarks\ContextMemory.Bench\ContextMemory.Bench.csproj", "{760854A5-8588-4EF0-A7C2-96E94EA2ABC4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -129,6 +133,18 @@ Global
 		{F620AD50-7F1E-4409-9946-1926405C5375}.Release|x64.Build.0 = Release|Any CPU
 		{F620AD50-7F1E-4409-9946-1926405C5375}.Release|x86.ActiveCfg = Release|Any CPU
 		{F620AD50-7F1E-4409-9946-1926405C5375}.Release|x86.Build.0 = Release|Any CPU
+		{760854A5-8588-4EF0-A7C2-96E94EA2ABC4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{760854A5-8588-4EF0-A7C2-96E94EA2ABC4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{760854A5-8588-4EF0-A7C2-96E94EA2ABC4}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{760854A5-8588-4EF0-A7C2-96E94EA2ABC4}.Debug|x64.Build.0 = Debug|Any CPU
+		{760854A5-8588-4EF0-A7C2-96E94EA2ABC4}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{760854A5-8588-4EF0-A7C2-96E94EA2ABC4}.Debug|x86.Build.0 = Debug|Any CPU
+		{760854A5-8588-4EF0-A7C2-96E94EA2ABC4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{760854A5-8588-4EF0-A7C2-96E94EA2ABC4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{760854A5-8588-4EF0-A7C2-96E94EA2ABC4}.Release|x64.ActiveCfg = Release|Any CPU
+		{760854A5-8588-4EF0-A7C2-96E94EA2ABC4}.Release|x64.Build.0 = Release|Any CPU
+		{760854A5-8588-4EF0-A7C2-96E94EA2ABC4}.Release|x86.ActiveCfg = Release|Any CPU
+		{760854A5-8588-4EF0-A7C2-96E94EA2ABC4}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -142,5 +158,6 @@ Global
 		{D67D9760-DD90-4B67-8BF1-460B4461FCC6} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{BCEF7B33-B1E0-4362-9B32-164118422ED5} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{F620AD50-7F1E-4409-9946-1926405C5375} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{760854A5-8588-4EF0-A7C2-96E94EA2ABC4} = {66320409-64EC-F7C5-3DEF-65E7510DAAD1}
 	EndGlobalSection
 EndGlobal

@@ -6,6 +6,8 @@ namespace ContextMemory.Core.Agentic.Prompts;
 /// <summary>Harness intensity for multi-model agentic loops.</summary>
 public enum ModelHarnessMode
 {
+    /// <summary>No family recovery, arg repair, finish gate, Continue, or prose promotion (A/B baseline).</summary>
+    Off,
     Weak,
     Strong
 }
@@ -37,28 +39,28 @@ public static partial class LlmCapabilitiesResolver
         var mode = ResolveHarnessMode(config, profile);
 
         var weak = mode == ModelHarnessMode.Weak;
-        // Harness-based (not server/app specific): Weak models in the Qwen-family profile
-        // often emit malformed native tool_calls across backends. Prefer client-side JSON
-        // catalog for that profile on any llmBackend. Other Weak profiles keep native tools[].
-        var clientSideTools = weak && profile == AgenticPromptProfile.Qwen;
+        var off = mode == ModelHarnessMode.Off;
+        // Weak Qwen: client-side catalog (avoids native XML template 500s).
+        // Off + Qwen: SAME hard wire as Weak, but recovery/prose/finish stay disabled —
+        // adversarial A/B baseline (native tools[] would hide protocol pain on capable hosts).
+        var clientSideTools = (weak || off) && profile == AgenticPromptProfile.Qwen;
         var supportsVision = ResolveSupportsVision(config);
 
         return new LlmCapabilities(
             HarnessMode: mode,
-            PreferNativeToolCalls: !weak && profile is AgenticPromptProfile.OpenAi
+            PreferNativeToolCalls: !weak && !off && profile is AgenticPromptProfile.OpenAi
                 or AgenticPromptProfile.Claude
                 or AgenticPromptProfile.ComposerLike,
             PreferClientSideToolParsing: clientSideTools,
-            EnableProseToolCallPromotion: true,
-            SanitizeSchemasAggressively: weak,
+            EnableProseToolCallPromotion: !off,
+            SanitizeSchemasAggressively: weak && !off,
             SupportsOpenAiJsonFormat: openAiCompat
                 || profile is AgenticPromptProfile.OpenAi or AgenticPromptProfile.ComposerLike,
             InlineEvidenceRules: weak,
-            PreferSkillDiscovery: !weak,
+            PreferSkillDiscovery: !weak && !off,
             SupportsVision: supportsVision,
-            // Weak harness burns context the same whether tools are inlined or native tools[].
-            // Strong / frontier paths keep full tenant max (up to AbsoluteMax).
-            MaxMcpToolsHint: weak ? WeakPromptMaxMcpTools : int.MaxValue,
+            // Weak/Off Qwen burn the same MCP top-K; Strong keeps tenant max.
+            MaxMcpToolsHint: (weak || off) ? WeakPromptMaxMcpTools : int.MaxValue,
             DefaultToolChoice: "auto");
         }
 
@@ -185,6 +187,7 @@ public static partial class LlmCapabilitiesResolver
     public static ModelHarnessMode ParseHarnessMode(string value) =>
         value.Trim().ToLowerInvariant() switch
         {
+            "off" or "none" or "disabled" => ModelHarnessMode.Off,
             "strong" => ModelHarnessMode.Strong,
             "weak" => ModelHarnessMode.Weak,
             _ => ModelHarnessMode.Weak

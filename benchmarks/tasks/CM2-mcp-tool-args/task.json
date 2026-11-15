@@ -1,0 +1,41 @@
+{
+  "id": "CM2-mcp-tool-args",
+  "title": "MCP tool with valid schema args",
+  "prompt": "Look up Account id ACC-1001 via the CRM query_objects tool and report the account name from the tool result only. The tool requires objectType and a non-empty where filter — empty {} args are invalid.",
+  "expectBaselineFail": true,
+  "adversarialWire": "client-side-no-recovery",
+  "fixtures": [
+    "fixtures/mcp/query_objects.schema.json"
+  ],
+  "hiddenChecks": {
+    "facts": {
+      "mustContain": ["Acme Staging Holdings"]
+    },
+    "tools": {
+      "requiredAny": ["query_objects", "crm__query_objects", "zuora-mcp__query_objects", "bench-crm__query_objects"],
+      "requiredArgs": {
+        "objectType": "Account",
+        "where": { "id": "ACC-1001" }
+      },
+      "rejectEmptyArgs": true,
+      "rejectOpenStubOnly": true,
+      "forbiddenFinishWithoutTools": true
+    }
+  },
+  "baselineProbe": {
+    "answer": "Acme Staging Holdings",
+    "steps": [{ "tool": "query_objects", "args": "{}", "success": true }],
+    "mustFail": true,
+    "reason": "empty args must score badArgs / fail"
+  },
+  "scoring": {
+    "weights": {
+      "evidence": 30,
+      "tool": 40,
+      "protocol": 20,
+      "honesty": 10
+    },
+    "notes": "badArgs when args are {} / missing objectType|where. Family recovery + ToolArgumentRepair should lift malformed markup when harness is on."
+  },
+  "failureClasses": ["A-harness", "B-protocol"]
+}
