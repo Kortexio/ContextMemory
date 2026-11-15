@@ -13,7 +13,13 @@ internal static class BenchEntry
     public static async Task<int> Main(string[] args)
     {
 
-        var baseUrl = (Environment.GetEnvironmentVariable("CM_BENCH_BASE_URL") ?? "https://llm.example.test").TrimEnd('/');
+        var baseUrlEnv = (Environment.GetEnvironmentVariable("CM_BENCH_BASE_URL") ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(baseUrlEnv))
+        {
+            Console.Error.WriteLine("Set CM_BENCH_BASE_URL to an OpenAI-compatible /v1 host before running live A/B.");
+            return 2;
+        }
+        var baseUrl = baseUrlEnv.TrimEnd('/');
         var model = Environment.GetEnvironmentVariable("CM_BENCH_MODEL") ?? "qwen3.6-35b-iq3s-mtp";
         var apiKey = (Environment.GetEnvironmentVariable("CM_BENCH_API_KEY")
             ?? Environment.GetEnvironmentVariable("CM_BENCH_BEARER")
@@ -106,11 +112,12 @@ internal static class BenchEntry
             ["runId"] = runId,
             ["createdAt"] = DateTimeOffset.UtcNow.ToString("O"),
             ["reachable"] = true,
-            ["endpoint"] = $"{baseUrl}/v1/chat/completions",
+            // Never persist the live LLM host — results may be shared or committed by mistake.
+            ["endpoint"] = "(redacted)/v1/chat/completions",
             ["model"] = model,
             ["env"] = new JsonObject
             {
-                ["CM_BENCH_BASE_URL"] = baseUrl,
+                ["CM_BENCH_BASE_URL"] = "(redacted)",
                 ["CM_BENCH_MODEL"] = model,
                 ["CM_BENCH_API_KEY"] = string.IsNullOrEmpty(apiKey) ? "(none — target API open)" : "(set — target API auth)"
             },
@@ -202,7 +209,9 @@ internal static class BenchEntry
             var configStore = scope.ServiceProvider.GetRequiredService<IAppConfigStore>();
             var orchestrator = scope.ServiceProvider.GetRequiredService<IAgentOrchestrator>();
 
-            var endpoint = (Environment.GetEnvironmentVariable("CM_BENCH_BASE_URL") ?? "https://llm.example.test").TrimEnd('/');
+            var endpoint = (Environment.GetEnvironmentVariable("CM_BENCH_BASE_URL") ?? "").Trim().TrimEnd('/');
+            if (string.IsNullOrWhiteSpace(endpoint))
+                throw new InvalidOperationException("CM_BENCH_BASE_URL is required.");
             var key = (Environment.GetEnvironmentVariable("CM_BENCH_API_KEY")
                 ?? Environment.GetEnvironmentVariable("CM_BENCH_BEARER")
                 ?? "").Trim();

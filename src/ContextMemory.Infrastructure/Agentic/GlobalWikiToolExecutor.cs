@@ -6,16 +6,29 @@ using ContextMemory.Core.Models;
 
 namespace ContextMemory.Infrastructure.Agentic;
 
-public sealed class GlobalWikiToolExecutor : IToolExecutor
+public sealed class GlobalWikiToolExecutor : IToolExecutor, IToolDescriptor
 {
     private readonly GlobalWikiService _wikiService;
 
     public GlobalWikiToolExecutor(GlobalWikiService wikiService) => _wikiService = wikiService;
 
+    public IEnumerable<ToolRegistration> Describe() =>
+    [
+        new(AgenticToolRegistry.WikiSearchToolName, ToolCapabilities.QueryFocused, ToolHandlerKind.AppScoped),
+        new(AgenticToolRegistry.WikiGrepToolName, ToolCapabilities.QueryFocused, ToolHandlerKind.AppScoped)
+    ];
+
+    public IEnumerable<OllamaTool> BuildSchemas(AppRuntimeConfig runtimeConfig)
+    {
+        if (AgenticToolRegistry.BuildWikiSearchTool(runtimeConfig, lazySchemas: false) is { } search)
+            yield return search;
+        if (AgenticToolRegistry.BuildWikiGrepTool(runtimeConfig, lazySchemas: false) is { } grep)
+            yield return grep;
+    }
+
     public bool CanExecute(string toolName, AppRuntimeConfig runtimeConfig) =>
         runtimeConfig.GlobalWikiEnabled
-        && (string.Equals(toolName, AgenticToolRegistry.WikiSearchToolName, StringComparison.Ordinal)
-            || string.Equals(toolName, AgenticToolRegistry.WikiGrepToolName, StringComparison.Ordinal));
+        && Describe().Any(r => string.Equals(r.WireName, toolName, StringComparison.OrdinalIgnoreCase));
 
     public Task<ToolExecutionResult> ExecuteAsync(
         OllamaToolCall toolCall,

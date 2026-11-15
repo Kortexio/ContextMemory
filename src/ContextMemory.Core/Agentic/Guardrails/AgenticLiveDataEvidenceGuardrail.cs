@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -90,7 +91,7 @@ public static partial class AgenticLiveDataEvidenceGuardrail
 
     private static bool IsEvidenceTool(string? toolName, IReadOnlyList<string> evidenceMarkers)
     {
-        if (string.IsNullOrWhiteSpace(toolName) || SessionDiscoveryTools.IsDiscoveryTool(toolName))
+        if (string.IsNullOrWhiteSpace(toolName) || ToolCapabilityIndex.HasFlag(toolName, ToolCapabilities.Discovery))
             return false;
 
         foreach (var marker in evidenceMarkers)

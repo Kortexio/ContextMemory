@@ -26,7 +26,7 @@ services:
         Host=${POSTGRES_HOST:-postgres};Port=5432;Database=${POSTGRES_DB:-contextmemory};
         Username=${POSTGRES_USER:-contextmemory};Password=${POSTGRES_PASSWORD:-contextmemory_dev}
       ContextMemory__WikiPath: /app/wikis
-      ContextMemory__OllamaEndpoint: ${OLLAMA_ENDPOINT:-https://llm.example.test}
+      ContextMemory__OllamaEndpoint: ${OLLAMA_ENDPOINT:-}
       ContextMemory__LlmEndpoint: ${LLM_ENDPOINT:-}
       ContextMemory__DefaultLlmModel: ${DEFAULT_LLM_MODEL:-qwen3.5:9b}
       ContextMemory__MasterKey: ${MASTER_KEY:-cm_master_local_dev_change_me}

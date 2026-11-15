@@ -1,6 +1,5 @@
 using ContextMemory.Core.Agentic.Harness;
 using ContextMemory.Core.Agentic.Mcp;
-using ContextMemory.Core.Agentic.Prompts;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 
@@ -8,13 +7,16 @@ namespace ContextMemory.Core.Agentic;
 
 public sealed class AgenticToolRegistryService : IAgenticToolRegistry
 {
+    private readonly IToolRegistry _toolRegistry;
     private readonly IMcpToolCatalog _mcpCatalog;
     private readonly ICapabilityPolicyFilter _capabilityFilter;
 
     public AgenticToolRegistryService(
+        IToolRegistry toolRegistry,
         IMcpToolCatalog mcpCatalog,
         ICapabilityPolicyFilter capabilityFilter)
     {
+        _toolRegistry = toolRegistry;
         _mcpCatalog = mcpCatalog;
         _capabilityFilter = capabilityFilter;
     }
@@ -27,25 +29,9 @@ public sealed class AgenticToolRegistryService : IAgenticToolRegistry
     {
         var harness = ModelHarnessProfile.From(runtimeConfig);
         var tools = new List<OllamaTool>();
-        // Full schemas by default (CodeForge-style) — lazy stubs burned weak-model turns on {}.
-        tools.AddRange(AgenticToolRegistry.BuildExecutionTools(runtimeConfig, lazySchemas: false));
 
-        var wikiTool = AgenticToolRegistry.BuildWikiSearchTool(runtimeConfig, lazySchemas: false);
-        if (wikiTool is not null)
-            tools.Add(wikiTool);
-        var wikiGrep = AgenticToolRegistry.BuildWikiGrepTool(runtimeConfig, lazySchemas: false);
-        if (wikiGrep is not null)
-            tools.Add(wikiGrep);
-
-        // Discovery helpers — tool_describe remains for tools outside the top-K / still-unclear schemas.
-        tools.AddRange(SessionDiscoveryTools.BuildTools(runtimeConfig));
-
-        var caps = LlmCapabilitiesResolver.From(runtimeConfig);
-        tools.AddRange(AgenticHttpTools.BuildTools(runtimeConfig));
-        tools.AddRange(AgenticVisionTools.BuildTools(runtimeConfig, caps.SupportsVision));
-        tools.AddRange(AgenticBrowserTools.BuildTools(runtimeConfig));
-        tools.AddRange(AgenticDocumentTools.BuildTools(runtimeConfig));
-        tools.AddRange(AgenticCanvasTools.BuildTools(runtimeConfig));
+        // Built-ins: each IToolDescriptor owns its schemas — no hardcoded AddRange by family.
+        tools.AddRange(_toolRegistry.BuildBuiltinSchemas(runtimeConfig));
 
         // Top-K MCP with real sanitized schemas (compacted on Weak).
         var mcpTools = await _mcpCatalog

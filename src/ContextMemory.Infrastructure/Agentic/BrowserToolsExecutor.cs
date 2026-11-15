@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ContextMemory.Infrastructure.Agentic;
 
-public sealed class BrowserToolsExecutor : ISessionScopedToolExecutor
+public sealed class BrowserToolsExecutor : ISessionScopedToolExecutor, IToolDescriptor
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ISessionArtifactStore _artifacts;
@@ -23,9 +23,21 @@ public sealed class BrowserToolsExecutor : ISessionScopedToolExecutor
         _logger = logger;
     }
 
+    public IEnumerable<ToolRegistration> Describe() =>
+    [
+        new(AgenticBrowserTools.Navigate, ToolCapabilities.Browser, ToolHandlerKind.SessionScoped),
+        new(AgenticBrowserTools.Snapshot, ToolCapabilities.Browser, ToolHandlerKind.SessionScoped),
+        new(AgenticBrowserTools.Click, ToolCapabilities.Browser | ToolCapabilities.Mutating, ToolHandlerKind.SessionScoped),
+        new(AgenticBrowserTools.Type, ToolCapabilities.Browser | ToolCapabilities.Mutating, ToolHandlerKind.SessionScoped),
+        new(AgenticBrowserTools.Screenshot, ToolCapabilities.Browser | ToolCapabilities.Vision, ToolHandlerKind.SessionScoped)
+    ];
+
+    public IEnumerable<OllamaTool> BuildSchemas(AppRuntimeConfig runtimeConfig) =>
+        AgenticBrowserTools.BuildTools(runtimeConfig);
+
     public bool CanExecute(string toolName, AppRuntimeConfig runtimeConfig) =>
         runtimeConfig.Agentic.Tools.Browser.Enabled
-        && AgenticBrowserTools.IsBrowserTool(toolName);
+        && Describe().Any(r => string.Equals(r.WireName, toolName, StringComparison.OrdinalIgnoreCase));
 
     public async Task<ToolExecutionResult> ExecuteAsync(
         OllamaToolCall toolCall,

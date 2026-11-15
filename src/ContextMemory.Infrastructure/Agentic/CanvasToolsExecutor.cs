@@ -5,15 +5,24 @@ using ContextMemory.Core.Models;
 
 namespace ContextMemory.Infrastructure.Agentic;
 
-public sealed class CanvasToolsExecutor : ISessionScopedToolExecutor
+public sealed class CanvasToolsExecutor : ISessionScopedToolExecutor, IToolDescriptor
 {
     private readonly ISessionArtifactStore _artifacts;
 
     public CanvasToolsExecutor(ISessionArtifactStore artifacts) => _artifacts = artifacts;
 
+    public IEnumerable<ToolRegistration> Describe() =>
+    [
+        new(AgenticCanvasTools.CanvasWrite, ToolCapabilities.Canvas | ToolCapabilities.Mutating, ToolHandlerKind.SessionScoped),
+        new(AgenticCanvasTools.CanvasRead, ToolCapabilities.Canvas, ToolHandlerKind.SessionScoped)
+    ];
+
+    public IEnumerable<OllamaTool> BuildSchemas(AppRuntimeConfig runtimeConfig) =>
+        AgenticCanvasTools.BuildTools(runtimeConfig);
+
     public bool CanExecute(string toolName, AppRuntimeConfig runtimeConfig) =>
         runtimeConfig.Agentic.Tools.Canvas.Enabled
-        && AgenticCanvasTools.IsCanvasTool(toolName);
+        && Describe().Any(r => string.Equals(r.WireName, toolName, StringComparison.OrdinalIgnoreCase));
 
     public async Task<ToolExecutionResult> ExecuteAsync(
         OllamaToolCall toolCall,

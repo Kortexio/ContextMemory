@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ContextMemory.Infrastructure.Agentic.Mcp;
 
-public sealed class McpToolExecutor : IToolExecutor
+public sealed class McpToolExecutor : IToolExecutor, IToolDescriptor
 {
     private readonly McpJsonRpcClient _client;
     private readonly IMcpToolCatalog _catalog;
@@ -22,6 +22,11 @@ public sealed class McpToolExecutor : IToolExecutor
         _catalog = catalog;
         _logger = logger;
     }
+
+    /// <summary>MCP names are dynamic; resolution is the qualified-name fallback in <see cref="IToolResolver"/>.</summary>
+    public IEnumerable<ToolRegistration> Describe() => [];
+
+    public IEnumerable<OllamaTool> BuildSchemas(AppRuntimeConfig runtimeConfig) => [];
 
     public bool CanExecute(string toolName, AppRuntimeConfig runtimeConfig)
     {

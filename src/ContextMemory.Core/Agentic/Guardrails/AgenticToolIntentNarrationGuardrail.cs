@@ -1,3 +1,4 @@
+using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -115,7 +116,7 @@ public static class AgenticToolIntentNarrationGuardrail
     {
         foreach (var step in steps)
         {
-            if (step.Success && SessionDiscoveryTools.IsDiscoveryTool(step.ToolName))
+            if (step.Success && ToolCapabilityIndex.StepHas(step, ToolCapabilities.Discovery))
                 return true;
         }
 
@@ -128,7 +129,7 @@ public static class AgenticToolIntentNarrationGuardrail
         {
             if (!step.Success)
                 continue;
-            if (SessionDiscoveryTools.IsDiscoveryTool(step.ToolName))
+            if (ToolCapabilityIndex.StepHas(step, ToolCapabilities.Discovery))
                 continue;
             return true;
         }

@@ -1,3 +1,4 @@
+using ContextMemory.Core.Agentic;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Persistence;
@@ -104,6 +105,22 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddTransient<ISessionScopedToolExecutor>(sp => sp.GetRequiredService<BrowserToolsExecutor>());
         services.AddTransient<ISessionScopedToolExecutor>(sp => sp.GetRequiredService<DocumentToolsExecutor>());
         services.AddTransient<ISessionScopedToolExecutor>(sp => sp.GetRequiredService<CanvasToolsExecutor>());
+
+        services.AddTransient<IToolDescriptor>(sp => sp.GetRequiredService<AcaExecutionToolExecutor>());
+        services.AddTransient<IToolDescriptor>(sp => sp.GetRequiredService<SelfHostedGVisorExecutor>());
+        services.AddTransient<IToolDescriptor>(sp => sp.GetRequiredService<McpToolExecutor>());
+        services.AddTransient<IToolDescriptor>(sp => sp.GetRequiredService<GlobalWikiToolExecutor>());
+        services.AddTransient<IToolDescriptor>(sp => sp.GetRequiredService<HttpToolsExecutor>());
+        services.AddTransient<IToolDescriptor>(sp => sp.GetRequiredService<SessionDiscoveryToolExecutor>());
+        services.AddTransient<IToolDescriptor>(sp => sp.GetRequiredService<DelegateTaskToolExecutor>());
+        services.AddTransient<IToolDescriptor>(sp => sp.GetRequiredService<VisionToolsExecutor>());
+        services.AddTransient<IToolDescriptor>(sp => sp.GetRequiredService<BrowserToolsExecutor>());
+        services.AddTransient<IToolDescriptor>(sp => sp.GetRequiredService<DocumentToolsExecutor>());
+        services.AddTransient<IToolDescriptor>(sp => sp.GetRequiredService<CanvasToolsExecutor>());
+        // Lazy breaks the cycle: SessionDiscoveryToolExecutor → IToolRegistry → descriptors → SessionDiscovery…
+        services.AddSingleton(sp => new Lazy<IToolRegistry>(() => sp.GetRequiredService<IToolRegistry>()));
+        services.AddSingleton<IToolResolver, ToolResolver>();
+        services.AddSingleton<IToolRegistry, ToolRegistry>();
 
         services.AddHttpClient(HttpToolsExecutor.HttpClientName, client =>
         {

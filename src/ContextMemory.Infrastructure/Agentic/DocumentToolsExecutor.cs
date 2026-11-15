@@ -9,7 +9,7 @@ using UglyToad.PdfPig;
 
 namespace ContextMemory.Infrastructure.Agentic;
 
-public sealed class DocumentToolsExecutor : ISessionScopedToolExecutor
+public sealed class DocumentToolsExecutor : ISessionScopedToolExecutor, IToolDescriptor
 {
     private readonly ISessionArtifactStore _artifacts;
     private readonly GlobalWikiService _wiki;
@@ -25,9 +25,18 @@ public sealed class DocumentToolsExecutor : ISessionScopedToolExecutor
         _logger = logger;
     }
 
+    public IEnumerable<ToolRegistration> Describe() =>
+    [
+        new(AgenticDocumentTools.ParsePdf, ToolCapabilities.Document, ToolHandlerKind.SessionScoped),
+        new(AgenticDocumentTools.ReadDocument, ToolCapabilities.Document, ToolHandlerKind.SessionScoped)
+    ];
+
+    public IEnumerable<OllamaTool> BuildSchemas(AppRuntimeConfig runtimeConfig) =>
+        AgenticDocumentTools.BuildTools(runtimeConfig);
+
     public bool CanExecute(string toolName, AppRuntimeConfig runtimeConfig) =>
         runtimeConfig.Agentic.Tools.Documents.Enabled
-        && AgenticDocumentTools.IsDocumentTool(toolName);
+        && Describe().Any(r => string.Equals(r.WireName, toolName, StringComparison.OrdinalIgnoreCase));
 
     public async Task<ToolExecutionResult> ExecuteAsync(
         OllamaToolCall toolCall,

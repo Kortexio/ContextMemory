@@ -1,58 +1,76 @@
 using System.Text;
+using ContextMemory.Core.Contracts;
 
 namespace ContextMemory.Core.Agentic.Harness;
 
 /// <summary>
-/// CodeForge-style tool system contract for active tools only.
-/// Does not replace Admin skills / policy prose.
+/// Tool system contract for active tools, driven by <see cref="ToolCapabilities"/> — not wire-name lists.
 /// </summary>
 public static class ToolSystemContractBuilder
 {
     public static string Build(IEnumerable<string> activeToolNames)
     {
-        var active = new HashSet<string>(
-            activeToolNames.Where(n => !string.IsNullOrWhiteSpace(n)),
-            StringComparer.OrdinalIgnoreCase);
-        if (active.Count == 0)
+        var tools = activeToolNames
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n =>
+            {
+                ToolCapabilityIndex.TryGet(n, out var caps);
+                return (Name: n.Trim(), Caps: caps);
+            })
+            .ToList();
+
+        return Build(tools);
+    }
+
+    public static string Build(IEnumerable<(string Name, ToolCapabilities Caps)> activeTools)
+    {
+        var tools = activeTools
+            .Where(t => !string.IsNullOrWhiteSpace(t.Name))
+            .GroupBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .ToList();
+
+        if (tools.Count == 0)
             return string.Empty;
 
-        bool Has(params string[] names) => names.Any(active.Contains);
+        var union = ToolCapabilities.None;
+        foreach (var t in tools)
+            union |= t.Caps;
 
         var sb = new StringBuilder();
         sb.AppendLine("### Tool contract");
         sb.AppendLine("Call tools to inspect live data and act. Chat text alone is not evidence.");
 
-        var explore = new List<string>();
-        if (Has("wiki_search")) explore.Add("wiki_search");
-        if (Has("wiki_grep")) explore.Add("wiki_grep");
-        if (Has("tool_search")) explore.Add("tool_search");
-        if (Has("tool_describe")) explore.Add("tool_describe");
-        if (Has("skill_search", "skill_read")) explore.Add("skill_search/skill_read");
+        var explore = tools
+            .Where(t => t.Caps.HasFlag(ToolCapabilities.Discovery) || t.Caps.HasFlag(ToolCapabilities.QueryFocused))
+            .Select(t => t.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         if (explore.Count > 0)
             sb.AppendLine($"Discovery: {string.Join(", ", explore)}.");
 
-        var exec = new List<string>();
-        if (Has("shell_execute")) exec.Add("shell_execute");
-        if (Has("python_execute")) exec.Add("python_execute");
-        if (Has("node_execute")) exec.Add("node_execute");
-        if (Has("container_execute")) exec.Add("container_execute");
+        var exec = tools
+            .Where(t => t.Caps.HasFlag(ToolCapabilities.Sandbox))
+            .Select(t => t.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         if (exec.Count > 0)
             sb.AppendLine($"Execution: {string.Join(", ", exec)}.");
 
-        if (Has("http_fetch", "http_request", "web_fetch"))
+        if (union.HasFlag(ToolCapabilities.Http))
             sb.AppendLine("HTTP: use dedicated fetch tools for URLs; do not invent page contents.");
 
-        if (Has("browser_navigate", "browser_snapshot", "browser_click"))
+        if (union.HasFlag(ToolCapabilities.Browser))
             sb.AppendLine("Browser: observe (snapshot) → act → re-observe. Unchanged UI: do not repeat the same selector.");
 
         sb.AppendLine(
             "Schemas for listed tools are already in the catalog — call them directly. "
-            + "Use tool_describe only for tools outside the offered set or when a schema is still unclear.");
+            + "Use discovery helpers only for tools outside the offered set or when a schema is still unclear.");
         sb.AppendLine(
             "Do not repeat an identical successful tool+args call. After a failure, change arguments or pivot.");
         sb.AppendLine(
-            "Finish: discovery-only (tool_describe/skill_search/…) is not done when the user needs live facts. "
-            + "Gather evidence with wiki/MCP/http/sandbox, then answer. Never narrate harness or raw tool names to the user.");
+            "Finish: discovery-only turns are not done when the user needs live facts. "
+            + "Gather evidence with query/MCP/http/sandbox tools, then answer. Never narrate harness or raw tool names to the user.");
         sb.AppendLine("Answer in the user's language.");
 
         return sb.ToString().TrimEnd();

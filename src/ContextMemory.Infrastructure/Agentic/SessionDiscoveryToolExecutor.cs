@@ -8,27 +8,47 @@ using ContextMemory.Core.Models;
 
 namespace ContextMemory.Infrastructure.Agentic;
 
-public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
+public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor, IToolDescriptor
 {
     public const string TodosArtifactId = "meta:todos";
 
     private readonly ISessionArtifactStore _artifacts;
     private readonly ISessionStore _sessionStore;
     private readonly IMcpToolCatalog _mcpCatalog;
+    private readonly Lazy<IToolRegistry> _toolRegistry;
 
     public SessionDiscoveryToolExecutor(
         ISessionArtifactStore artifacts,
         ISessionStore sessionStore,
-        IMcpToolCatalog mcpCatalog)
+        IMcpToolCatalog mcpCatalog,
+        Lazy<IToolRegistry> toolRegistry)
     {
         _artifacts = artifacts;
         _sessionStore = sessionStore;
         _mcpCatalog = mcpCatalog;
+        _toolRegistry = toolRegistry;
     }
 
+    public IEnumerable<ToolRegistration> Describe() =>
+    [
+        new(SessionDiscoveryTools.ArtifactRead, ToolCapabilities.Discovery, ToolHandlerKind.SessionScoped),
+        new(SessionDiscoveryTools.ArtifactTail, ToolCapabilities.Discovery, ToolHandlerKind.SessionScoped),
+        new(SessionDiscoveryTools.SkillRead, ToolCapabilities.Discovery, ToolHandlerKind.SessionScoped),
+        new(SessionDiscoveryTools.SkillSearch, ToolCapabilities.Discovery, ToolHandlerKind.SessionScoped),
+        new(SessionDiscoveryTools.RuleRead, ToolCapabilities.Discovery, ToolHandlerKind.SessionScoped),
+        new(SessionDiscoveryTools.RuleSearch, ToolCapabilities.Discovery, ToolHandlerKind.SessionScoped),
+        new(SessionDiscoveryTools.ToolDescribe, ToolCapabilities.Discovery, ToolHandlerKind.SessionScoped),
+        new(SessionDiscoveryTools.ToolSearch, ToolCapabilities.Discovery, ToolHandlerKind.SessionScoped),
+        new(SessionDiscoveryTools.SessionLogSearch, ToolCapabilities.Discovery, ToolHandlerKind.SessionScoped),
+        new(SessionDiscoveryTools.TodoWrite, ToolCapabilities.Discovery | ToolCapabilities.Mutating, ToolHandlerKind.SessionScoped)
+    ];
+
+    public IEnumerable<OllamaTool> BuildSchemas(AppRuntimeConfig runtimeConfig) =>
+        SessionDiscoveryTools.BuildTools(runtimeConfig)
+            .Where(t => !string.Equals(t.Function.Name, SessionDiscoveryTools.DelegateTask, StringComparison.OrdinalIgnoreCase));
+
     public bool CanExecute(string toolName, AppRuntimeConfig runtimeConfig) =>
-        SessionDiscoveryTools.IsDiscoveryTool(toolName)
-        && !string.Equals(toolName, SessionDiscoveryTools.DelegateTask, StringComparison.OrdinalIgnoreCase);
+        Describe().Any(r => string.Equals(r.WireName, toolName, StringComparison.OrdinalIgnoreCase));
 
     public async Task<ToolExecutionResult> ExecuteAsync(
         OllamaToolCall toolCall,
@@ -259,25 +279,8 @@ public sealed class SessionDiscoveryToolExecutor : ISessionScopedToolExecutor
         AppRuntimeConfig runtimeConfig,
         CancellationToken cancellationToken)
     {
-        if (SessionDiscoveryTools.IsDiscoveryTool(toolName))
-        {
-            var meta = SessionDiscoveryTools.BuildTools(runtimeConfig)
-                .FirstOrDefault(t => string.Equals(t.Function.Name, toolName, StringComparison.OrdinalIgnoreCase));
-            if (meta is not null)
-                return FormatTool(meta);
-        }
-
-        var builtins = new List<OllamaTool>();
-        builtins.AddRange(AgenticToolRegistry.BuildExecutionTools(runtimeConfig, lazySchemas: false));
-        var wiki = AgenticToolRegistry.BuildWikiSearchTool(runtimeConfig, lazySchemas: false);
-        if (wiki is not null)
-            builtins.Add(wiki);
-        var wikiGrep = AgenticToolRegistry.BuildWikiGrepTool(runtimeConfig, lazySchemas: false);
-        if (wikiGrep is not null)
-            builtins.Add(wikiGrep);
-        builtins.AddRange(SessionDiscoveryTools.BuildTools(runtimeConfig));
-        var built = builtins.FirstOrDefault(t =>
-            string.Equals(t.Function.Name, toolName, StringComparison.OrdinalIgnoreCase));
+        var built = _toolRegistry.Value.BuildBuiltinSchemas(runtimeConfig)
+            .FirstOrDefault(t => string.Equals(t.Function.Name, toolName, StringComparison.OrdinalIgnoreCase));
         if (built is not null)
             return FormatTool(built);
 

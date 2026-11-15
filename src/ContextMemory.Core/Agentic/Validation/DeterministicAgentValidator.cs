@@ -105,7 +105,7 @@ public sealed class DeterministicAgentValidator
         // counting them forces the model to explain budget mechanics to the end user.
         var failedSteps = steps
             .Where(s => !s.Success)
-            .Where(s => !SessionDiscoveryTools.IsDiscoveryTool(s.ToolName))
+            .Where(s => !ToolCapabilityIndex.StepHas(s, ToolCapabilities.Discovery))
             .Where(s => !AgenticDuplicateToolCallGuard.IsHarnessPolicyRejection(s))
             .Where(s => !HasLaterSuccessfulRetry(steps, s))
             .ToList();

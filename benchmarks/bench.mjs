@@ -8,8 +8,8 @@
  *   node benchmarks/bench.mjs report [results-file-or-dir]
  *
  * Env:
- *   CM_BENCH_BASE_URL  OpenAI-compatible host (default https://llm.example.test)
- *   CM_BENCH_MODEL     model id (default qwen3.6-35b)
+ *   CM_BENCH_BASE_URL  OpenAI-compatible host under test (required for live A/B)
+ *   CM_BENCH_MODEL     model id (default qwen3.6-35b-iq3s-mtp)
  *   CM_BENCH_API_KEY   optional — only if the API under test requires a key (not a ContextMemory app key)
  */
 
@@ -24,7 +24,6 @@ const TASKS_DIR = path.join(HERE, "tasks");
 const RESULTS_DIR = path.join(HERE, "results");
 const FIXTURES_ROOT = HERE;
 
-const DEFAULT_BASE_URL = "https://llm.example.test";
 const DEFAULT_MODEL = "qwen3.6-35b-iq3s-mtp";
 
 function die(msg) {
@@ -261,7 +260,7 @@ function buildAbDocument({ label, reachable, baseUrl, model, tasks }) {
         "Harness off vs on is applied by the local CM harness (in-process), not by gateway auth. " +
         "Publish README Measured only after honest Δ (off must hurt when expectBaselineFail).",
       steps: [
-        "1. Point CM_BENCH_BASE_URL at any OpenAI-compatible /v1 (default llm.example.test).",
+        "1. Point CM_BENCH_BASE_URL at any OpenAI-compatible /v1 host under test.",
         "2. Run each task with harness OFF (no family recovery / arg repair / finish gate / Continue).",
         "3. Repeat with harness ON (full CM harness against the same model).",
         "4. Score hidden checks; compare Δ score / stuck / badArgs / falseDone.",
@@ -272,14 +271,15 @@ function buildAbDocument({ label, reachable, baseUrl, model, tasks }) {
         "CM_BENCH_API_KEY is optional and only used when the API under test requires a key. Not a ContextMemory app/gateway key.",
     },
     env: {
-      CM_BENCH_BASE_URL: baseUrl,
+      // Never persist the live LLM host — results may be shared or committed by mistake.
+      CM_BENCH_BASE_URL: "(redacted)",
       CM_BENCH_MODEL: model,
       CM_BENCH_API_KEY:
         (process.env.CM_BENCH_API_KEY || process.env.CM_BENCH_BEARER || "").trim()
           ? "(set — target API auth)"
           : "(none — target API open)",
     },
-    endpoint: `${baseUrl.replace(/\/$/, "")}/v1/chat/completions`,
+    endpoint: "(redacted)/v1/chat/completions",
     model,
     tasks: taskRows,
     summary: {
@@ -346,7 +346,11 @@ async function probeEndpoint(baseUrl) {
 }
 
 async function cmdAb(flags) {
-  const baseUrl = (process.env.CM_BENCH_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, "");
+  const baseUrlRaw = (process.env.CM_BENCH_BASE_URL || "").trim();
+  if (!baseUrlRaw) {
+    die("Set CM_BENCH_BASE_URL to an OpenAI-compatible /v1 host before running live A/B.");
+  }
+  const baseUrl = baseUrlRaw.replace(/\/$/, "");
   const model = process.env.CM_BENCH_MODEL || DEFAULT_MODEL;
   const tasks = loadTasks();
   const label = typeof flags.label === "string" ? flags.label : "ab";
