@@ -7,7 +7,7 @@
 <p align="center">
   <a href="#try-it-in-three-commands"><strong>Try it (3 commands)</strong></a>
   ·
-  <a href="#proof-weak-model--strong-agent">Proof</a>
+  <a href="#proof-same-model-harness-off--on">Proof</a>
   ·
   <a href="docs/compare.md">vs Mem0 / Zep / Letta</a>
   ·
@@ -23,17 +23,17 @@
 
 ---
 
-# Make a weak model behave like a strong agent
+# Weak model. Strong agent loop.
 
-Point any OpenAI-compatible client at ContextMemory. Keep the **same prompts**.  
-The gateway adds **durable memory you can open as markdown**, and a **server-side harness** that recovers tool calls, refuses fake “done”, and finishes the loop.
+A model only writes the next tokens. An **agent** is the loop around it: tools, memory, repair, evidence, finish.  
+ContextMemory is that loop on the server — so a **weaker model** can still complete agent work on the **same prompts**.
 
-You do not rewrite your app. You do not adopt LangGraph/CrewAI/Letta.  
-One `/v1/chat/completions` URL — memory + tools + evidence rules on the server.
+Point any OpenAI-compatible client here. You keep your app. No LangGraph/CrewAI/Letta rewrite.  
+One `/v1/chat/completions` URL — markdown memory you can open, plus a harness that recovers tool calls, refuses fake “done”, and terminates.
 
 ---
 
-## Proof (weak model → strong agent)
+## Proof (same model, harness off → on)
 
 Same model, same prompts, adversarial suite (wiki · MCP · finish · anti-stuck · distractor).  
 **Off** = wire without recovery. **On** = weak harness.
