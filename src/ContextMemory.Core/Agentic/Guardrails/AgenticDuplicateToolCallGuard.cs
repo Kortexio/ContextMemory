@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -17,12 +18,6 @@ public static class AgenticDuplicateToolCallGuard
     private static readonly Regex UnicodeEscape = new(
         @"\\u([0-9a-fA-F]{4})",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
-    private static readonly HashSet<string> QueryFocusedTools = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "wiki_search",
-        "wiki_grep"
-    };
 
     /// <summary>
     /// Max wiki_search/wiki_grep attempts (success or real fail) before forcing a pivot.
@@ -86,7 +81,7 @@ public static class AgenticDuplicateToolCallGuard
             return false;
 
         var name = NormalizeToolName(toolName);
-        if (QueryFocusedTools.Contains(name))
+        if (IsQueryFocused(name))
         {
             var wikiAttempts = steps.Count(IsRealWikiAttempt);
             if (wikiAttempts >= MaxWikiAttemptsPerTurn)
@@ -115,7 +110,7 @@ public static class AgenticDuplicateToolCallGuard
             && string.Equals(BuildSignature(s.ToolName, s.Arguments), signature, StringComparison.Ordinal))
             .ToList();
 
-        if (QueryFocusedTools.Contains(name))
+        if (IsQueryFocused(name))
         {
             // Empty/identical wiki retries never help — block after any prior attempt.
             if (sameSignature.Count == 0)
@@ -128,7 +123,7 @@ public static class AgenticDuplicateToolCallGuard
         // Discovery calls are local, deterministic reads/searches. Repeating the exact failed
         // arguments cannot recover and previously burned every remaining iteration (for example
         // artifact_read with a malformed field name).
-        if (SessionDiscoveryTools.IsDiscoveryTool(name)
+        if (ToolCapabilityIndex.HasFlag(name, ToolCapabilities.Discovery)
             && sameSignature.Count > 0
             && sameSignature.All(s => !s.Success))
         {
@@ -155,7 +150,7 @@ public static class AgenticDuplicateToolCallGuard
     public static string BuildSignature(string toolName, string? argumentsJson)
     {
         var name = NormalizeToolName(toolName);
-        if (QueryFocusedTools.Contains(name))
+        if (IsQueryFocused(name))
         {
             var query = ExtractQuery(argumentsJson);
             return name + "|q=" + NormalizeText(query);
@@ -271,6 +266,9 @@ public static class AgenticDuplicateToolCallGuard
     private static string NormalizeToolName(string toolName) =>
         toolName.Trim().ToLowerInvariant();
 
+    private static bool IsQueryFocused(string? toolName) =>
+        ToolCapabilityIndex.HasFlag(toolName, ToolCapabilities.QueryFocused);
+
     private static string ExtractQuery(string? argumentsJson)
     {
         if (string.IsNullOrWhiteSpace(argumentsJson))
@@ -335,7 +333,7 @@ public static class AgenticDuplicateToolCallGuard
     /// </summary>
     private static bool IsRealWikiAttempt(AgentExecutionStep step)
     {
-        if (!QueryFocusedTools.Contains(NormalizeToolName(step.ToolName)))
+        if (!IsQueryFocused(step.ToolName))
             return false;
         if (IsWikiBudgetRejection(step))
             return false;
@@ -581,7 +579,7 @@ public static class AgenticDuplicateToolCallGuard
     {
         if (step.Success || string.IsNullOrWhiteSpace(step.ToolName))
             return false;
-        if (!QueryFocusedTools.Contains(NormalizeToolName(step.ToolName)))
+        if (!IsQueryFocused(step.ToolName))
             return false;
 
         var output = step.Output ?? string.Empty;
@@ -589,7 +587,7 @@ public static class AgenticDuplicateToolCallGuard
     }
 
     public static bool HasSuccessfulWikiEvidence(IReadOnlyList<AgentExecutionStep> steps) =>
-        steps.Any(s => s.Success && QueryFocusedTools.Contains(NormalizeToolName(s.ToolName)));
+        steps.Any(s => s.Success && IsQueryFocused(s.ToolName));
 
     private static string BuildWikiBudgetFeedback(
         IReadOnlyList<AgentExecutionStep> steps,
@@ -619,7 +617,11 @@ public static class AgenticDuplicateToolCallGuard
     private static string BuildEmptyQueryFeedback(string toolName, AppRuntimeConfig runtimeConfig)
     {
         var hasMcp = HasConfiguredMcp(runtimeConfig);
-        var field = string.Equals(toolName, "wiki_grep", StringComparison.Ordinal) ? "pattern" : "query";
+        // Prefer "pattern" when the tool's last registration implies grep-style args; else "query".
+        var field = ToolCapabilityIndex.TryGet(toolName, out _)
+                    && toolName.Contains("grep", StringComparison.OrdinalIgnoreCase)
+            ? "pattern"
+            : "query";
 
         if (hasMcp)
         {
@@ -636,7 +638,7 @@ public static class AgenticDuplicateToolCallGuard
 
     private static string BuildFeedback(string toolName, AppRuntimeConfig runtimeConfig, bool afterFailure)
     {
-        var isWiki = QueryFocusedTools.Contains(NormalizeToolName(toolName));
+        var isWiki = IsQueryFocused(toolName);
 
         // Identical call that already succeeded: stop tooling and answer from that result.
         if (!afterFailure)

@@ -502,6 +502,11 @@ public sealed class AgentExecutionStep
     public string? Summary { get; init; }
     public Dictionary<string, string>? Entities { get; init; }
     public bool OutputTruncated { get; init; }
+
+    /// <summary>
+    /// Capabilities from <see cref="Contracts.IToolResolver"/> at execution time. Gates prefer this over wire-name lists.
+    /// </summary>
+    public Contracts.ToolCapabilities Capabilities { get; init; }
 }
 
 public sealed class ValidationResult

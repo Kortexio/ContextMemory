@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ContextMemory.Infrastructure.Agentic;
 
-public sealed class AcaExecutionToolExecutor : IToolExecutor
+public sealed class AcaExecutionToolExecutor : IToolExecutor, IToolDescriptor
 {
     private readonly AcaDynamicSessionsClient _client;
     private readonly ILogger<AcaExecutionToolExecutor> _logger;
@@ -17,6 +17,17 @@ public sealed class AcaExecutionToolExecutor : IToolExecutor
         _client = client;
         _logger = logger;
     }
+
+    public IEnumerable<ToolRegistration> Describe() =>
+    [
+        new(AgenticToolRegistry.ShellExecuteToolName, ToolCapabilities.Sandbox | ToolCapabilities.Mutating, ToolHandlerKind.AppScoped),
+        new(AgenticToolRegistry.PythonExecuteToolName, ToolCapabilities.Sandbox | ToolCapabilities.Mutating, ToolHandlerKind.AppScoped),
+        new(AgenticToolRegistry.NodeExecuteToolName, ToolCapabilities.Sandbox | ToolCapabilities.Mutating, ToolHandlerKind.AppScoped),
+        new(AgenticToolRegistry.ContainerExecuteToolName, ToolCapabilities.Sandbox | ToolCapabilities.Mutating, ToolHandlerKind.AppScoped)
+    ];
+
+    public IEnumerable<OllamaTool> BuildSchemas(AppRuntimeConfig runtimeConfig) =>
+        AgenticToolRegistry.BuildExecutionTools(runtimeConfig, lazySchemas: false);
 
     public bool CanExecute(string toolName, AppRuntimeConfig runtimeConfig) =>
         TryResolveExecution(toolName, runtimeConfig) is not null;

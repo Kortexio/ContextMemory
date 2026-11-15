@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -21,7 +22,7 @@ public static partial class AgenticPriceQuoteGuardrail
             return false;
 
         var evidence = string.Join('\n', steps
-            .Where(s => s.Success && !SessionDiscoveryTools.IsDiscoveryTool(s.ToolName))
+            .Where(s => s.Success && !ToolCapabilityIndex.StepHas(s, ToolCapabilities.Discovery))
             .Select(s => s.Output ?? string.Empty));
 
         foreach (Match m in prices)

@@ -10,6 +10,7 @@ namespace ContextMemory.Core.Agentic;
 
 public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
 {
+    private readonly IToolResolver _toolResolver;
     private readonly IEnumerable<IToolExecutor> _toolExecutors;
     private readonly IEnumerable<ISessionScopedToolExecutor> _sessionToolExecutors;
     private readonly IAgenticPendingStore _pendingStore;
@@ -19,6 +20,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
     private readonly ContextMemoryOptions _options;
 
     public AgentToolCallProcessor(
+        IToolResolver toolResolver,
         IEnumerable<IToolExecutor> toolExecutors,
         IEnumerable<ISessionScopedToolExecutor> sessionToolExecutors,
         IAgenticPendingStore pendingStore,
@@ -27,6 +29,7 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
         IExecutionPolicyEvaluator executionPolicy,
         IOptions<ContextMemoryOptions> options)
     {
+        _toolResolver = toolResolver;
         _toolExecutors = toolExecutors;
         _sessionToolExecutors = sessionToolExecutors;
         _pendingStore = pendingStore;
@@ -306,6 +309,33 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
             };
         }
 
+        if (!_toolResolver.TryResolve(toolCall.Function.Name, runtimeConfig, out var resolved))
+        {
+            var unknown = new ToolExecutionResult
+            {
+                Output = ToolExecutionMessages.ToolNotRegistered(toolCall.Function.Name, runtimeConfig),
+                ExitCode = 1
+            };
+            messages.Add(new OllamaMessage
+            {
+                Role = "tool",
+                Content = AgenticToolObservationFormatter.Format(
+                    toolCall.Function.Name, unknown, runtimeConfig)
+            });
+            steps.Add(new AgentExecutionStep
+            {
+                Iteration = iteration,
+                ToolName = toolCall.Function.Name,
+                Arguments = toolCall.Function.Arguments,
+                Output = unknown.Output ?? string.Empty,
+                ExitCode = 1,
+                Success = false,
+                Duration = TimeSpan.Zero,
+                Summary = "Tool not registered"
+            });
+            return new AgentToolCallOutcome { Result = unknown };
+        }
+
         Report(report, new AgenticProgressEvent
         {
             Phase = AgenticProgressPhase.ToolStarted,
@@ -335,8 +365,8 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
         var maxObs = runtimeConfig.MaxToolObservationChars > 0
             ? runtimeConfig.MaxToolObservationChars
             : AgenticToolObservationFormatter.DefaultMaxObservationChars;
-        var isSandbox = IsSandboxTool(toolCall.Function.Name);
-        var shouldArchive = !SessionDiscoveryTools.IsDiscoveryTool(toolCall.Function.Name)
+        var isSandbox = resolved.Capabilities.HasFlag(ToolCapabilities.Sandbox);
+        var shouldArchive = !resolved.Capabilities.HasFlag(ToolCapabilities.Discovery)
             && (isSandbox || fullOutput.Length > maxObs);
 
         if (shouldArchive && fullOutput.Length > 0)
@@ -381,7 +411,8 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
             Duration = sw.Elapsed,
             Summary = toolResult.Summary,
             Entities = toolResult.Entities,
-            OutputTruncated = toolResult.OutputTruncated || shouldArchive
+            OutputTruncated = toolResult.OutputTruncated || shouldArchive,
+            Capabilities = resolved.Capabilities
         };
         steps.Add(step);
 
@@ -465,12 +496,6 @@ public sealed class AgentToolCallProcessor : IAgentToolCallProcessor
         map[key] = value;
         return map;
     }
-
-    private static bool IsSandboxTool(string? toolName) =>
-        string.Equals(toolName, AgenticToolRegistry.ShellExecuteToolName, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, AgenticToolRegistry.PythonExecuteToolName, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, AgenticToolRegistry.NodeExecuteToolName, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, AgenticToolRegistry.ContainerExecuteToolName, StringComparison.OrdinalIgnoreCase);
 
     private static bool RequiresMcpConfirmation(OllamaToolCall toolCall, AppRuntimeConfig runtimeConfig)
     {

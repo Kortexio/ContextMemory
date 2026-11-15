@@ -11,10 +11,10 @@ public class LlmHealthProbeTests
     {
         var handler = new RecordingHandler(HttpStatusCode.OK);
         using var http = new HttpClient(handler);
-        var client = new OpenAiChatClient(http, "https://server.kortexio.io/v1", apiKey: null);
+        var client = new OpenAiChatClient(http, "https://llm.example.test/v1", apiKey: null);
 
         Assert.True(await client.IsHealthyAsync(CancellationToken.None));
-        Assert.Equal("https://server.kortexio.io/", handler.LastUri?.ToString());
+        Assert.Equal("https://llm.example.test/", handler.LastUri?.ToString());
     }
 
     [Fact]

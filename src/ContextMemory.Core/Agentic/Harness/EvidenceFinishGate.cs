@@ -1,3 +1,4 @@
+using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic.Harness;
@@ -75,6 +76,6 @@ public static class EvidenceFinishGate
             return false;
 
         // All successful tools were discovery harness helpers — no real evidence/effect.
-        return successful.All(s => SessionDiscoveryTools.IsDiscoveryTool(s.ToolName));
+        return successful.All(s => ToolCapabilityIndex.StepHas(s, ToolCapabilities.Discovery));
     }
 }

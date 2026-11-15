@@ -1,13 +1,14 @@
 using System.Text;
 using System.Text.Json;
 using ContextMemory.Core.Agentic;
+using ContextMemory.Core.Agentic.Prompts;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 using Microsoft.Extensions.Logging;
 
 namespace ContextMemory.Infrastructure.Agentic;
 
-public sealed class VisionToolsExecutor : ISessionScopedToolExecutor
+public sealed class VisionToolsExecutor : ISessionScopedToolExecutor, IToolDescriptor
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ISessionArtifactStore _artifacts;
@@ -23,9 +24,22 @@ public sealed class VisionToolsExecutor : ISessionScopedToolExecutor
         _logger = logger;
     }
 
+    public IEnumerable<ToolRegistration> Describe() =>
+    [
+        new(AgenticVisionTools.ReadImage, ToolCapabilities.Vision, ToolHandlerKind.SessionScoped),
+        new(AgenticVisionTools.ScreenshotDescribe, ToolCapabilities.Vision, ToolHandlerKind.SessionScoped)
+    ];
+
+    public IEnumerable<OllamaTool> BuildSchemas(AppRuntimeConfig runtimeConfig)
+    {
+        var caps = LlmCapabilitiesResolver.From(runtimeConfig);
+        return AgenticVisionTools.BuildTools(runtimeConfig, caps.SupportsVision);
+    }
+
     public bool CanExecute(string toolName, AppRuntimeConfig runtimeConfig)
     {
-        if (!runtimeConfig.Agentic.Tools.Vision.Enabled || !AgenticVisionTools.IsVisionTool(toolName))
+        if (!runtimeConfig.Agentic.Tools.Vision.Enabled
+            || !Describe().Any(r => string.Equals(r.WireName, toolName, StringComparison.OrdinalIgnoreCase)))
             return false;
 
         return LlmCapabilitiesGate.SupportsVision(runtimeConfig);

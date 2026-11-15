@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ContextMemory.Infrastructure.Agentic;
 
-public sealed class SelfHostedGVisorExecutor : IToolExecutor
+public sealed class SelfHostedGVisorExecutor : IToolExecutor, IToolDescriptor
 {
     private readonly SelfHostedSandboxClient _client;
     private readonly IMcpCredentialStore _credentialStore;
@@ -22,6 +22,17 @@ public sealed class SelfHostedGVisorExecutor : IToolExecutor
         _credentialStore = credentialStore;
         _logger = logger;
     }
+
+    public IEnumerable<ToolRegistration> Describe() =>
+    [
+        new(AgenticToolRegistry.ShellExecuteToolName, ToolCapabilities.Sandbox | ToolCapabilities.Mutating, ToolHandlerKind.AppScoped),
+        new(AgenticToolRegistry.PythonExecuteToolName, ToolCapabilities.Sandbox | ToolCapabilities.Mutating, ToolHandlerKind.AppScoped),
+        new(AgenticToolRegistry.NodeExecuteToolName, ToolCapabilities.Sandbox | ToolCapabilities.Mutating, ToolHandlerKind.AppScoped),
+        new(AgenticToolRegistry.ContainerExecuteToolName, ToolCapabilities.Sandbox | ToolCapabilities.Mutating, ToolHandlerKind.AppScoped)
+    ];
+
+    /// <summary>Schemas come from <see cref="AcaExecutionToolExecutor"/> (shared <see cref="AgenticToolRegistry.BuildExecutionTools"/>); deduped by registry.</summary>
+    public IEnumerable<OllamaTool> BuildSchemas(AppRuntimeConfig runtimeConfig) => [];
 
     public bool CanExecute(string toolName, AppRuntimeConfig runtimeConfig) =>
         TryResolveExecution(toolName, runtimeConfig) is not null;

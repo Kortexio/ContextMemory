@@ -86,7 +86,7 @@ public sealed class LlmCapabilitiesResolverTests
             AppId = "test",
             LlmBackend = "openai-compatible",
             LlmModel = "bonsai-27b",
-            LlmEndpoint = "https://server.kortexio.io/v1"
+            LlmEndpoint = "https://llm.example.test/v1"
         };
 
         var caps = LlmCapabilitiesResolver.From(config);

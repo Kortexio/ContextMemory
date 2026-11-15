@@ -17,19 +17,6 @@ public static class SessionDiscoveryTools
     public const string DelegateTask = "delegate_task";
     public const string TodoWrite = "todo_write";
 
-    public static bool IsDiscoveryTool(string? toolName) =>
-        string.Equals(toolName, ArtifactRead, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, ArtifactTail, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, SkillRead, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, SkillSearch, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, RuleRead, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, RuleSearch, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, ToolDescribe, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, ToolSearch, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, SessionLogSearch, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, DelegateTask, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, TodoWrite, StringComparison.OrdinalIgnoreCase);
-
     public static List<OllamaTool> BuildTools(AppRuntimeConfig runtimeConfig)
     {
         _ = runtimeConfig;

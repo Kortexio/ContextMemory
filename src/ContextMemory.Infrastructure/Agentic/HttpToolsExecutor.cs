@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 
 namespace ContextMemory.Infrastructure.Agentic;
 
-public sealed class HttpToolsExecutor : IToolExecutor
+public sealed class HttpToolsExecutor : IToolExecutor, IToolDescriptor
 {
     public const string HttpClientName = "HttpTools";
 
@@ -33,9 +33,19 @@ public sealed class HttpToolsExecutor : IToolExecutor
         _logger = logger;
     }
 
+    public IEnumerable<ToolRegistration> Describe() =>
+    [
+        new(AgenticHttpTools.FetchUrl, ToolCapabilities.Http, ToolHandlerKind.AppScoped),
+        new(AgenticHttpTools.HttpRequest, ToolCapabilities.Http, ToolHandlerKind.AppScoped),
+        new(AgenticHttpTools.WebSearch, ToolCapabilities.Http | ToolCapabilities.QueryFocused, ToolHandlerKind.AppScoped)
+    ];
+
+    public IEnumerable<OllamaTool> BuildSchemas(AppRuntimeConfig runtimeConfig) =>
+        AgenticHttpTools.BuildTools(runtimeConfig);
+
     public bool CanExecute(string toolName, AppRuntimeConfig runtimeConfig) =>
         runtimeConfig.Agentic.Tools.Http.Enabled
-        && AgenticHttpTools.IsHttpTool(toolName)
+        && Describe().Any(r => string.Equals(r.WireName, toolName, StringComparison.OrdinalIgnoreCase))
         && (string.Equals(toolName, AgenticHttpTools.WebSearch, StringComparison.OrdinalIgnoreCase)
             ? runtimeConfig.Agentic.Tools.Http.AllowWebSearchTool
             : true)

@@ -1,3 +1,4 @@
+using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -73,7 +74,7 @@ public static class AgenticSandboxClaimGuardrail
             if (step.Success)
                 continue;
 
-            if (!IsSandboxTool(step.ToolName))
+            if (!ToolCapabilityIndex.StepHas(step, ToolCapabilities.Sandbox))
                 continue;
 
             var output = step.Output ?? string.Empty;
@@ -93,8 +94,4 @@ public static class AgenticSandboxClaimGuardrail
         return false;
     }
 
-    private static bool IsSandboxTool(string toolName) =>
-        string.Equals(toolName, AgenticToolRegistry.PythonExecuteToolName, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, AgenticToolRegistry.ShellExecuteToolName, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolName, AgenticToolRegistry.NodeExecuteToolName, StringComparison.OrdinalIgnoreCase);
 }

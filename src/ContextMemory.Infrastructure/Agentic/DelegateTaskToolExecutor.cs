@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 namespace ContextMemory.Infrastructure.Agentic;
 
 /// <summary>Subagent tool: isolated child session(s), result returned as artifact + summary.</summary>
-public sealed class DelegateTaskToolExecutor : ISessionScopedToolExecutor
+public sealed class DelegateTaskToolExecutor : ISessionScopedToolExecutor, IToolDescriptor
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ISessionArtifactStore _artifacts;
@@ -28,8 +28,17 @@ public sealed class DelegateTaskToolExecutor : ISessionScopedToolExecutor
         _orchestrator = orchestrator;
     }
 
+    public IEnumerable<ToolRegistration> Describe() =>
+    [
+        new(SessionDiscoveryTools.DelegateTask, ToolCapabilities.Discovery, ToolHandlerKind.SessionScoped)
+    ];
+
+    public IEnumerable<OllamaTool> BuildSchemas(AppRuntimeConfig runtimeConfig) =>
+        SessionDiscoveryTools.BuildTools(runtimeConfig)
+            .Where(t => string.Equals(t.Function.Name, SessionDiscoveryTools.DelegateTask, StringComparison.OrdinalIgnoreCase));
+
     public bool CanExecute(string toolName, AppRuntimeConfig runtimeConfig) =>
-        string.Equals(toolName, SessionDiscoveryTools.DelegateTask, StringComparison.OrdinalIgnoreCase);
+        Describe().Any(r => string.Equals(r.WireName, toolName, StringComparison.OrdinalIgnoreCase));
 
     public async Task<ToolExecutionResult> ExecuteAsync(
         OllamaToolCall toolCall,

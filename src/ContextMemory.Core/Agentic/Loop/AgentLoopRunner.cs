@@ -765,7 +765,7 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
                     // Soften (opt-in): keep tools when no evidence yet. Default profile keeps
                     // force-answer for wiki-budget / duplicate-after-success circuit breakers.
                     var hasEvidence = steps.Any(s =>
-                        s.Success && !SessionDiscoveryTools.IsDiscoveryTool(s.ToolName));
+                        s.Success && !ToolCapabilityIndex.StepHas(s, ToolCapabilities.Discovery));
                     if (harnessProfile.SoftenForceAnswerOnly
                         && !hasEvidence
                         && iteration + 1 < budget.AbsoluteMax)
@@ -1144,18 +1144,9 @@ public sealed class AgentLoopRunner : IAgentLoopRunner
             continueExtensions));
     }
 
-    private static bool IsDiscoveryFetchTool(string? toolName)
-    {
-        if (string.IsNullOrWhiteSpace(toolName))
-            return false;
-
-        if (toolName.StartsWith("wiki_", StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        return string.Equals(toolName, SessionDiscoveryTools.SkillRead, StringComparison.OrdinalIgnoreCase)
-               || string.Equals(toolName, SessionDiscoveryTools.ArtifactRead, StringComparison.OrdinalIgnoreCase)
-               || string.Equals(toolName, SessionDiscoveryTools.ArtifactTail, StringComparison.OrdinalIgnoreCase);
-    }
+    private static bool IsDiscoveryFetchTool(string? toolName) =>
+        ToolCapabilityIndex.HasFlag(toolName, ToolCapabilities.Discovery)
+        || ToolCapabilityIndex.HasFlag(toolName, ToolCapabilities.QueryFocused);
 
     private static void Report(Action<AgenticProgressEvent>? report, AgenticProgressEvent evt) =>
         report?.Invoke(evt);

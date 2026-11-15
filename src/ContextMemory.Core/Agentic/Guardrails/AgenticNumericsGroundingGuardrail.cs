@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Agentic;
@@ -100,7 +101,7 @@ public static partial class AgenticNumericsGroundingGuardrail
     private static string BuildEvidenceBlob(IReadOnlyList<AgentExecutionStep> steps)
     {
         var parts = steps
-            .Where(s => s.Success && !SessionDiscoveryTools.IsDiscoveryTool(s.ToolName))
+            .Where(s => s.Success && !ToolCapabilityIndex.StepHas(s, ToolCapabilities.Discovery))
             .Select(s => s.Output ?? string.Empty);
         return string.Join('\n', parts);
     }

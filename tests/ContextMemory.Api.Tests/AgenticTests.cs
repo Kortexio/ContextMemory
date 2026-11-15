@@ -661,7 +661,10 @@ public sealed class McpJsonRpcClientTests
             }
         };
         var catalog = new StubMcpCatalog(mcpTools);
-        var registry = new AgenticToolRegistryService(catalog, new CapabilityPolicyFilter());
+        var registry = new AgenticToolRegistryService(
+            new ToolRegistry([new DiscoveryToolsDescriptor()]),
+            catalog,
+            new CapabilityPolicyFilter());
         var config = new AppRuntimeConfig
         {
             AppId = "demo",
@@ -712,6 +715,18 @@ public sealed class McpJsonRpcClientTests
         Assert.Contains("`wiki_search`", catalog, StringComparison.Ordinal);
         Assert.Contains("params:", catalog, StringComparison.Ordinal);
         Assert.Contains("query", catalog, StringComparison.Ordinal);
+    }
+
+    private sealed class DiscoveryToolsDescriptor : IToolDescriptor
+    {
+        public IEnumerable<ToolRegistration> Describe() =>
+            SessionDiscoveryTools.BuildTools(new AppRuntimeConfig { AppId = "demo" })
+                .Where(t => !string.Equals(t.Function.Name, SessionDiscoveryTools.DelegateTask, StringComparison.OrdinalIgnoreCase))
+                .Select(t => new ToolRegistration(t.Function.Name, ToolCapabilities.Discovery, ToolHandlerKind.SessionScoped));
+
+        public IEnumerable<OllamaTool> BuildSchemas(AppRuntimeConfig runtimeConfig) =>
+            SessionDiscoveryTools.BuildTools(runtimeConfig)
+                .Where(t => !string.Equals(t.Function.Name, SessionDiscoveryTools.DelegateTask, StringComparison.OrdinalIgnoreCase));
     }
 
     private sealed class StubMcpCatalog(IReadOnlyList<McpToolDefinition> tools) : IMcpToolCatalog

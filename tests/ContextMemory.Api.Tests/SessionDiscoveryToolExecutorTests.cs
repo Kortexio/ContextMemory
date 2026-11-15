@@ -26,10 +26,7 @@ public sealed class SessionDiscoveryToolExecutorTests
     {
         var artifacts = new StubArtifactStore();
         await artifacts.WriteAsync("app", "user", "session", "tool:wiki_search:abc", "full evidence");
-        var executor = new SessionDiscoveryToolExecutor(
-            artifacts,
-            new StubSessionStore(),
-            new StubMcpCatalog());
+        var executor = CreateExecutor(artifacts);
 
         var result = await executor.ExecuteAsync(
             new OllamaToolCall(new OllamaFunctionCall(
@@ -49,10 +46,7 @@ public sealed class SessionDiscoveryToolExecutorTests
     {
         var artifacts = new StubArtifactStore();
         await artifacts.WriteAsync("app", "user", "session", "tool:wiki_search:abc", "0123456789");
-        var executor = new SessionDiscoveryToolExecutor(
-            artifacts,
-            new StubSessionStore(),
-            new StubMcpCatalog());
+        var executor = CreateExecutor(artifacts);
 
         var result = await executor.ExecuteAsync(
             new OllamaToolCall(new OllamaFunctionCall(
@@ -70,10 +64,7 @@ public sealed class SessionDiscoveryToolExecutorTests
     [Fact]
     public async Task DiscoveryTool_InvalidJson_ReturnsFailureInsteadOfThrowing()
     {
-        var executor = new SessionDiscoveryToolExecutor(
-            new StubArtifactStore(),
-            new StubSessionStore(),
-            new StubMcpCatalog());
+        var executor = CreateExecutor(new StubArtifactStore());
 
         var result = await executor.ExecuteAsync(
             new OllamaToolCall(new OllamaFunctionCall(
@@ -91,10 +82,7 @@ public sealed class SessionDiscoveryToolExecutorTests
     [Fact]
     public async Task TodoWrite_MissingTodos_FailsInsteadOfSilentlyClearingList()
     {
-        var executor = new SessionDiscoveryToolExecutor(
-            new StubArtifactStore(),
-            new StubSessionStore(),
-            new StubMcpCatalog());
+        var executor = CreateExecutor(new StubArtifactStore());
 
         var result = await executor.ExecuteAsync(
             new OllamaToolCall(new OllamaFunctionCall(
@@ -108,6 +96,13 @@ public sealed class SessionDiscoveryToolExecutorTests
         Assert.False(result.Success);
         Assert.Contains("todos array", result.Output, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static SessionDiscoveryToolExecutor CreateExecutor(ISessionArtifactStore artifacts) =>
+        new(
+            artifacts,
+            new StubSessionStore(),
+            new StubMcpCatalog(),
+            new Lazy<IToolRegistry>(() => new ToolRegistry([])));
 
     private sealed class StubArtifactStore : ISessionArtifactStore
     {
