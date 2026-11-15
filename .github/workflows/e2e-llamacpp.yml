@@ -98,6 +98,16 @@ jobs:
           CONTEXTMEMORY_TIMEOUT: "600"
         run: bash scripts/aha-chat.sh
 
+      - name: Run chat aha (stream)
+        env:
+          CONTEXTMEMORY_BASE_URL: http://localhost:5100
+          CONTEXTMEMORY_API_KEY: cm_live_e2e
+          CONTEXTMEMORY_APP_ID: demo-dev
+          CONTEXTMEMORY_MODEL: local-model
+          CONTEXTMEMORY_TIMEOUT: "600"
+          CONTEXTMEMORY_STREAM: "1"
+        run: bash scripts/aha-chat.sh
+
       - name: Container logs
         if: failure()
         run: |

@@ -11,7 +11,7 @@
 | MCP catalog + credentials | ✅ | ✅ |
 | Agentic skills / guardrail packs | ✅ | ✅ |
 | Pending HITL state | ✅ | ✅ |
-| Telemetry / rate limits | in-memory | in-memory |
+| Telemetry / rate limits | **in-memory only** (single instance) | **in-memory only** (single instance) |
 
 EF Core migrations live in `ContextMemory.Infrastructure` (includes `global_wiki_documents`, MCP catalog, and agentic policy catalog).
 
@@ -108,20 +108,89 @@ Public contracts live in `src/ContextMemory.Core/Contracts/` with XML documentat
 
 ---
 
-## Documentation backlog
+## Rate limits (single-node)
 
-Items still thin or missing from this README (code exists; docs TBD or expand later):
+RPM/TPM (and agentic weight) are enforced **in-process**. That is enough for one API container. **Do not** run multiple API replicas expecting a shared rate-limit budget — counters are not in Postgres. Multi-instance rate limiting is post-1.0.
 
-| Area | What's missing |
-|---|---|
-| **MCP catalog** | End-to-end stdio packaging guide (`mcp-runtime` + `/opt/mcps`) and credential modes matrix beyond Config field help |
-| **sandbox-runtime** | Security model, env knobs (`SANDBOX_*`), and ACA vs self-hosted comparison beyond the feature bullets |
-| **Global Wiki digests** | Operational guidance for large corpora (batch ingest → `digests/rebuild`, when to `force`, catalog size) |
-| **Network Compose** | `docker-compose.network.yml` (Postgres, shared network, multi-tenant seeds such as `laravox` / `kyc`) as a first-class quick-start path |
-| **OpenAI metadata** | Where agentic progress / HITL confirmation appear on `/v1` responses vs legacy `/api/chat` `context_memory` |
-| **Cloud vs OSS deltas** | Explicit matrix of Cloud-only dashboard features vs this repo |
+`GET /metrics` (Prometheus) is the supported ops signal for 0.3.x.
 
-PRs that close any row above are welcome — keep examples in English and prefer `/v1/chat/completions` in new snippets.
+---
+
+## Before you expose the API to the internet
+
+1. Change `ContextMemory__MasterKey` and every app `ApiKey` away from `*_change_me` / demo seeds.
+2. Prefer Postgres persistence for sessions/wiki/HITL if you care about durability across restarts.
+3. Keep egress defaults; only allowlist hosts you need for HTTP/MCP tools.
+4. Enable HITL (`requireConfirmationFor`) for destructive sandbox/MCP actions.
+5. Put TLS and auth in front (reverse proxy); do not publish Admin `:5200` without the Master Key locked down.
+6. Confirm `GET /health` and one `aha-chat` turn against your real LLM endpoint.
+
+---
+
+## MCP catalog (stdio packaging)
+
+- Run `mcp-runtime` beside the API (Compose service). Place packages under the runtime’s MCP root (Compose: `/opt/mcps`).
+- App config: integration `type=mcp`, `enabled=true`, transport HTTP URL to the runtime **or** stdio command registered in the runtime.
+- Credentials: `POST /apps/{id}/mcp/credentials/{name}` (app key) or Admin Master Key list/get under `/admin/apps/{id}/mcp/credentials`. Modes: bearer / OAuth fields as exposed in Admin Config — never commit secrets.
+- Refresh tools: `POST /apps/{id}/mcp/catalog/rebuild`. Probe: `POST /apps/{id}/mcp/test/{name}`.
+
+---
+
+## Sandbox security model
+
+| Mode | Where code runs | Notes |
+|---|---|---|
+| **sandbox-runtime** (Compose) | Sibling Node host | Env `SANDBOX_*` on that service; network isolated from the public internet unless you open it |
+| **Azure ACA sessions** | Azure Container Apps dynamic sessions | Pool endpoint + credentials in app execution config |
+
+Treat sandbox as **untrusted code execution**. Prefer HITL for shell; keep filesystem mounts read-only where possible; never mount host secrets into the sandbox.
+
+---
+
+## Global Wiki digests (large corpora)
+
+1. Batch upsert: `POST /apps/{id}/wiki/documents/batch`.
+2. Rebuild digests + catalog: `POST /apps/{id}/wiki/digests/rebuild` (`force` when content rules change).
+3. Agents discover via digests / `wiki:catalog`, then `wiki_search` / `wiki_grep` — do not stuff the full corpus into the prompt.
+4. Watch catalog size and `asOf` queries if you supersede often.
+
+---
+
+## Network Compose
+
+`docker-compose.network.yml` adds Postgres + a shared Docker network for multi-service / multi-tenant seeds. Use it when File persistence is not enough:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.network.yml up --build -d
+```
+
+Set `POSTGRES_*` / connection string via env. Seed apps (e.g. demos) still need unique API keys.
+
+---
+
+## Cloud vs OSS
+
+| | **This repo (OSS)** | **Kortexio Cloud** |
+|---|---|---|
+| Chat API | Self-host `/v1` + `cm_live_…` + `X-App-Id` | Hosted `/v1` + `cmk_live_…` |
+| Admin | Blazor on `:5200`, Master Key | Cloud dashboard |
+| License | AGPL-3.0 | Commercial terms |
+| LLM | BYO endpoint | BYO in dashboard |
+| Feature delta | Full gateway source | Hosted ops, billing, no self-host Admin SSO in OSS |
+
+Agentic/HITL `/v1` metadata: see [api.md](api.md).
+
+---
+
+## Engines (memory vs agentic)
+
+| Engine | Session memory (aha) | Agentic tool loop |
+|---|---|---|
+| llama.cpp (`--jinja`) | Yes (CI uses ~1.5B) | Prefer **≥~7B** instruct + Weak harness |
+| vLLM / OpenAI-compatible | Yes | Same — native or client-side tools per profile |
+| Ollama | Yes; set `num_ctx` high enough | Qwen/Weak → client-side catalog; watch Jinja templates |
+
+Reports: open a GitHub **engine compatibility** issue with model id + flags.
 
 ---
 

@@ -57,8 +57,8 @@ Author here. A few things people usually ask:
   You never touch it from your app — it is just an HTTP URL.
 - Small models: session memory works with 1.5B instruct models (that is what CI uses).
   The agentic tool loop needs 7B+ with native tool calling; llama.cpp needs --jinja.
-- Honest limits: beta, small team, APIs may still move. Engine compatibility
-  reports are the most useful issue you can open.
+- Honest limits: still beta (0.3.1-beta). Stable contract is documented in docs/api.md
+  (/v1 + Admin HTTP + HITL metadata). Engine compatibility reports help most.
 ```
 
 ## Checklist before posting

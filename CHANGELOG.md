@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.1-beta](https://github.com/Kortexio/ContextMemory/compare/v0.2.0-beta...v0.3.1-beta) (2026-11-15)
+
+### Features
+
+* **agentic:** pluggable tools via `IToolDescriptor` + `ToolCapabilities` (no wire-name lists in the loop)
+* **harness:** measured weak-harness A/B lift on adversarial suite (off → on); README proof section
+* **helpers:** rename `sdk/` → `helpers/`; packages documented as header helpers (not a client SDK)
+* **docs:** API freeze notes (`/v1` agentic/HITL metadata + Admin HTTP); ops single-node checklist; engines matrix
+* **ci:** `bench-selftest` workflow; aha-chat supports `CONTEXTMEMORY_STREAM=1`
+
+### Bug Fixes
+
+* scrub internal LLM host from docs/defaults; bench artifacts redact `CM_BENCH_BASE_URL`
+
 ## [0.2.0-beta](https://github.com/Kortexio/ContextMemory/compare/v0.1.0-beta...v0.2.0-beta) (2026-09-28)
 
 

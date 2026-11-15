@@ -37,5 +37,39 @@
 
 The preferred chat response is the **OpenAI schema** — `choices[0].message.content`. Legacy `/api/chat` still returns Ollama `message.content` / `done`.
 
+### Stability (0.3.x-beta freeze)
+
+| Surface | Status |
+|---|---|
+| `POST /v1/chat/completions` + tenant headers (`Authorization`, `X-App-Id`, `X-User-Id`, `X-Session-Id`) | **Stable** |
+| OpenAI response shape (`choices`, streaming SSE chunks, `[DONE]`) | **Stable** |
+| Agentic / HITL metadata on `/v1` (see below) | **Stable** |
+| Admin HTTP under `/admin/...` (Master Key) — apps, config, agentic catalog, MCP credentials | **Stable** |
+| App-scoped wiki / MCP / session wiki routes in the table above | **Stable** |
+| Admin **Blazor UI** (layout, components) | Not a versioned API |
+| Harness knobs (`harnessMode`, experimental profiles) | May tighten; defaults stay Weak-friendly |
+
+Breaking changes to **Stable** rows require a major bump after GA; during beta we still avoid them without a CHANGELOG note.
+
+### Agentic / HITL on `/v1`
+
+**Response headers (non-stream and stream):**
+
+| Header | Meaning |
+|---|---|
+| `X-Context-Memory-Agentic: true` | Agentic loop ran (or is enabled for the stream) |
+| `X-Context-Memory-Agentic-Awaiting-Confirmation: true` | HITL pause — reply with approve / `[CONFIRM:id]` |
+| `X-Context-Memory-Agentic-Timed-Out: true` | Loop hit timeout |
+| `X-Context-Memory-Agentic-Progress: true` | Stream path advertises progress support |
+| `X-Context-Memory-Message-Id` | Reserved id for the streamed turn (when set) |
+
+**Body metadata:** OpenAI-compatible payloads may include `context_memory.agentic` (`AgenticStreamMetadata`): `phase`, `iteration` / `iterations`, `tool_name`, `detail`, `label`, `steps`, `awaiting_confirmation`, `pending_confirmation_id`, `timed_out`, `max_iterations_reached`.
+
+On **SSE** streams, tool progress is not emitted as mid-loop content chunks today — the final SSE chunk carries `context_memory.agentic` after the loop finishes. Confirm HITL via the awaiting-confirmation header + message content (see [hitl.md](hitl.md)).
+
+Legacy `/api/chat` may mirror the same `context_memory` object; prefer `/v1` for new clients.
+
+Optional npm/PyPI **header helpers** only build auth/tenant headers — they are not a client API. Contract = `/v1`.
+
 ---
 

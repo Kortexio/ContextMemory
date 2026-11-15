@@ -1,7 +1,7 @@
 {
   "name": "@kortexio/contextmemory",
   "version": "0.0.1-beta.2",
-  "description": "Thin headers helper for the ContextMemory OpenAI-compatible gateway",
+  "description": "Header helper for the ContextMemory OpenAI-compatible gateway (/v1)",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -18,7 +18,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Kortexio/ContextMemory.git",
-    "directory": "sdk/typescript"
+    "directory": "helpers/typescript"
   },
   "homepage": "https://github.com/Kortexio/ContextMemory",
   "license": "AGPL-3.0-or-later",

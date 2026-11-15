@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: sdk/python
+        working-directory: helpers/python
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

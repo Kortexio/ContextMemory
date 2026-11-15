@@ -1,7 +1,7 @@
 [project]
 name = "kortexio-contextmemory"
 version = "0.0.1b2"
-description = "Thin headers helper for the ContextMemory OpenAI-compatible gateway"
+description = "Header helper for the ContextMemory OpenAI-compatible gateway (/v1)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "AGPL-3.0-or-later" }
