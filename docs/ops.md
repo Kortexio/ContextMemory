@@ -110,9 +110,15 @@ Public contracts live in `src/ContextMemory.Core/Contracts/` with XML documentat
 
 ## Rate limits (single-node)
 
-RPM/TPM (and agentic weight) are enforced **in-process**. That is enough for one API container. **Do not** run multiple API replicas expecting a shared rate-limit budget — counters are not in Postgres. Multi-instance rate limiting is post-1.0.
+RPM/TPM (and agentic weight) are enforced **in-process**. That is enough for one API container. **Do not** run multiple API replicas expecting a shared rate-limit budget — counters are not in Postgres. Multi-instance rate limiting (Postgres/Redis) is tracked in [#25](https://github.com/Kortexio/ContextMemory/issues/25) — not in this beta ship.
 
 `GET /metrics` (Prometheus) is the supported ops signal for 0.3.x.
+
+---
+
+## After the history rewrite (collaborators)
+
+`main` was force-pushed to remove a private LLM host from git history. **Re-clone** (or `git fetch origin` + reset hard to `origin/main`). Old clones still contain the purged URL in local objects.
 
 ---
 
@@ -187,6 +193,8 @@ Agentic/HITL `/v1` metadata: see [api.md](api.md).
 | Engine | Session memory (aha) | Agentic tool loop |
 |---|---|---|
 | llama.cpp (`--jinja`) | Yes (CI uses ~1.5B) | Prefer **≥~7B** instruct + Weak harness |
+
+Canonical table: [engines.md](engines.md).
 | vLLM / OpenAI-compatible | Yes | Same — native or client-side tools per profile |
 | Ollama | Yes; set `num_ctx` high enough | Qwen/Weak → client-side catalog; watch Jinja templates |
 

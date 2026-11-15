@@ -39,9 +39,9 @@ The script sends two requests in one session; the second carries only the questi
 so the answer can only come from the gateway's memory. CI runs the same check
 against a real llama-server on every push.
 
-.NET 9, AGPL-3.0. There is a hosted version (Kortexio Cloud) if you do not want to run it.
-
-https://github.com/Kortexio/ContextMemory
+.NET 9. Repo: https://github.com/Kortexio/ContextMemory
+License: https://github.com/Kortexio/ContextMemory/blob/main/LICENSE
+Hosted option: https://kortexio.io
 ```
 
 ## First comment (post immediately after submitting)

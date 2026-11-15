@@ -31,7 +31,7 @@ ContextMemory is that loop on the server — so a **weaker model** can still com
 Point any OpenAI-compatible client here (official OpenAI SDKs, LangChain, curl, Cursor). You keep your app. No LangGraph/CrewAI/Letta rewrite.  
 One `/v1/chat/completions` URL — markdown memory you can open, plus a harness that recovers tool calls, refuses fake “done”, and terminates.
 
-Optional npm/PyPI packages only build the gateway headers (`Authorization`, `X-App-Id`, …). They are **header helpers**, not a ContextMemory client SDK — the contract is `/v1`.
+Optional npm/PyPI packages only build the gateway headers (`Authorization`, `X-App-Id`, …) — **header helpers**. The product contract is `/v1`.
 
 ---
 
@@ -149,6 +149,8 @@ Deep dive: [`benchmarks/README.md`](benchmarks/README.md).
 |---|---|
 | [docs/compare.md](docs/compare.md) | Why this exists · vs Mem0 / Zep / Letta · not RAG |
 | [docs/small-model-guide.md](docs/small-model-guide.md) | Harden local / small LLMs |
+| [docs/engines.md](docs/engines.md) | Memory vs agentic engine matrix |
+| [docs/launch-0.3.1-beta.md](docs/launch-0.3.1-beta.md) | Show HN / announce kit |
 | [benchmarks/](benchmarks/) | Adversarial A/B (honesty over vanity) |
 | [docs/self-host.md](docs/self-host.md) · [docs/cloud.md](docs/cloud.md) | Docker · Cloud |
 | [docs/architecture-and-features.md](docs/architecture-and-features.md) | Internals when you need them |

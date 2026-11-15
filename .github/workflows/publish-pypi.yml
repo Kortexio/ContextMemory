@@ -28,4 +28,8 @@ jobs:
           fi
           python -m pip install --upgrade build twine
           python -m build
-          python -m twine upload dist/*
+          # Soft-fail: duplicate version / token issues must not fail the release.
+          python -m twine upload dist/* || {
+            echo "::warning::PyPI upload failed (check PYPI_API_TOKEN / version). Continuing."
+            exit 0
+          }

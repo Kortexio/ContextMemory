@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Chat aha: tell the gateway a fact, then ask for it in a second request that carries
 # ONLY the new question. The answer can only come from ContextMemory's session memory.
+# Turn 3 always uses stream:true and asserts the fact in concatenated SSE delta.content.
 # Works with any engine behind the gateway (llama.cpp, vLLM, Ollama, OpenAI, ...).
 # Usage: ./scripts/aha-chat.sh
-# Optional: CONTEXTMEMORY_STREAM=1 — use stream:true and assemble SSE content.
 set -euo pipefail
 
 BASE="${CONTEXTMEMORY_BASE_URL:-http://localhost:5100}"
@@ -14,10 +14,9 @@ USER_ID="${CONTEXTMEMORY_USER_ID:-aha-user}"
 SESSION="aha-$(date +%s)"
 FACT="postgres-staging-01"
 OUT="$(mktemp -d)"
-STREAM="${CONTEXTMEMORY_STREAM:-0}"
+ASK="What is our staging database host? Reply with the host name only."
 
 extract_content() {
-  # Prefer jq when present; else a small Python fallback.
   if command -v jq >/dev/null 2>&1; then
     jq -r '.choices[0].message.content // empty' "$1"
   else
@@ -77,51 +76,38 @@ print("".join(text))
 PY
 }
 
-chat() {
-  if [ "$STREAM" = "1" ] || [ "$STREAM" = "true" ]; then
-    chat_stream "$1"
-  else
-    chat_nonstream "$1"
-  fi
-}
-
 echo "==> Health ($BASE)"
 curl -sSf "$BASE/health" | head -c 300
 echo; echo
 
-if [ "$STREAM" = "1" ] || [ "$STREAM" = "true" ]; then
-  echo "==> Streaming mode (CONTEXTMEMORY_STREAM=$STREAM)"
-fi
-
 echo "==> Turn 1 (session $SESSION): state the fact"
-if [ "$STREAM" = "1" ] || [ "$STREAM" = "true" ]; then
-  ANSWER1=$(chat "Remember this for later: our staging database host is $FACT. Reply with OK.")
-  echo "$ANSWER1" | tee "$OUT/turn1.txt"
-else
-  chat "Remember this for later: our staging database host is $FACT. Reply with OK." | tee "$OUT/turn1.json"
-fi
+chat_nonstream "Remember this for later: our staging database host is $FACT. Reply with OK." | tee "$OUT/turn1.json"
 echo; echo
 
 echo "==> Turn 2 (same session, body contains only the new question)"
-if [ "$STREAM" = "1" ] || [ "$STREAM" = "true" ]; then
-  ANSWER2=$(chat "What is our staging database host? Reply with the host name only.")
-  echo "$ANSWER2" | tee "$OUT/turn2.txt"
-else
-  chat "What is our staging database host? Reply with the host name only." | tee "$OUT/turn2.json"
-  ANSWER2=$(extract_content "$OUT/turn2.json")
-fi
+chat_nonstream "$ASK" | tee "$OUT/turn2.json"
+ANSWER2=$(extract_content "$OUT/turn2.json")
 echo; echo
 
-if printf '%s' "${ANSWER2:-}" | grep -q "$FACT"; then
-  echo "AHA OK — the client sent no history; the gateway remembered '$FACT'."
-  exit 0
+if ! printf '%s' "${ANSWER2:-}" | grep -q "$FACT"; then
+  if [ -f "$OUT/turn2.json" ] && grep -q "$FACT" "$OUT/turn2.json"; then
+    :
+  else
+    echo "AHA FAILED — '$FACT' not found in the turn 2 answer."
+    exit 1
+  fi
+fi
+echo "AHA OK (non-stream) — gateway remembered '$FACT'."
+
+echo "==> Turn 3 (stream:true, same question)"
+ANSWER3=$(chat_stream "$ASK")
+echo "$ANSWER3" | tee "$OUT/turn3.txt"
+echo; echo
+
+if ! printf '%s' "${ANSWER3:-}" | grep -q "$FACT"; then
+  echo "AHA FAILED — '$FACT' not found in streamed turn 3 SSE content."
+  exit 1
 fi
 
-# Non-stream: also accept raw JSON containing the fact (jq missing / alternate shape)
-if [ -f "$OUT/turn2.json" ] && grep -q "$FACT" "$OUT/turn2.json"; then
-  echo "AHA OK — the client sent no history; the gateway remembered '$FACT'."
-  exit 0
-fi
-
-echo "AHA FAILED — '$FACT' not found in the turn 2 answer."
-exit 1
+echo "AHA OK (stream) — SSE delta.content contained '$FACT'."
+exit 0

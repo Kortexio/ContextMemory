@@ -28,6 +28,7 @@ jobs:
         with:
           dotnet-version: 9.0.x
       - name: Publish LinkedIn
+        continue-on-error: true
         env:
           LINKEDIN_CLIENT_ID: ${{ secrets.LINKEDIN_CLIENT_ID }}
           LINKEDIN_CLIENT_SECRET: ${{ secrets.LINKEDIN_CLIENT_SECRET }}
@@ -59,6 +60,7 @@ jobs:
         with:
           dotnet-version: 9.0.x
       - name: Publish dev.to
+        continue-on-error: true
         env:
           DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
           RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.release_tag }}

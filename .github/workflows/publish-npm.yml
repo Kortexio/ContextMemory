@@ -27,4 +27,8 @@ jobs:
             echo "NPM_TOKEN not set — skipping npm publish."
             exit 0
           fi
-          npm publish --access public
+          # Soft-fail: missing org access / already-published must not fail the release.
+          npm publish --access public || {
+            echo "::warning::npm publish failed (check NPM_TOKEN / @kortexio org). Continuing."
+            exit 0
+          }
