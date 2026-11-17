@@ -19,7 +19,7 @@
       ]
     },
     "tools": {
-      "requiredAny": ["wiki_search", "wiki_grep"],
+      "requiredAny": ["wiki_search", "wiki_fetch", "wiki_grep"],
       "preferDocumentHints": ["staging-host", "Staging database host"],
       "forbiddenFinishWithoutTools": true
     }

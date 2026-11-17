@@ -55,7 +55,7 @@ public static class EvidenceFinishGate
                 true,
                 "Discovery-only tools ran (tool_describe/skill_*/tool_search/…). "
                 + "That is not a finished answer when the user needs facts or actions. "
-                + "Call wiki_search, an MCP tool, http, or sandbox next — then answer.",
+                + "Call wiki_search then wiki_fetch, an MCP tool, http, or sandbox next — then answer.",
                 "discovery-only");
         }
 

@@ -182,7 +182,7 @@ public sealed class AgenticLiveDataEvidenceGuardrailTests
             evidenceToolMarkers = new[]
             {
                 "__", "query_objects", "get_account", "manage_customer",
-                "wiki_search", "wiki_grep", "wiki_get", "wiki_read"
+                "wiki_search", "wiki_fetch", "wiki_grep", "wiki_get", "wiki_read"
             },
             honestUnknownMarkers = new[]
             {

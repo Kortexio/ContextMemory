@@ -90,8 +90,8 @@ public static class AgenticDuplicateToolCallGuard
                 return true;
             }
 
-            var query = ExtractQuery(argumentsJson);
-            if (string.IsNullOrWhiteSpace(query))
+            var key = ExtractQueryFocusedKey(name, argumentsJson);
+            if (string.IsNullOrWhiteSpace(key))
             {
                 feedback = BuildEmptyQueryFeedback(name, runtimeConfig);
                 return true;
@@ -152,8 +152,11 @@ public static class AgenticDuplicateToolCallGuard
         var name = NormalizeToolName(toolName);
         if (IsQueryFocused(name))
         {
-            var query = ExtractQuery(argumentsJson);
-            return name + "|q=" + NormalizeText(query);
+            var key = ExtractQueryFocusedKey(name, argumentsJson);
+            var prefix = string.Equals(name, AgenticToolRegistry.WikiFetchToolName, StringComparison.Ordinal)
+                ? "id="
+                : "q=";
+            return name + "|" + prefix + NormalizeText(key);
         }
 
         return name + "|a=" + NormalizeArguments(argumentsJson);
@@ -269,7 +272,10 @@ public static class AgenticDuplicateToolCallGuard
     private static bool IsQueryFocused(string? toolName) =>
         ToolCapabilityIndex.HasFlag(toolName, ToolCapabilities.QueryFocused);
 
-    private static string ExtractQuery(string? argumentsJson)
+    /// <summary>
+    /// Primary key for query-focused tools: query/pattern for search/grep, id for wiki_fetch.
+    /// </summary>
+    private static string ExtractQueryFocusedKey(string toolName, string? argumentsJson)
     {
         if (string.IsNullOrWhiteSpace(argumentsJson))
             return string.Empty;
@@ -280,26 +286,37 @@ public static class AgenticDuplicateToolCallGuard
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
                 return string.Empty;
 
+            if (string.Equals(toolName, AgenticToolRegistry.WikiFetchToolName, StringComparison.Ordinal))
+            {
+                if (TryGetStringProp(doc.RootElement, "id", out var id))
+                    return id;
+                if (TryGetStringProp(doc.RootElement, "documentId", out var documentId))
+                    return documentId;
+                return string.Empty;
+            }
+
             // wiki_search uses "query"; wiki_grep uses "pattern".
-            if (doc.RootElement.TryGetProperty("query", out var q)
-                && q.ValueKind == JsonValueKind.String)
-            {
-                return q.GetString() ?? string.Empty;
-            }
+            if (TryGetStringProp(doc.RootElement, "query", out var query))
+                return query;
+            if (TryGetStringProp(doc.RootElement, "pattern", out var pattern))
+                return pattern;
 
-            if (doc.RootElement.TryGetProperty("pattern", out var p)
-                && p.ValueKind == JsonValueKind.String)
-            {
-                return p.GetString() ?? string.Empty;
-            }
-
-            // {} or object without query/pattern → empty (do not fall back to raw JSON).
+            // {} or object without query/pattern/id → empty (do not fall back to raw JSON).
             return string.Empty;
         }
         catch (JsonException)
         {
             return string.Empty;
         }
+    }
+
+    private static bool TryGetStringProp(JsonElement root, string name, out string value)
+    {
+        value = string.Empty;
+        if (!root.TryGetProperty(name, out var prop) || prop.ValueKind != JsonValueKind.String)
+            return false;
+        value = prop.GetString() ?? string.Empty;
+        return true;
     }
 
     /// <summary>
@@ -429,6 +446,7 @@ public static class AgenticDuplicateToolCallGuard
         string[] names =
         [
             AgenticToolRegistry.WikiSearchToolName,
+            AgenticToolRegistry.WikiFetchToolName,
             AgenticToolRegistry.WikiGrepToolName,
             AgenticToolRegistry.PythonExecuteToolName,
             AgenticToolRegistry.ShellExecuteToolName,
@@ -542,7 +560,7 @@ public static class AgenticDuplicateToolCallGuard
         const string antiMeta =
             " CRITICAL: Answer ONLY the user's original question with facts from tool results. "
             + "Do NOT explain budgets, duplicate calls, rejections, or how to call tools. "
-            + "Do NOT name tools (wiki_search, wiki_grep, …). "
+            + "Do NOT name tools (wiki_search, wiki_fetch, wiki_grep, …). "
             + "Write the user-facing answer in the user's language.";
 
         if (ShouldForceAnswerAfterDuplicateSuccess(steps))
@@ -586,8 +604,19 @@ public static class AgenticDuplicateToolCallGuard
         return output.Contains("budget exhausted", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Body-bearing wiki evidence: successful <c>wiki_fetch</c> or <c>wiki_grep</c>.
+    /// A map-only <c>wiki_search</c> does not count — the model still needs to fetch.
+    /// </summary>
     public static bool HasSuccessfulWikiEvidence(IReadOnlyList<AgentExecutionStep> steps) =>
-        steps.Any(s => s.Success && IsQueryFocused(s.ToolName));
+        steps.Any(s => s.Success && IsBodyBearingWikiTool(s.ToolName));
+
+    private static bool IsBodyBearingWikiTool(string? toolName)
+    {
+        var name = NormalizeToolName(toolName ?? string.Empty);
+        return string.Equals(name, AgenticToolRegistry.WikiFetchToolName, StringComparison.Ordinal)
+               || string.Equals(name, AgenticToolRegistry.WikiGrepToolName, StringComparison.Ordinal);
+    }
 
     private static string BuildWikiBudgetFeedback(
         IReadOnlyList<AgentExecutionStep> steps,
@@ -597,43 +626,53 @@ public static class AgenticDuplicateToolCallGuard
         // instead of answering from the evidence they already have.
         if (HasSuccessfulWikiEvidence(steps))
         {
-            return "Rejected: wiki_search/wiki_grep budget exhausted this turn. "
+            return "Rejected: wiki_search/wiki_fetch/wiki_grep budget exhausted this turn. "
                    + "Do NOT call any tool. Answer the user NOW from the wiki evidence already gathered. "
                    + "No tool_calls, no JSON tool invocations.";
         }
 
         if (HasConfiguredMcp(runtimeConfig))
         {
-            return "Rejected: wiki_search/wiki_grep budget exhausted this turn. "
+            return "Rejected: wiki_search/wiki_fetch/wiki_grep budget exhausted this turn. "
                    + "Do NOT call wiki again. Call a configured MCP tool now as ONLY JSON "
                    + "{\"tool\":\"<integration>__<tool>\",\"arguments\":{...}} "
                    + "(use exact names from the tool catalog — never invent a server__ prefix; tool_describe if unsure).";
         }
 
-        return "Rejected: wiki_search/wiki_grep budget exhausted this turn. "
+        return "Rejected: wiki_search/wiki_fetch/wiki_grep budget exhausted this turn. "
                + "Answer from evidence already gathered or change approach — do not call wiki again.";
     }
 
     private static string BuildEmptyQueryFeedback(string toolName, AppRuntimeConfig runtimeConfig)
     {
         var hasMcp = HasConfiguredMcp(runtimeConfig);
-        // Prefer "pattern" when the tool's last registration implies grep-style args; else "query".
-        var field = ToolCapabilityIndex.TryGet(toolName, out _)
-                    && toolName.Contains("grep", StringComparison.OrdinalIgnoreCase)
-            ? "pattern"
-            : "query";
+        var field = ResolveRequiredField(toolName);
+        var exampleValue = string.Equals(field, "id", StringComparison.Ordinal)
+            ? "document-id-from-search-map"
+            : "concrete keywords";
 
         if (hasMcp)
         {
             return $"Rejected: `{toolName}` needs a non-empty \"{field}\". "
-                   + $"Retry as ONLY JSON {{\"tool\":\"{toolName}\",\"arguments\":{{\"{field}\":\"concrete keywords\"}}}} "
+                   + $"Retry as ONLY JSON {{\"tool\":\"{toolName}\",\"arguments\":{{\"{field}\":\"{exampleValue}\"}}}} "
                    + "OR call a configured MCP tool now "
                    + "{\"tool\":\"<integration>__<tool>\",\"arguments\":{...}} "
                    + "(use exact names from the tool catalog — never invent a server__ prefix).";
         }
 
         return $"Rejected: `{toolName}` needs a non-empty \"{field}\". "
-               + $"Retry as ONLY JSON {{\"tool\":\"{toolName}\",\"arguments\":{{\"{field}\":\"concrete keywords\"}}}}.";
+               + $"Retry as ONLY JSON {{\"tool\":\"{toolName}\",\"arguments\":{{\"{field}\":\"{exampleValue}\"}}}}.";
+    }
+
+    private static string ResolveRequiredField(string toolName)
+    {
+        var name = NormalizeToolName(toolName);
+        if (string.Equals(name, AgenticToolRegistry.WikiFetchToolName, StringComparison.Ordinal)
+            || name.Contains("fetch", StringComparison.OrdinalIgnoreCase))
+            return "id";
+        if (name.Contains("grep", StringComparison.OrdinalIgnoreCase))
+            return "pattern";
+        return "query";
     }
 
     private static string BuildFeedback(string toolName, AppRuntimeConfig runtimeConfig, bool afterFailure)
@@ -645,7 +684,17 @@ public static class AgenticDuplicateToolCallGuard
         {
             if (isWiki)
             {
-                return "Rejected: identical wiki_search already succeeded — do NOT repeat the same query. "
+                if (string.Equals(
+                        NormalizeToolName(toolName),
+                        AgenticToolRegistry.WikiSearchToolName,
+                        StringComparison.Ordinal))
+                {
+                    return "Rejected: identical wiki_search already succeeded — do NOT repeat the same query. "
+                           + "Call wiki_fetch with an id from that map (or answer if the summary already suffices). "
+                           + "Do not repeat the same wiki_search.";
+                }
+
+                return "Rejected: identical wiki call already succeeded — do NOT repeat the same arguments. "
                        + "Answer the user NOW from the wiki result already gathered. "
                        + "No tool_calls, no JSON tool invocations.";
             }
@@ -659,8 +708,8 @@ public static class AgenticDuplicateToolCallGuard
 
         if (hasMcp && isWiki)
         {
-            return "Rejected: identical wiki_search already failed — do NOT repeat the same query. "
-                   + "Either change the query substantially OR call a configured MCP tool now as ONLY JSON "
+            return "Rejected: identical wiki call already failed — do NOT repeat the same arguments. "
+                   + "Either change the query/id substantially OR call a configured MCP tool now as ONLY JSON "
                    + "{\"tool\":\"<integration>__<tool>\",\"arguments\":{...}} "
                    + "(use exact names from the tool catalog — never invent a server__ prefix; tool_describe if unsure).";
         }
@@ -674,8 +723,8 @@ public static class AgenticDuplicateToolCallGuard
 
         if (isWiki)
         {
-            return "Rejected: identical wiki_search already failed — do NOT repeat. "
-                   + "Change the query substantially or answer from the evidence you already have.";
+            return "Rejected: identical wiki call already failed — do NOT repeat. "
+                   + "Change the query/id substantially or answer from the evidence you already have.";
         }
 
         return $"Rejected: identical `{toolName}` already failed — do NOT repeat the same arguments. "

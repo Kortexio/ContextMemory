@@ -76,12 +76,12 @@ public record AppRuntimeConfig
 
     /// <summary>
     /// When true, injects top-K Global Wiki digests into the system prompt (DB-first discovery)
-    /// and exposes <c>wiki_search</c> when agentic tools are otherwise enabled.
+    /// and exposes <c>wiki_search</c> / <c>wiki_fetch</c> when agentic tools are otherwise enabled.
     /// Does not force the agentic loop by itself.
     /// </summary>
     public bool GlobalWikiEnabled { get; init; } = true;
 
-    /// <summary>Max chars returned by <c>wiki_search</c> full-body hydrate (0 = service default).</summary>
+    /// <summary>Max chars returned by <c>wiki_fetch</c> / <c>wiki_grep</c> (0 = service default).</summary>
     public int MaxGlobalWikiToolChars { get; init; }
 
     /// <summary>Agentic loop only when sandbox/MCP/tools are configured — not merely because Global Wiki is on.</summary>

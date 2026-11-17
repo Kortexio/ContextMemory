@@ -11,7 +11,11 @@ public static class AgenticToolRegistry
     public const string NodeExecuteToolName = "node_execute";
     public const string ContainerExecuteToolName = "container_execute";
     public const string WikiSearchToolName = "wiki_search";
+    public const string WikiFetchToolName = "wiki_fetch";
     public const string WikiGrepToolName = "wiki_grep";
+
+    /// <summary>Hard cap for wiki_search map rows (Microsoft Learn-style excerpt list).</summary>
+    public const int WikiSearchMapMaxTopK = 10;
 
     private static readonly object OpenParameters = new Dictionary<string, object?>
     {
@@ -65,7 +69,7 @@ public static class AgenticToolRegistry
                         topK = new
                         {
                             type = "integer",
-                            description = "Max documents to return (default 5)."
+                            description = $"Max map rows to return (default {WikiSearchMapMaxTopK}, max {WikiSearchMapMaxTopK}). Each row is id|title|summary — no document body."
                         },
                         asOf = new
                         {
@@ -74,6 +78,44 @@ public static class AgenticToolRegistry
                         }
                     },
                     required = new[] { "query" }
+                }));
+    }
+
+    /// <summary>
+    /// Load one wiki document body by id after <see cref="WikiSearchToolName"/>. Prefer lazySchemas = false.
+    /// </summary>
+    public static OllamaTool? BuildWikiFetchTool(AppRuntimeConfig runtimeConfig, bool lazySchemas = false)
+    {
+        if (!runtimeConfig.GlobalWikiEnabled)
+            return null;
+
+        if (lazySchemas)
+        {
+            return new OllamaTool(
+                "function",
+                new OllamaFunction(
+                    WikiFetchToolName,
+                    "Fetch full wiki document by id from wiki_search. Call tool_describe for args.",
+                    OpenParameters));
+        }
+
+        return new OllamaTool(
+            "function",
+            new OllamaFunction(
+                WikiFetchToolName,
+                AgenticToolDescriptionBuilder.BuildWikiFetchDescription(runtimeConfig),
+                new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        id = new
+                        {
+                            type = "string",
+                            description = "DocumentId from a prior wiki_search map row."
+                        }
+                    },
+                    required = new[] { "id" }
                 }));
     }
 

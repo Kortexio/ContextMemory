@@ -71,12 +71,12 @@ else
                 <div class="kx-section-title">Global Wiki</div>
                 <div class="form-check mb-2">
                     <InputCheckbox class="form-check-input" id="globalWikiEnabled" @bind-Value="_form.GlobalWikiEnabled" />
-                    <label class="form-check-label" for="globalWikiEnabled">Enable Global Wiki (<code>wiki_search</code>)</label>
+                    <label class="form-check-label" for="globalWikiEnabled">Enable Global Wiki (<code>wiki_search</code> / <code>wiki_fetch</code>)</label>
                 </div>
                 <div class="form-group">
                     <label>Max Global Wiki tool chars</label>
                     <InputNumber class="form-control" @bind-Value="_form.MaxGlobalWikiToolChars" />
-                    <FieldHelp>Max chars returned by <code>wiki_search</code> full-body hydrate. <code>0</code> = service default.</FieldHelp>
+                    <FieldHelp>Max chars returned by <code>wiki_fetch</code> / <code>wiki_grep</code>. <code>0</code> = service default.</FieldHelp>
                 </div>
 
                 @if (Message is not null) { <div class="alert alert-success">@Message</div> }

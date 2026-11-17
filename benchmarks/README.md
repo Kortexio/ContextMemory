@@ -16,7 +16,7 @@ Rigor follows CodeForge honesty (baseline must hurt; hidden checks; no soft suit
 
 | Task | Off | On | Δ | Off falseDone | On falseDone | Notes (this run) |
 |---|---:|---:|---:|:---:|:---:|---|
-| CM1-wiki-live-data | 10 | 100 | +90 | yes | no | Off: “I do not know”; On: `wiki_search` → `postgres-staging-01` |
+| CM1-wiki-live-data | 10 | 100 | +90 | yes | no | Off: “I do not know”; On: `wiki_search` → `wiki_fetch` → `postgres-staging-01` |
 | CM2-mcp-tool-args | 10 | 100 | +90 | yes | no | Off: max-iter HITL; On: `bench-crm__query_objects` → Acme Staging Holdings |
 | CM3-finish-evidence | 25 | 100 | +75 | yes | no | Off: max-iter; On: MCP + wiki → “No” with evidence |
 | CM4-anti-stuck | 17.5 | 100 | +82.5 | yes | no | Sticky wiki: On noise → pivot → `postgres-staging-01` |

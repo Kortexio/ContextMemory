@@ -102,12 +102,12 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
                     "## Global knowledge (digests)\n"
                     + "These are short digests from the app knowledge base (not full documents). "
                     + "Tag facts with `[global-wiki]`. "
-                    + "Use `wiki_search` only when you need the full document body.\n\n"
+                    + "Use `wiki_search` for a short id|title|summary map, then `wiki_fetch` with an id for the full document body.\n\n"
                     + digests,
                     "## Memória global (digests)\n"
                     + "Sumários curtos da base de conhecimento da app (não documentos completos). "
                     + "Etiqueta factos com `[global-wiki]`. "
-                    + "Usa `wiki_search` só quando precisares do corpo completo.\n\n"
+                    + "Usa `wiki_search` para o mapa id|title|summary e `wiki_fetch` com um id para o corpo completo.\n\n"
                     + digests));
         }
 

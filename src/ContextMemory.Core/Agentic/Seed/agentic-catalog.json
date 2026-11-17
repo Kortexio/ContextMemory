@@ -75,8 +75,8 @@
     {
       "id": "wiki-first-for-docs",
       "name": "Wiki-first for internal docs",
-      "description": "Prefer ingested knowledge via wiki_search.",
-      "promptMarkdown": "## Wiki-first for internal docs\r\n- Use `wiki_search` for Jira/Confluence/SQL/docs already ingested into the app before guessing.\r\n- Prefer wiki evidence over memory when they conflict.\r\n- At most 5 distinct wiki_search/wiki_grep calls per question. Never repeat the same query or pattern.\r\n- If results do not answer the question, stop searching the wiki and use MCP or other tools (or say evidence is missing).\r\n- Reply in the user's language.",
+      "description": "Prefer ingested knowledge via wiki_search then wiki_fetch.",
+      "promptMarkdown": "## Wiki-first for internal docs\r\n- Use `wiki_search` for a short map of Jira/Confluence/SQL/docs already ingested, then `wiki_fetch` with an id for the full body.\r\n- Prefer wiki evidence over memory when they conflict.\r\n- At most 5 distinct wiki_search/wiki_fetch/wiki_grep calls per question. Never repeat the same query, id, or pattern.\r\n- If results do not answer the question, stop searching the wiki and use MCP or other tools (or say evidence is missing).\r\n- Reply in the user's language.",
       "category": "tools",
       "activation": "skill",
       "isSystem": true,
@@ -190,7 +190,7 @@
       "id": "rule-always-evidence",
       "name": "Always-on: evidence first",
       "description": "Always-on rule: never invent unsupported facts.",
-      "promptMarkdown": "## Always-on: evidence first\r\n- Prefer tools, wiki_search/wiki_grep, and session artifacts over speculation.\r\n- Tag uncertain claims clearly.",
+      "promptMarkdown": "## Always-on: evidence first\r\n- Prefer tools, wiki_search/wiki_fetch/wiki_grep, and session artifacts over speculation.\r\n- Tag uncertain claims clearly.",
       "category": "rules",
       "activation": "skill",
       "isSystem": true,
@@ -332,6 +332,7 @@
         "feedbackMcp": "Rejected: do not narrate or name tools. Emit a tool call now as ONLY JSON {\"tool\":\"exact_name_from_catalog\",\"arguments\":{...}}.",
         "toolNameMarkers": [
           "wiki_search",
+          "wiki_fetch",
           "wiki_grep",
           "wiki_get",
           "wiki_read",

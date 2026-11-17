@@ -325,6 +325,10 @@ public sealed class GlobalWikiMatch
     [JsonPropertyName("title")]
     public string Title { get; init; } = string.Empty;
 
+    /// <summary>Short digest/line for search-map tooling (not full Content).</summary>
+    [JsonPropertyName("summary")]
+    public string Summary { get; init; } = string.Empty;
+
     [JsonPropertyName("score")]
     public double Score { get; init; }
 
@@ -333,6 +337,25 @@ public sealed class GlobalWikiMatch
 
     [JsonPropertyName("revisionId")]
     public string RevisionId { get; init; } = string.Empty;
+}
+
+/// <summary>Tool-facing search map: ids + titles + summaries, no document bodies.</summary>
+public sealed class GlobalWikiSearchMapResult
+{
+    [JsonPropertyName("mapMarkdown")]
+    public string MapMarkdown { get; init; } = string.Empty;
+
+    [JsonPropertyName("matchCount")]
+    public int MatchCount { get; init; }
+
+    [JsonPropertyName("totalDocuments")]
+    public int TotalDocuments { get; init; }
+
+    [JsonPropertyName("asOf")]
+    public DateTimeOffset AsOf { get; init; }
+
+    [JsonPropertyName("matches")]
+    public List<GlobalWikiMatch> Matches { get; init; } = [];
 }
 
 public sealed class GlobalWikiRevisionListResult

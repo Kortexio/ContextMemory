@@ -135,7 +135,7 @@ public sealed class AgenticToolIntentNarrationGuardrailTests
                 + "(prefer listed MCP tools for live data; tool_describe if the schema is unclear).",
             toolNameMarkers = new[]
             {
-                "wiki_search", "wiki_grep", "wiki_get", "wiki_read", "fetch_url", "http_request", "web_search",
+                "wiki_search", "wiki_fetch", "wiki_grep", "wiki_get", "wiki_read", "fetch_url", "http_request", "web_search",
                 "query_objects", "python_execute", "shell_execute", "node_execute", "browser_navigate",
                 "browser_snapshot", "browser_click", "browser_type", "browser_screenshot", "read_image",
                 "parse_pdf", "canvas_write", "canvas_read", "todo_write", "tool_search", "tool_describe",

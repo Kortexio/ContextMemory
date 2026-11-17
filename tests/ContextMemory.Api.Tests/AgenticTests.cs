@@ -717,6 +717,23 @@ public sealed class McpJsonRpcClientTests
         Assert.Contains("query", catalog, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void WikiFetchTool_ExposesRequiredIdSchema_WhenWikiEnabled()
+    {
+        var enabled = new AppRuntimeConfig { AppId = "demo", GlobalWikiEnabled = true };
+        var tool = AgenticToolRegistry.BuildWikiFetchTool(enabled, lazySchemas: false);
+        Assert.NotNull(tool);
+        Assert.False(McpPinnedToolFactory.IsOpenStubParameters(tool!.Function.Parameters));
+
+        var catalog = ClientSideToolCalling.BuildCatalog([tool]);
+        Assert.Contains("`wiki_fetch`", catalog, StringComparison.Ordinal);
+        Assert.Contains("id", catalog, StringComparison.Ordinal);
+
+        Assert.Null(AgenticToolRegistry.BuildWikiFetchTool(
+            new AppRuntimeConfig { AppId = "demo", GlobalWikiEnabled = false },
+            lazySchemas: false));
+    }
+
     private sealed class DiscoveryToolsDescriptor : IToolDescriptor
     {
         public IEnumerable<ToolRegistration> Describe() =>

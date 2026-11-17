@@ -13,6 +13,8 @@ public sealed class GlobalWikiService
     public const int DefaultBudgetChars = 8_000;
     public const int DefaultDigestTopK = 3;
     public const int DefaultDigestBudgetChars = 2_500;
+    public const int DefaultSearchMapTopK = 10;
+    public const int MaxSearchMapTopK = 10;
 
     private readonly IGlobalWikiStore _store;
     private readonly IGlobalWikiDigestGenerator _digestGenerator;
@@ -242,15 +244,7 @@ public sealed class GlobalWikiService
             .ConfigureAwait(false);
 
         var matches = matchedDocs
-            .Select((d, i) => new GlobalWikiMatch
-            {
-                DocumentId = d.DocumentId,
-                Slug = d.Slug,
-                Title = d.Title,
-                Score = matchedDocs.Count - i,
-                SourceId = d.SourceId,
-                RevisionId = d.RevisionId
-            })
+            .Select((d, i) => ToMatch(d, matchedDocs.Count - i))
             .ToList();
 
         // Prefer scored ordering from GlobalWikiScoring when we have the pool.
@@ -264,15 +258,7 @@ public sealed class GlobalWikiService
                 request.DigestOnly).ToList();
             matchedDocs = rescored.Select(x => x.Document).ToList();
             matches = rescored
-                .Select(m => new GlobalWikiMatch
-                {
-                    DocumentId = m.Document.DocumentId,
-                    Slug = m.Document.Slug,
-                    Title = m.Document.Title,
-                    Score = m.Score,
-                    SourceId = m.Document.SourceId,
-                    RevisionId = m.Document.RevisionId
-                })
+                .Select(m => ToMatch(m.Document, m.Score))
                 .ToList();
         }
 
@@ -506,6 +492,125 @@ public sealed class GlobalWikiService
         CancellationToken cancellationToken = default) =>
         _store.GetAsync(appId, documentId, cancellationToken);
 
+    /// <summary>
+    /// Agent-tool search map: ranked id|title|summary rows without packing document bodies.
+    /// </summary>
+    public async Task<GlobalWikiSearchMapResult> SearchMapAsync(
+        string appId,
+        GlobalWikiQueryRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var asOf = request.AsOf ?? DateTimeOffset.UtcNow;
+        var topK = request.TopK > 0
+            ? Math.Min(request.TopK, MaxSearchMapTopK)
+            : DefaultSearchMapTopK;
+
+        var matchedDocs = (await _store
+                .SearchAsync(
+                    appId,
+                    request.Query,
+                    asOf,
+                    request.SourceId,
+                    topK,
+                    digestOnly: true,
+                    cancellationToken)
+                .ConfigureAwait(false))
+            .Where(d => !GlobalWikiCatalog.IsGlossaryDocument(d.DocumentId))
+            .ToList();
+
+        var totalDocs = await _store
+            .CountAsync(appId, request.SourceId, includeSuperseded: false, cancellationToken)
+            .ConfigureAwait(false);
+
+        List<GlobalWikiMatch> matches;
+        if (matchedDocs.Count == 0)
+        {
+            matches = [];
+        }
+        else
+        {
+            var lexicon = GlobalWikiAliasLexicon.ForApp(appId);
+            var rescored = GlobalWikiScoring.ScoreMatches(
+                matchedDocs,
+                request.Query,
+                lexicon,
+                digestOnly: true).ToList();
+            matchedDocs = rescored.Select(x => x.Document).Take(topK).ToList();
+            matches = rescored
+                .Take(topK)
+                .Select(m => ToMatch(m.Document, m.Score))
+                .ToList();
+        }
+
+        return new GlobalWikiSearchMapResult
+        {
+            MapMarkdown = FormatSearchMap(matches, totalDocs, asOf),
+            MatchCount = matches.Count,
+            TotalDocuments = totalDocs,
+            AsOf = asOf,
+            Matches = matches
+        };
+    }
+
+    private static GlobalWikiMatch ToMatch(GlobalWikiDocument d, double score) =>
+        new()
+        {
+            DocumentId = d.DocumentId,
+            Slug = d.Slug,
+            Title = d.Title,
+            Summary = d.Summary ?? string.Empty,
+            Score = score,
+            SourceId = d.SourceId,
+            RevisionId = d.RevisionId
+        };
+
+    private static string FormatSearchMap(
+        IReadOnlyList<GlobalWikiMatch> matches,
+        int totalDocuments,
+        DateTimeOffset asOf)
+    {
+        if (matches.Count == 0)
+            return "No matching documents found in the app knowledge base.";
+
+        var sb = new StringBuilder();
+        sb.Append("Found ").Append(matches.Count)
+            .Append(" match(es) of ").Append(totalDocuments)
+            .Append(" document(s) (asOf=").Append(asOf.ToString("O")).Append(").")
+            .Append(" Map only — call wiki_fetch with an id for the full body.")
+            .AppendLine()
+            .AppendLine();
+        sb.AppendLine("| id | title | summary |");
+        sb.AppendLine("| --- | --- | --- |");
+        foreach (var m in matches)
+        {
+            var title = string.IsNullOrWhiteSpace(m.Title) ? m.DocumentId : m.Title.Trim();
+            var summary = FlattenMapCell(m.Summary);
+            if (string.IsNullOrWhiteSpace(summary))
+                summary = "(no summary — fetch for body)";
+            sb.Append("| `").Append(EscapeMapCell(m.DocumentId)).Append("` | ")
+                .Append(EscapeMapCell(title)).Append(" | ")
+                .Append(EscapeMapCell(summary)).AppendLine(" |");
+        }
+
+        return sb.ToString().TrimEnd();
+    }
+
+    private static string FlattenMapCell(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+        var flat = value.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Replace('\n', ' ')
+            .Trim();
+        if (flat.Length > 240)
+            flat = flat[..240] + "…";
+        return flat;
+    }
+
+    private static string EscapeMapCell(string value) =>
+        value.Replace("|", "\\|", StringComparison.Ordinal);
+
     private async Task RefreshCatalogAsync(string appId, CancellationToken cancellationToken)
     {
         try
@@ -649,7 +754,7 @@ public sealed class GlobalWikiService
         if (!digestOnly)
             return doc.Content;
 
-        // Dynamic context discovery: inject digests, hydrate full body via wiki_search when needed.
+        // Dynamic context discovery: inject digests, hydrate full body via wiki_fetch when needed.
         if (!string.IsNullOrWhiteSpace(doc.Summary))
         {
             var title = string.IsNullOrWhiteSpace(doc.Title) ? doc.DocumentId : doc.Title.Trim();

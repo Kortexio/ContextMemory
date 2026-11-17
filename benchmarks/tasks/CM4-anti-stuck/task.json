@@ -13,7 +13,7 @@
       "mustContain": ["postgres-staging-01"]
     },
     "tools": {
-      "requiredAny": ["wiki_search", "wiki_grep"],
+      "requiredAny": ["wiki_search", "wiki_fetch", "wiki_grep"],
       "maxIdenticalCalls": 2,
       "stuckIfIdenticalAbove": 2,
       "forbiddenFinishWithoutTools": true,

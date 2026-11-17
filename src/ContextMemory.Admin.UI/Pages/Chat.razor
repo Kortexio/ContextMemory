@@ -353,7 +353,7 @@
                 <div class="kx-panel-body p-2">
                     @if (ConversationWikiRefs.Count == 0)
                     {
-                        <p class="small text-muted mb-0">No wiki_search / wiki_grep / compaction events yet.</p>
+                        <p class="small text-muted mb-0">No wiki_search / wiki_fetch / wiki_grep / compaction events yet.</p>
                     }
                     else
                     {
@@ -477,6 +477,7 @@
             .Where(s =>
                 string.Equals(s.Phase, "Compacting", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(s.ToolName, "wiki_search", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(s.ToolName, "wiki_fetch", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(s.ToolName, "wiki_grep", StringComparison.OrdinalIgnoreCase)
                 || (s.Label?.Contains("wiki", StringComparison.OrdinalIgnoreCase) ?? false)
                 || (s.Detail?.Contains("wiki", StringComparison.OrdinalIgnoreCase) ?? false))

@@ -104,7 +104,7 @@ public static class AgenticSystemPromptBuilder
         // Always include common builtins so the contract sections light up.
         foreach (var builtin in new[]
                  {
-                     "wiki_search", "wiki_grep", "tool_describe", "tool_search",
+                     "wiki_search", "wiki_fetch", "wiki_grep", "tool_describe", "tool_search",
                      "skill_search", "skill_read", "shell_execute", "python_execute",
                      "node_execute", "artifact_read", "artifact_tail"
                  })

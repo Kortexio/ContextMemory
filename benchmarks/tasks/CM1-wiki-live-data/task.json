@@ -14,7 +14,7 @@
       "mustNotContain": ["postgres-staging-legacy", "db-staging.internal", "postgres-prod-01"]
     },
     "tools": {
-      "requiredAny": ["wiki_search", "wiki_grep"],
+      "requiredAny": ["wiki_search", "wiki_fetch", "wiki_grep"],
       "forbiddenFinishWithoutTools": true
     }
   },

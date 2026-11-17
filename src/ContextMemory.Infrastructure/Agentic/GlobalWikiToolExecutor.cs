@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using ContextMemory.Core.Agentic;
 using ContextMemory.Core.Contracts;
@@ -15,6 +16,7 @@ public sealed class GlobalWikiToolExecutor : IToolExecutor, IToolDescriptor
     public IEnumerable<ToolRegistration> Describe() =>
     [
         new(AgenticToolRegistry.WikiSearchToolName, ToolCapabilities.QueryFocused, ToolHandlerKind.AppScoped),
+        new(AgenticToolRegistry.WikiFetchToolName, ToolCapabilities.QueryFocused, ToolHandlerKind.AppScoped),
         new(AgenticToolRegistry.WikiGrepToolName, ToolCapabilities.QueryFocused, ToolHandlerKind.AppScoped)
     ];
 
@@ -22,6 +24,8 @@ public sealed class GlobalWikiToolExecutor : IToolExecutor, IToolDescriptor
     {
         if (AgenticToolRegistry.BuildWikiSearchTool(runtimeConfig, lazySchemas: false) is { } search)
             yield return search;
+        if (AgenticToolRegistry.BuildWikiFetchTool(runtimeConfig, lazySchemas: false) is { } fetch)
+            yield return fetch;
         if (AgenticToolRegistry.BuildWikiGrepTool(runtimeConfig, lazySchemas: false) is { } grep)
             yield return grep;
     }
@@ -45,21 +49,24 @@ public sealed class GlobalWikiToolExecutor : IToolExecutor, IToolDescriptor
             });
         }
 
-        return string.Equals(toolCall.Function.Name, AgenticToolRegistry.WikiGrepToolName, StringComparison.Ordinal)
-            ? ExecuteGrepAsync(toolCall, appId, runtimeConfig, cancellationToken)
-            : ExecuteSearchAsync(toolCall, appId, runtimeConfig, cancellationToken);
+        if (string.Equals(toolCall.Function.Name, AgenticToolRegistry.WikiGrepToolName, StringComparison.Ordinal))
+            return ExecuteGrepAsync(toolCall, appId, runtimeConfig, cancellationToken);
+
+        if (string.Equals(toolCall.Function.Name, AgenticToolRegistry.WikiFetchToolName, StringComparison.Ordinal))
+            return ExecuteFetchAsync(toolCall, appId, runtimeConfig, cancellationToken);
+
+        return ExecuteSearchAsync(toolCall, appId, cancellationToken);
     }
 
     private async Task<ToolExecutionResult> ExecuteSearchAsync(
         OllamaToolCall toolCall,
         string appId,
-        AppRuntimeConfig runtimeConfig,
         CancellationToken cancellationToken)
     {
         string query;
         string? sourceId = null;
         DateTimeOffset? asOf = null;
-        var topK = GlobalWikiService.DefaultTopK;
+        var topK = AgenticToolRegistry.WikiSearchMapMaxTopK;
         try
         {
             using var doc = JsonDocument.Parse(
@@ -91,37 +98,95 @@ public sealed class GlobalWikiToolExecutor : IToolExecutor, IToolDescriptor
             };
         }
 
-        var budget = runtimeConfig.MaxGlobalWikiToolChars > 0
-            ? runtimeConfig.MaxGlobalWikiToolChars
-            : GlobalWikiService.DefaultBudgetChars;
+        topK = Math.Clamp(topK, 1, AgenticToolRegistry.WikiSearchMapMaxTopK);
 
-        var result = await _wikiService.QueryAsync(
+        var result = await _wikiService.SearchMapAsync(
             appId,
             new GlobalWikiQueryRequest
             {
                 Query = query,
                 SourceId = sourceId,
                 TopK = topK,
-                BudgetChars = budget,
-                IncludeIndex = false,
-                AsOf = asOf
+                AsOf = asOf,
+                DigestOnly = true
             },
-            budget,
             cancellationToken).ConfigureAwait(false);
 
-        if (result.TotalDocuments == 0 || result.Matches.Count == 0)
+        return new ToolExecutionResult
+        {
+            Output = result.MapMarkdown,
+            ExitCode = 0
+        };
+    }
+
+    private async Task<ToolExecutionResult> ExecuteFetchAsync(
+        OllamaToolCall toolCall,
+        string appId,
+        AppRuntimeConfig runtimeConfig,
+        CancellationToken cancellationToken)
+    {
+        string id;
+        try
+        {
+            using var doc = JsonDocument.Parse(
+                string.IsNullOrWhiteSpace(toolCall.Function.Arguments) ? "{}" : toolCall.Function.Arguments);
+            var root = doc.RootElement;
+            id = AgenticToolArguments.GetString(root, "id")
+                 ?? AgenticToolArguments.GetString(root, "documentId")
+                 ?? string.Empty;
+        }
+        catch
         {
             return new ToolExecutionResult
             {
-                Output = "No matching documents found in the app knowledge base.",
-                ExitCode = 0
+                Output = "Invalid wiki_fetch arguments. Expected JSON with an \"id\" field.",
+                ExitCode = 1
             };
         }
 
-        var header = $"Found {result.Matches.Count} match(es) of {result.TotalDocuments} document(s) (asOf={result.AsOf:O}).\n\n";
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return new ToolExecutionResult
+            {
+                Output = "wiki_fetch requires a non-empty \"id\".",
+                ExitCode = 1
+            };
+        }
+
+        var document = await _wikiService.GetAsync(appId, id.Trim(), cancellationToken).ConfigureAwait(false);
+        if (document is null)
+        {
+            return new ToolExecutionResult
+            {
+                Output = $"Document '{id}' not found (inactive or missing).",
+                ExitCode = 1
+            };
+        }
+
+        var budget = runtimeConfig.MaxGlobalWikiToolChars > 0
+            ? runtimeConfig.MaxGlobalWikiToolChars
+            : GlobalWikiService.DefaultBudgetChars;
+
+        var title = string.IsNullOrWhiteSpace(document.Title) ? document.DocumentId : document.Title.Trim();
+        var sb = new StringBuilder();
+        sb.Append("# ").Append(title).AppendLine();
+        sb.Append("id: `").Append(document.DocumentId).AppendLine("`");
+        if (!string.IsNullOrWhiteSpace(document.SourceId))
+            sb.Append("sourceId: ").AppendLine(document.SourceId);
+        sb.AppendLine();
+        sb.Append(document.Content ?? string.Empty);
+
+        var output = sb.ToString().TrimEnd();
+        var truncated = false;
+        if (output.Length > budget)
+        {
+            output = output[..Math.Max(0, budget)] + "\n\n_(truncated)_";
+            truncated = true;
+        }
+
         return new ToolExecutionResult
         {
-            Output = header + result.CompiledMarkdown,
+            Output = truncated ? output : output + (output.Length == 0 ? "(empty document)" : string.Empty),
             ExitCode = 0
         };
     }

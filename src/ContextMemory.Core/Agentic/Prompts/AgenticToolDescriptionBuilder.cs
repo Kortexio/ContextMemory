@@ -65,7 +65,16 @@ public static class AgenticToolDescriptionBuilder
     public static string BuildWikiSearchDescription(AppRuntimeConfig config)
     {
         _ = config;
-        return "Search the app knowledge base (ingested docs). Optional asOf for point-in-time facts.";
+        return "Search the app knowledge base first. Returns a short map (id|title|summary), not full bodies. "
+               + "Then call wiki_fetch with an id from the map when you need the document content. "
+               + "Optional asOf for point-in-time facts.";
+    }
+
+    public static string BuildWikiFetchDescription(AppRuntimeConfig config)
+    {
+        _ = config;
+        return "Fetch the full body of one knowledge-base document by id from a prior wiki_search map. "
+               + "Use after wiki_search when the summary is not enough.";
     }
 
     private static bool IsSelfHosted(ExecutionToolConfig? execution) =>

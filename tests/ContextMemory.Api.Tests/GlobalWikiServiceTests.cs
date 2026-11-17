@@ -544,6 +544,69 @@ public sealed class GlobalWikiServiceTests
         Assert.Contains("Other notes stay.", filtered);
     }
 
+    [Fact]
+    public async Task SearchMap_ReturnsAtMostTenRows_WithoutDocumentBody()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cm-global-wiki-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var service = CreateService(root);
+            for (var i = 1; i <= 12; i++)
+            {
+                await service.UpsertAsync("demo", $"doc-{i}", new GlobalWikiUpsertRequest
+                {
+                    Title = $"Doc {i}",
+                    Content = $"# Doc {i}\n\nSECRET_BODY_{i} should not appear in the map.",
+                    Summary = $"Summary line for document {i} about staging host.",
+                    SourceId = "test"
+                });
+            }
+
+            var map = await service.SearchMapAsync(
+                "demo",
+                new GlobalWikiQueryRequest { Query = "staging host", TopK = 50 });
+
+            Assert.True(map.MatchCount <= 10);
+            Assert.DoesNotContain("SECRET_BODY_", map.MapMarkdown, StringComparison.Ordinal);
+            Assert.Contains("wiki_fetch", map.MapMarkdown, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("`doc-", map.MapMarkdown, StringComparison.Ordinal);
+            Assert.All(map.Matches, m => Assert.DoesNotContain("SECRET_BODY_", m.Summary, StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task GetAsync_ReturnsActiveBody_AndClosedDocIsAbsent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cm-global-wiki-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var service = CreateService(root);
+            await service.UpsertAsync("demo", "host-doc", new GlobalWikiUpsertRequest
+            {
+                Title = "Staging host",
+                Content = "Hostname is postgres-staging-01.",
+                Summary = "staging database host"
+            });
+
+            var active = await service.GetAsync("demo", "host-doc");
+            Assert.NotNull(active);
+            Assert.Contains("postgres-staging-01", active!.Content, StringComparison.Ordinal);
+
+            await service.DeleteAsync("demo", "host-doc");
+            Assert.Null(await service.GetAsync("demo", "host-doc"));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static GlobalWikiService CreateService(string root, StubDigestGenerator? digest = null) =>
         new(CreateStore(root), digest ?? new StubDigestGenerator(), NullLogger<GlobalWikiService>.Instance);
 

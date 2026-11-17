@@ -245,13 +245,14 @@ public sealed class AgenticDuplicateToolCallGuardTests
     {
         var steps = new List<AgentExecutionStep>
         {
-            Successful("wiki_search", """{"query":"paccar"}"""),
+            // Map-only wiki_search is not body evidence; fetch/grep is.
+            Successful("wiki_fetch", """{"id":"paccar-rules"}"""),
             new()
             {
                 Iteration = 2,
                 ToolName = "wiki_grep",
                 Arguments = """{"pattern":"ITD"}""",
-                Output = "Rejected: wiki_search/wiki_grep budget exhausted this turn.",
+                Output = "Rejected: wiki_search/wiki_fetch/wiki_grep budget exhausted this turn.",
                 ExitCode = 1,
                 Success = false,
                 Duration = TimeSpan.Zero,
@@ -455,6 +456,28 @@ public sealed class AgenticDuplicateToolCallGuardTests
         var config = Config(withMcp: true);
         var steps = new List<AgentExecutionStep>
         {
+            Successful("wiki_fetch", """{"id":"subscription-rules"}""")
+        };
+
+        var rejected = AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_fetch",
+            """{"id":"subscription-rules"}""",
+            steps,
+            config,
+            out var feedback);
+
+        Assert.True(rejected);
+        Assert.True(AgenticDuplicateToolCallGuard.FeedbackIndicatesDuplicateAfterSuccess(feedback));
+        Assert.Contains("Answer the user NOW", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("server__tool", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void IdenticalSuccessfulWikiSearch_NudgesFetchNotFinalAnswer()
+    {
+        var config = Config(withMcp: true);
+        var steps = new List<AgentExecutionStep>
+        {
             Successful("wiki_search", """{"query":"subscription rules"}""")
         };
 
@@ -466,9 +489,59 @@ public sealed class AgenticDuplicateToolCallGuardTests
             out var feedback);
 
         Assert.True(rejected);
-        Assert.True(AgenticDuplicateToolCallGuard.FeedbackIndicatesDuplicateAfterSuccess(feedback));
-        Assert.Contains("Answer the user NOW", feedback, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("server__tool", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("wiki_fetch", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Answer the user NOW", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Rejects_EmptyWikiFetchId_Immediately()
+    {
+        var config = Config();
+        var rejected = AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_fetch",
+            "{}",
+            steps: [],
+            config,
+            out var feedback);
+
+        Assert.True(rejected);
+        Assert.Contains("non-empty", feedback, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("id", feedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Allows_WikiFetch_DifferentIds()
+    {
+        var config = Config();
+        var steps = new List<AgentExecutionStep>
+        {
+            Successful("wiki_fetch", """{"id":"doc-a"}""")
+        };
+
+        Assert.False(AgenticDuplicateToolCallGuard.TryReject(
+            "wiki_fetch",
+            """{"id":"doc-b"}""",
+            steps,
+            config,
+            out _));
+    }
+
+    [Fact]
+    public void HasSuccessfulWikiEvidence_IgnoresMapOnlySearch()
+    {
+        Assert.False(AgenticDuplicateToolCallGuard.HasSuccessfulWikiEvidence(
+        [
+            Successful("wiki_search", """{"query":"x"}""")
+        ]));
+        Assert.True(AgenticDuplicateToolCallGuard.HasSuccessfulWikiEvidence(
+        [
+            Successful("wiki_search", """{"query":"x"}"""),
+            Successful("wiki_fetch", """{"id":"doc-1"}""")
+        ]));
+        Assert.True(AgenticDuplicateToolCallGuard.HasSuccessfulWikiEvidence(
+        [
+            Successful("wiki_grep", """{"pattern":"x"}""")
+        ]));
     }
 
     [Fact]

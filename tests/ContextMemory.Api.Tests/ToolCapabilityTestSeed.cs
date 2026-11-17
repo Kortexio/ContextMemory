@@ -18,6 +18,7 @@ internal static class ToolCapabilityTestSeed
         ToolCapabilityIndex.Publish(new Dictionary<string, ToolCapabilities>(StringComparer.OrdinalIgnoreCase)
         {
             [AgenticToolRegistry.WikiSearchToolName] = ToolCapabilities.QueryFocused,
+            [AgenticToolRegistry.WikiFetchToolName] = ToolCapabilities.QueryFocused,
             [AgenticToolRegistry.WikiGrepToolName] = ToolCapabilities.QueryFocused,
             [AgenticToolRegistry.ShellExecuteToolName] = ToolCapabilities.Sandbox | ToolCapabilities.Mutating,
             [AgenticToolRegistry.PythonExecuteToolName] = ToolCapabilities.Sandbox | ToolCapabilities.Mutating,
